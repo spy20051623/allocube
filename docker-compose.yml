@@ -1,0 +1,83 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 8787
+      DATABASE_PATH: /app/data/allocube.sqlite
+    volumes:
+      - allocube-data:/app/data
+    tmpfs:
+      - /tmp
+    expose:
+      - "8787"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    pids_limit: 128
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    tmpfs:
+      - /tmp
+
+  backup:
+    build: .
+    restart: unless-stopped
+    network_mode: "none"
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_PATH: /app/data/allocube.sqlite
+      BACKUP_DIR: /app/backups
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - allocube-data:/app/data
+      - allocube-backups:/app/backups
+    tmpfs:
+      - /tmp
+    command: ["sh", "-c", "while true; do if node scripts/backup.mjs; then sleep \"$${BACKUP_INTERVAL_SECONDS:-86400}\"; else sleep 300; fi; done"]
+
+volumes:
+  allocube-data:
+  allocube-backups:
+  caddy-data:
+  caddy-config:

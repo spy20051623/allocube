@@ -1,0 +1,13 @@
+node_modules
+node_modules.failed-install
+dist
+dist-server
+data
+backups
+instance-secrets.json
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.env*
+.git
+*.log

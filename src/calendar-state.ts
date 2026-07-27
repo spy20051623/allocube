@@ -1,0 +1,533 @@
+import type {
+  ReservationPreviewItem,
+  ReservationSegmentInput
+} from "./shared/types";
+
+export type CalendarView = "day" | "week";
+
+export type CalendarQueryState = {
+  date: string;
+  view: CalendarView;
+  machineId: string;
+  search: string;
+};
+
+export type CalendarDraft = ReservationSegmentInput & {
+  id: string;
+};
+
+export type CalendarMetadata = {
+  title: string;
+  purpose: string;
+  note: string;
+};
+
+export type CalendarTimeRange = {
+  startAt: string;
+  endAt: string;
+};
+
+export type CalendarBookingRules = {
+  minBookingMinutes: number;
+  maxBookingMinutes: number;
+  advanceDays: number;
+};
+
+export type CalendarDraftFieldIssues = {
+  startAt?: string;
+  endAt?: string;
+};
+
+export const DAY_ZOOM_LEVELS = [6, 12, 24] as const;
+
+export function timelineWheelAction(input: {
+  altKey: boolean;
+  shiftKey: boolean;
+  deltaX: number;
+  deltaY: number;
+}):
+  | { kind: "VERTICAL" }
+  | { kind: "HORIZONTAL"; delta: number }
+  | { kind: "ZOOM_IN" }
+  | { kind: "ZOOM_OUT" }
+  | null {
+  const delta =
+    Math.abs(input.deltaY) >= Math.abs(input.deltaX)
+      ? input.deltaY
+      : input.deltaX;
+  if (input.altKey) {
+    if (delta === 0) return null;
+    return { kind: delta < 0 ? "ZOOM_IN" : "ZOOM_OUT" };
+  }
+  if (input.shiftKey) {
+    return delta === 0 ? null : { kind: "HORIZONTAL", delta };
+  }
+  return { kind: "VERTICAL" };
+}
+
+export function clampDayWindowStartMinutes(
+  startMinutes: number,
+  visibleHours: number
+) {
+  const maximum = Math.max(0, 24 * 60 - visibleHours * 60);
+  return Math.max(0, Math.min(maximum, startMinutes));
+}
+
+export function defaultDayWindowStartMinutes(
+  now: number,
+  visibleHours = 12
+) {
+  const hourPart = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai",
+    hour: "2-digit",
+    hourCycle: "h23"
+  })
+    .formatToParts(new Date(now))
+    .find((part) => part.type === "hour");
+  const currentHour = Number(hourPart?.value ?? 0);
+  const defaultStartHour = currentHour < 14 ? 9 : 12;
+  const defaultCenterMinutes = (defaultStartHour + 6) * 60;
+  return clampDayWindowStartMinutes(
+    defaultCenterMinutes - (visibleHours * 60) / 2,
+    visibleHours
+  );
+}
+
+export function currentMinuteStart(now: number) {
+  return new Date(Math.floor(now / 60_000) * 60_000).toISOString();
+}
+
+export function parseCalendarQuery(
+  search: string,
+  fallbackDate: string
+): CalendarQueryState {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const date = params.get("date") ?? "";
+  return {
+    date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : fallbackDate,
+    view: params.get("view") === "week" ? "week" : "day",
+    machineId: params.get("machine")?.trim() ?? "",
+    search: params.get("q")?.trim().slice(0, 100) ?? ""
+  };
+}
+
+export function calendarQueryUrl(state: CalendarQueryState) {
+  const params = new URLSearchParams();
+  params.set("date", state.date);
+  if (state.view === "week") params.set("view", "week");
+  if (state.machineId) params.set("machine", state.machineId);
+  if (state.search) params.set("q", state.search);
+  const query = params.toString();
+  return query ? `/calendar?${query}` : "/calendar";
+}
+
+export function calendarEditUrl(input: {
+  reservationId: string;
+  date: string;
+  machineId: string;
+}) {
+  const params = new URLSearchParams({
+    date: input.date,
+    machine: input.machineId,
+    edit: input.reservationId
+  });
+  return `/calendar?${params.toString()}`;
+}
+
+export type CalendarEditRoute =
+  | { kind: "NONE" }
+  | { kind: "INVALID" }
+  | { kind: "EDIT"; reservationId: string };
+
+export function parseCalendarEditRoute(search: string): CalendarEditRoute {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search
+  );
+  if (!params.has("edit")) return { kind: "NONE" };
+  const value = params.get("edit")?.trim() ?? "";
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value
+    )
+  ) {
+    return { kind: "INVALID" };
+  }
+  return { kind: "EDIT", reservationId: value };
+}
+
+export function parseCalendarEditReservationId(search: string) {
+  const route = parseCalendarEditRoute(search);
+  return route.kind === "EDIT" ? route.reservationId : "";
+}
+
+export function calendarUrlWithoutEditRequest(search: string) {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search
+  );
+  params.delete("edit");
+  const query = params.toString();
+  return query ? `/calendar?${query}` : "/calendar";
+}
+
+export function calendarUrlWithEditRequest(
+  search: string,
+  reservationId: string
+) {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search
+  );
+  params.set("edit", reservationId);
+  return `/calendar?${params.toString()}`;
+}
+
+export function reservationTargetKey(
+  input: Pick<
+    ReservationSegmentInput,
+    "scope" | "machineId" | "resourceGroupId"
+  >
+) {
+  return input.scope === "MACHINE"
+    ? `MACHINE:${input.machineId ?? input.resourceGroupId}`
+    : `GROUP:${input.resourceGroupId}`;
+}
+
+export function draggedTimeRange({
+  rangeStart,
+  days,
+  trackLeft,
+  trackWidth,
+  pointerStart,
+  pointerEnd,
+  snapMinutes = 15
+}: {
+  rangeStart: string;
+  days: number;
+  trackLeft: number;
+  trackWidth: number;
+  pointerStart: number;
+  pointerEnd: number;
+  snapMinutes?: number;
+}) {
+  if (trackWidth <= 0 || Math.abs(pointerEnd - pointerStart) < 4) return null;
+  const clamp = (value: number) => Math.max(0, Math.min(1, value));
+  const first = clamp((pointerStart - trackLeft) / trackWidth);
+  const second = clamp((pointerEnd - trackLeft) / trackWidth);
+  const totalMinutes = days * 24 * 60;
+  const snap = (fraction: number) =>
+    Math.round((fraction * totalMinutes) / snapMinutes) * snapMinutes;
+  const startMinutes = snap(Math.min(first, second));
+  const endMinutes = Math.max(
+    startMinutes + snapMinutes,
+    snap(Math.max(first, second))
+  );
+  const start = new Date(rangeStart).getTime();
+  return {
+    startAt: new Date(start + startMinutes * 60_000).toISOString(),
+    endAt: new Date(start + Math.min(totalMinutes, endMinutes) * 60_000).toISOString()
+  };
+}
+
+export function snappedTimelineInstant({
+  rangeStart,
+  days,
+  trackLeft,
+  trackWidth,
+  pointer,
+  snapMinutes = 15
+}: {
+  rangeStart: string;
+  days: number;
+  trackLeft: number;
+  trackWidth: number;
+  pointer: number;
+  snapMinutes?: number;
+}) {
+  if (trackWidth <= 0) return null;
+  const fraction = Math.max(
+    0,
+    Math.min(1, (pointer - trackLeft) / trackWidth)
+  );
+  const totalMinutes = days * 24 * 60;
+  const minutes = Math.max(
+    0,
+    Math.min(
+      totalMinutes,
+      Math.round((fraction * totalMinutes) / snapMinutes) * snapMinutes
+    )
+  );
+  return new Date(
+    new Date(rangeStart).getTime() + minutes * 60_000
+  ).toISOString();
+}
+
+export function subtractBusyTimeRanges(
+  requested: CalendarTimeRange,
+  busyRanges: CalendarTimeRange[],
+  minMinutes: number
+) {
+  const requestedStart = new Date(requested.startAt).getTime();
+  const requestedEnd = new Date(requested.endAt).getTime();
+  if (
+    !Number.isFinite(requestedStart) ||
+    !Number.isFinite(requestedEnd) ||
+    requestedEnd <= requestedStart
+  ) {
+    return [];
+  }
+  const busy = busyRanges
+    .map((range) => ({
+      start: Math.max(requestedStart, new Date(range.startAt).getTime()),
+      end: Math.min(requestedEnd, new Date(range.endAt).getTime())
+    }))
+    .filter(
+      (range) =>
+        Number.isFinite(range.start) &&
+        Number.isFinite(range.end) &&
+        range.start < range.end
+    )
+    .sort((a, b) => a.start - b.start);
+  const mergedBusy: Array<{ start: number; end: number }> = [];
+  for (const range of busy) {
+    const previous = mergedBusy.at(-1);
+    if (previous && range.start <= previous.end) {
+      previous.end = Math.max(previous.end, range.end);
+    } else {
+      mergedBusy.push({ ...range });
+    }
+  }
+  const available: CalendarTimeRange[] = [];
+  let cursor = requestedStart;
+  for (const range of mergedBusy) {
+    if ((range.start - cursor) / 60_000 >= minMinutes) {
+      available.push({
+        startAt: new Date(cursor).toISOString(),
+        endAt: new Date(range.start).toISOString()
+      });
+    }
+    cursor = Math.max(cursor, range.end);
+  }
+  if ((requestedEnd - cursor) / 60_000 >= minMinutes) {
+    available.push({
+      startAt: new Date(cursor).toISOString(),
+      endAt: new Date(requestedEnd).toISOString()
+    });
+  }
+  return available;
+}
+
+export function mergeTimeRanges(ranges: CalendarTimeRange[]) {
+  const normalized = ranges
+    .map((range) => ({
+      start: new Date(range.startAt).getTime(),
+      end: new Date(range.endAt).getTime()
+    }))
+    .filter(
+      (range) =>
+        Number.isFinite(range.start) &&
+        Number.isFinite(range.end) &&
+        range.start < range.end
+    )
+    .sort((a, b) => a.start - b.start);
+  const merged: Array<{ start: number; end: number }> = [];
+  for (const range of normalized) {
+    const previous = merged.at(-1);
+    if (previous && range.start <= previous.end) {
+      previous.end = Math.max(previous.end, range.end);
+    } else {
+      merged.push({ ...range });
+    }
+  }
+  return merged.map((range) => ({
+    startAt: new Date(range.start).toISOString(),
+    endAt: new Date(range.end).toISOString()
+  }));
+}
+
+export function mergeCalendarDrafts(
+  drafts: CalendarDraft[],
+  additions: Array<ReservationSegmentInput & CalendarTimeRange>,
+  createId: () => string
+) {
+  const targetOrder = Array.from(
+    new Set([
+      ...drafts.map(reservationTargetKey),
+      ...additions.map(reservationTargetKey)
+    ])
+  );
+  return targetOrder.flatMap((targetKey) => {
+    const existing = drafts.filter(
+      (draft) => reservationTargetKey(draft) === targetKey
+    );
+    const targetAdditions = additions.filter(
+      (addition) => reservationTargetKey(addition) === targetKey
+    );
+    const validExisting = existing.filter((draft) => {
+      const start = new Date(draft.startAt).getTime();
+      const end = new Date(draft.endAt).getTime();
+      return Number.isFinite(start) && Number.isFinite(end) && start < end;
+    });
+    const invalidExisting = existing.filter(
+      (draft) => !validExisting.includes(draft)
+    );
+    const ranges = mergeTimeRanges([...validExisting, ...targetAdditions]);
+    const target = validExisting[0] ?? targetAdditions[0] ?? existing[0];
+    return [
+      ...ranges.map((range, index) => ({
+        ...target,
+        id: validExisting[index]?.id ?? createId(),
+        ...range
+      })),
+      ...invalidExisting
+    ];
+  });
+}
+
+export function trimDraftsBefore(
+  drafts: CalendarDraft[],
+  boundary: string,
+  minMinutes: number
+) {
+  const boundaryTime = new Date(boundary).getTime();
+  if (!Number.isFinite(boundaryTime)) {
+    return { drafts, changed: false };
+  }
+  let changed = false;
+  const next = drafts.flatMap((draft) => {
+    const start = new Date(draft.startAt).getTime();
+    const end = new Date(draft.endAt).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return [draft];
+    if (
+      end <= boundaryTime ||
+      (start < boundaryTime &&
+        (end - boundaryTime) / 60_000 < minMinutes)
+    ) {
+      changed = true;
+      return [];
+    }
+    if (start < boundaryTime) {
+      changed = true;
+      return [
+        {
+          ...draft,
+          startAt: new Date(boundaryTime).toISOString()
+        }
+      ];
+    }
+    return [draft];
+  });
+  return { drafts: next, changed };
+}
+
+export function reservationInput(
+  draft: CalendarDraft,
+  metadata: CalendarMetadata
+): ReservationSegmentInput {
+  return {
+    scope: draft.scope,
+    machineId: draft.machineId,
+    resourceGroupId: draft.resourceGroupId,
+    startAt: draft.startAt,
+    endAt: draft.endAt,
+    title: metadata.title,
+    purpose: metadata.purpose,
+    note: metadata.note
+  };
+}
+
+export function previewKey(input: ReservationSegmentInput) {
+  return `${reservationTargetKey(input)}\u0000${input.startAt}\u0000${input.endAt}`;
+}
+
+export function previewsByDraftId(
+  drafts: CalendarDraft[],
+  items: ReservationPreviewItem[]
+) {
+  const buckets = new Map<string, ReservationPreviewItem[]>();
+  for (const item of items) {
+    const key = previewKey(item.input);
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(item);
+    buckets.set(key, bucket);
+  }
+  const result = new Map<string, ReservationPreviewItem>();
+  for (const draft of drafts) {
+    const bucket = buckets.get(previewKey(draft));
+    const item = bucket?.shift();
+    if (item) result.set(draft.id, item);
+  }
+  return result;
+}
+
+export function splitDrafts(
+  drafts: CalendarDraft[],
+  previews: ReadonlyMap<string, ReservationPreviewItem>,
+  createId: () => string
+) {
+  return drafts.flatMap((draft) => {
+    const result = previews.get(draft.id);
+    if (!result || result.available) return [draft];
+    return result.splitSegments.map((segment) => ({
+      ...segment,
+      id: createId()
+    }));
+  });
+}
+
+export function calendarDraftIssues(
+  drafts: CalendarDraft[],
+  rules: CalendarBookingRules,
+  now = Date.now()
+) {
+  const issues: string[] = [];
+  if (new Set(drafts.map((draft) => draft.scope ?? "RESOURCE_GROUP")).size > 1) {
+    issues.push("整机占用和资源组占用不能同时提交");
+  }
+  const grouped = new Map<string, CalendarDraft[]>();
+  for (const draft of drafts) {
+    const fieldIssues = calendarDraftFieldIssues(draft, rules, now);
+    if (fieldIssues.startAt) issues.push(fieldIssues.startAt);
+    if (fieldIssues.endAt) issues.push(fieldIssues.endAt);
+    const targetKey = reservationTargetKey(draft);
+    const bucket = grouped.get(targetKey) ?? [];
+    bucket.push(draft);
+    grouped.set(targetKey, bucket);
+  }
+  for (const bucket of grouped.values()) {
+    const sorted = [...bucket].sort((a, b) => a.startAt.localeCompare(b.startAt));
+    for (let index = 1; index < sorted.length; index += 1) {
+      if (sorted[index].startAt < sorted[index - 1].endAt) {
+        issues.push("同一占用目标存在重叠的草稿时段");
+        break;
+      }
+    }
+  }
+  return Array.from(new Set(issues));
+}
+
+export function calendarDraftFieldIssues(
+  draft: CalendarDraft,
+  rules: CalendarBookingRules,
+  now = Date.now()
+): CalendarDraftFieldIssues {
+  const start = new Date(draft.startAt).getTime();
+  const end = new Date(draft.endAt).getTime();
+  if (!Number.isFinite(start)) {
+    return { startAt: "请输入有效的开始时间" };
+  }
+  if (!Number.isFinite(end) || end <= start) {
+    return { endAt: "结束时间必须晚于开始时间" };
+  }
+  const issues: CalendarDraftFieldIssues = {};
+  const minutes = (end - start) / 60_000;
+  if (start < now - 60_000) {
+    issues.startAt = "不能占用已经过去的时间";
+  }
+  if (minutes < rules.minBookingMinutes) {
+    issues.endAt = `占用时间至少需要 ${rules.minBookingMinutes} 分钟`;
+  } else if (minutes > rules.maxBookingMinutes) {
+    issues.endAt = `单次占用最长 ${rules.maxBookingMinutes} 分钟`;
+  } else if (end > now + rules.advanceDays * 24 * 60 * 60_000) {
+    issues.endAt = `占用结束时间不能超过未来 ${rules.advanceDays} 天`;
+  }
+  return issues;
+}

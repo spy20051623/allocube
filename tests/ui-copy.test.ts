@@ -280,12 +280,29 @@ describe("角色化界面文案", () => {
     const timelineShell =
       styles.match(/\.timeline-scroll-shell\s*\{([^}]*)\}/)?.[1] ?? "";
     const timelineCard = styles.match(/\.timeline-card\s*\{([^}]*)\}/)?.[1] ?? "";
+    const calendarLayout =
+      styles.match(/\.calendar-layout\s*\{([^}]*)\}/)?.[1] ?? "";
+    const calendarMain =
+      styles.match(/\.calendar-main\s*\{([^}]*)\}/)?.[1] ?? "";
+    const timelineFrame =
+      styles.match(/\.timeline-scroll-frame\s*\{([^}]*)\}/)?.[1] ?? "";
+    const bookingDrawer =
+      styles.match(/\.booking-drawer\s*\{([^}]*)\}/)?.[1] ?? "";
     expect(timelineCard).not.toContain("min-height");
-    expect(timelineShell).toContain(
-      "max-height: calc(100dvh - var(--app-header-height) - 144px)"
+    expect(calendarLayout).toContain(
+      "height: calc(100dvh - var(--app-header-height))"
     );
+    expect(calendarLayout).toContain("min-height: 0");
+    expect(calendarLayout).toContain("overflow: hidden");
+    expect(calendarMain).toContain("min-height: 0");
+    expect(calendarMain).toContain("display: flex");
+    expect(timelineFrame).toContain("min-height: 0");
+    expect(timelineFrame).toContain("flex: 1 1 auto");
+    expect(timelineShell).toContain("min-height: 0");
+    expect(timelineShell).toContain("flex: 1 1 auto");
     expect(timelineShell).toContain("overflow-x: hidden");
     expect(timelineShell).toContain("overflow-y: auto");
+    expect(bookingDrawer).toContain("overflow-y: auto");
     expect(timelineCard).not.toContain("overflow:");
     expect(styles).toMatch(
       /\.timeline-head\s*\{[^}]*position:\s*sticky;[^}]*top:\s*0;/s

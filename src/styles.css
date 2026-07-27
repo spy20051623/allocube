@@ -1034,10 +1034,12 @@ textarea::placeholder {
 }
 
 .calendar-layout {
-  min-height: calc(100vh - var(--app-header-height));
-  min-height: calc(100dvh - var(--app-header-height));
+  height: calc(100vh - var(--app-header-height));
+  height: calc(100dvh - var(--app-header-height));
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .calendar-layout.composer-open {
@@ -1046,15 +1048,16 @@ textarea::placeholder {
 
 .calendar-main {
   min-width: 0;
+  min-height: 0;
   padding: 28px 26px;
+  display: flex;
+  flex-direction: column;
 }
 
 .booking-drawer {
-  position: sticky;
-  top: var(--app-header-height);
-  height: calc(100vh - var(--app-header-height));
-  height: calc(100dvh - var(--app-header-height));
-  overflow: auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 26px 24px 40px;
   border-left: 1px solid var(--line);
   background: #fbfbfc;
@@ -1062,6 +1065,7 @@ textarea::placeholder {
 
 .page-header {
   min-height: 39px;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1128,6 +1132,7 @@ textarea::placeholder {
 
 .toolbar {
   min-height: 54px;
+  flex: 0 0 auto;
   padding: 8px;
   display: flex;
   align-items: center;
@@ -1464,6 +1469,10 @@ textarea::placeholder {
 }
 
 .timeline-scroll-frame {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line);
   background: white;
@@ -1471,7 +1480,8 @@ textarea::placeholder {
 }
 
 .timeline-scroll-shell {
-  max-height: calc(100dvh - var(--app-header-height) - 144px);
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1499,6 +1509,7 @@ textarea::placeholder {
 
 .timeline-horizontal-scroll-row {
   height: 11px;
+  flex: 0 0 11px;
   margin-left: 260px;
   border-top: 1px solid #eef0f4;
   background: #fafbfc;
@@ -1540,7 +1551,8 @@ textarea::placeholder {
 }
 
 .week-overview-scroll {
-  max-height: calc(100dvh - var(--app-header-height) - 144px);
+  min-height: 0;
+  flex: 1 1 auto;
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;

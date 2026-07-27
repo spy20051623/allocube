@@ -4475,6 +4475,7 @@ function CalendarPage({
   const previewRequestIdRef = useRef(0);
   const requestControllerRef = useRef<AbortController | null>(null);
   const timelineRef = useRef<TimelinePayload | null>(null);
+  const timelineFrameRef = useRef<HTMLDivElement | null>(null);
   const timelineShellRef = useRef<HTMLDivElement | null>(null);
   const timelineHorizontalScrollRef = useRef<HTMLDivElement | null>(null);
   const bookingDrawerRef = useRef<HTMLElement | null>(null);
@@ -4634,10 +4635,10 @@ function CalendarPage({
   }, [changeTimelineZoom, view]);
 
   useEffect(() => {
-    const shell = timelineShellRef.current;
-    if (!shell) return;
-    shell.addEventListener("wheel", handleTimelineWheel, { passive: false });
-    return () => shell.removeEventListener("wheel", handleTimelineWheel);
+    const frame = timelineFrameRef.current;
+    if (!frame) return;
+    frame.addEventListener("wheel", handleTimelineWheel, { passive: false });
+    return () => frame.removeEventListener("wheel", handleTimelineWheel);
   }, [handleTimelineWheel]);
 
   const timelineZoom = view === "day" ? 24 / visibleHours : 1;
@@ -5712,7 +5713,7 @@ function CalendarPage({
             )}
           </div>
         </div>
-        <div className="timeline-scroll-frame">
+        <div ref={timelineFrameRef} className="timeline-scroll-frame">
           {initialLoading && !timeline ? (
             <div className="timeline-loading calendar-panel-state">
               <RefreshCw className="spin" />

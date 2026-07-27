@@ -298,6 +298,12 @@ describe("角色化界面文案", () => {
     expect(source).toContain("可以前往全部资源查看完整机器列表");
     expect(source).toContain('onOpenResourceCatalog={() => navigate("resources")}');
     expect(source).toContain("function CalendarEmptyState");
+    expect(source).toContain(
+      '<div ref={timelineFrameRef} className="timeline-scroll-frame">'
+    );
+    expect(source).toContain(
+      'frame.addEventListener("wheel", handleTimelineWheel, { passive: false })'
+    );
     expect(calendarEmptyState).toContain("flex: 1 1 auto");
     expect(calendarEmptyState).toContain("min-height: 0");
     expect(styles).toMatch(

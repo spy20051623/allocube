@@ -176,6 +176,7 @@ import {
   readCalendarPreference,
   writeCalendarPreference
 } from "./calendar-preference";
+import { createClientId } from "./client-id";
 import type {
   AuthUser,
   DashboardBootstrap,
@@ -5044,14 +5045,14 @@ function CalendarPage({
       const replacements = projection.available.length
         ? projection.available.map((range, index) => ({
             ...edited,
-            id: index === 0 ? draftId : crypto.randomUUID(),
+            id: index === 0 ? draftId : createClientId(),
             ...range
           }))
         : [edited];
       return mergeCalendarDrafts(
         [...withoutEdited, ...replacements],
         [],
-        () => crypto.randomUUID()
+        () => createClientId()
       );
     });
     if (adjusted && projection.available.length) {
@@ -5129,7 +5130,7 @@ function CalendarPage({
     });
     setDrafts([
       {
-        id: crypto.randomUUID(),
+        id: createClientId(),
         scope: item.scope,
         machineId: item.machineId,
         resourceGroupId: item.resourceGroupId,
@@ -5304,7 +5305,7 @@ function CalendarPage({
       return false;
     }
     setDrafts((current) =>
-      mergeCalendarDrafts(current, additions, () => crypto.randomUUID())
+      mergeCalendarDrafts(current, additions, () => createClientId())
     );
     invalidatePreview();
     const adjusted =
@@ -5387,7 +5388,7 @@ function CalendarPage({
     const next = splitDrafts(
       drafts,
       previewByDraft,
-      () => crypto.randomUUID()
+      () => createClientId()
     );
     setDrafts(next);
     setPreviewByDraft(new Map());
@@ -10253,7 +10254,7 @@ function ResourceConfigurationModal({
   };
 
   const addPool = () => {
-    const id = crypto.randomUUID();
+    const id = createClientId();
     setSaveError("");
     setDraftPools((current) => [
       ...current,
@@ -10276,7 +10277,7 @@ function ResourceConfigurationModal({
   };
 
   const addGroup = () => {
-    const id = crypto.randomUUID();
+    const id = createClientId();
     setSaveError("");
     setDraftGroups((current) => [
       ...current,
@@ -10634,7 +10635,7 @@ function ResourceConfigurationModal({
                           kind,
                           items: kind === "ITEM_LIST" && !pool.items.length
                             ? [{
-                                id: crypto.randomUUID(),
+                                id: createClientId(),
                                 key: "",
                                 label: ""
                               }]
@@ -10840,7 +10841,7 @@ function ResourceConfigurationModal({
                           items: [
                             ...pool.items,
                             {
-                              id: crypto.randomUUID(),
+                              id: createClientId(),
                               key: "",
                               label: ""
                             }

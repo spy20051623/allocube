@@ -256,6 +256,9 @@ export function getBootstrapConfig() {
 
 export const config = {
   isProduction,
+  host:
+    process.env.HOST?.trim() ||
+    (isProduction ? "0.0.0.0" : "127.0.0.1"),
   port: Number(process.env.PORT ?? 8787),
   databasePath,
   instanceSecretsPath: instanceSecrets.path,
@@ -269,6 +272,9 @@ export const config = {
 
 export function validateRuntimeConfig() {
   const issues: string[] = [];
+  if (!["127.0.0.1", "0.0.0.0", "::"].includes(config.host)) {
+    issues.push("HOST（127.0.0.1、0.0.0.0 或 ::）");
+  }
   if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) {
     issues.push("PORT（1–65535）");
   }

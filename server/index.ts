@@ -364,6 +364,6 @@ if (passwordReminder) {
 }
 
 await app.listen({
-  host: config.isProduction ? "0.0.0.0" : "127.0.0.1",
+  host: config.host,
   port: config.port
 });

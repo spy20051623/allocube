@@ -101,6 +101,7 @@ npm run dev
 | 配置 | 作用 |
 |---|---|
 | `NODE_ENV` | 选择开发或生产运行模式；正式部署必须使用 `production` |
+| `HOST` | 指定 Fastify 监听地址；仅在明确需要从其他主机访问开发服务时调整 |
 | `PORT` | 指定 Fastify 监听端口 |
 | `DATABASE_PATH` | 指定 SQLite 主数据库的位置 |
 

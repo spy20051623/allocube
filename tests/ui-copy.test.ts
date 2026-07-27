@@ -273,6 +273,10 @@ describe("角色化界面文案", () => {
   });
 
   it("资源日历按实际内容收紧并只在长列表时滚动", () => {
+    const source = fs.readFileSync(
+      new URL("../src/App.tsx", import.meta.url),
+      "utf8"
+    );
     const styles = fs.readFileSync(
       new URL("../src/styles.css", import.meta.url),
       "utf8"
@@ -288,6 +292,17 @@ describe("角色化界面文案", () => {
       styles.match(/\.timeline-scroll-frame\s*\{([^}]*)\}/)?.[1] ?? "";
     const bookingDrawer =
       styles.match(/\.booking-drawer\s*\{([^}]*)\}/)?.[1] ?? "";
+    const calendarEmptyState =
+      styles.match(/\.calendar-empty-state\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(source).toContain('title="没有符合条件的资源组"');
+    expect(source).toContain("可以前往全部资源查看完整机器列表");
+    expect(source).toContain('onOpenResourceCatalog={() => navigate("resources")}');
+    expect(source).toContain("function CalendarEmptyState");
+    expect(calendarEmptyState).toContain("flex: 1 1 auto");
+    expect(calendarEmptyState).toContain("min-height: 0");
+    expect(styles).toMatch(
+      /\.calendar-empty-state\s*\{[^}]*overflow:\s*hidden;/s
+    );
     expect(timelineCard).not.toContain("min-height");
     expect(calendarLayout).toContain(
       "height: calc(100dvh - var(--app-header-height))"

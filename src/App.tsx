@@ -5713,11 +5713,35 @@ function CalendarPage({
           </div>
         </div>
         <div className="timeline-scroll-frame">
-          {view === "week" ? (
+          {initialLoading && !timeline ? (
+            <div className="timeline-loading calendar-panel-state">
+              <RefreshCw className="spin" />
+              正在同步资源状态
+            </div>
+          ) : !timeline?.machines.length ? (
+            <CalendarEmptyState
+              icon={Server}
+              title="暂无可用资源"
+              text="可以前往全部资源查看完整机器列表并申请使用权。"
+              onOpenResourceCatalog={() => navigate("resources")}
+            />
+          ) : !timeline.groups.length ? (
+            <CalendarEmptyState
+              icon={debouncedSearch ? Search : Server}
+              title="没有符合条件的资源组"
+              text={
+                debouncedSearch
+                  ? "可以调整搜索或筛选条件，或前往全部资源查看完整机器列表。"
+                  : selectedMachine
+                    ? "可以切换机器，或前往全部资源查看完整机器列表。"
+                    : "可以前往全部资源查看完整机器列表。"
+              }
+              onOpenResourceCatalog={() => navigate("resources")}
+            />
+          ) : view === "week" ? (
             <CalendarWeekOverview
               timeline={timeline}
               range={range}
-              loading={initialLoading}
               refreshing={refreshing}
               onSelectDay={(selectedDate) => changeView("day", selectedDate)}
             />
@@ -5742,27 +5766,6 @@ function CalendarPage({
               onSelectDay={(selectedDate) => changeView("day", selectedDate)}
             />
           </div>
-          {initialLoading && !timeline && <div className="timeline-loading"><RefreshCw className="spin" />正在同步资源状态</div>}
-          {!initialLoading && !timeline?.machines.length && (
-            <EmptyState icon={Server} title="还没有可用机器" text="可以前往全部资源申请机器使用权。" />
-          )}
-          {!initialLoading &&
-            Boolean(timeline?.machines.length) &&
-            !timeline?.groups.length && (
-              <EmptyState
-                icon={debouncedSearch ? Search : Server}
-                title={
-                  debouncedSearch
-                    ? "没有匹配的资源组"
-                    : "当前机器尚未配置资源组"
-                }
-                text={
-                  debouncedSearch
-                    ? "请调整搜索条件或机器筛选。"
-                    : "配置完成后即可在这里查看和占用资源。"
-                }
-              />
-            )}
           {timeline?.machines.map((machine) => {
             const machineGroups = groupsByMachine.get(machine.id) ?? [];
             if (!machineGroups.length) return null;
@@ -6393,13 +6396,11 @@ function CalendarPage({
 function CalendarWeekOverview({
   timeline,
   range,
-  loading,
   refreshing,
   onSelectDay
 }: {
-  timeline: TimelinePayload | null;
+  timeline: TimelinePayload;
   range: { from: string; to: string; startDate: string; days: number };
-  loading: boolean;
   refreshing: boolean;
   onSelectDay: (date: string) => void;
 }) {
@@ -6410,37 +6411,10 @@ function CalendarWeekOverview({
     string,
     Array<Omit<ResourceGroup, "version">>
   >();
-  for (const group of timeline?.groups ?? []) {
+  for (const group of timeline.groups) {
     const groups = groupsByMachine.get(group.machineId) ?? [];
     groups.push(group);
     groupsByMachine.set(group.machineId, groups);
-  }
-
-  if (loading && !timeline) {
-    return (
-      <div className="timeline-loading">
-        <RefreshCw className="spin" />
-        正在同步资源状态
-      </div>
-    );
-  }
-  if (!timeline?.machines.length) {
-    return (
-      <EmptyState
-        icon={Server}
-        title="还没有可用机器"
-        text="可以前往全部资源申请机器使用权。"
-      />
-    );
-  }
-  if (!timeline.groups.length) {
-    return (
-      <EmptyState
-        icon={Search}
-        title="没有匹配的资源组"
-        text="请调整搜索条件或机器筛选。"
-      />
-    );
   }
 
   return (
@@ -12963,6 +12937,36 @@ function EmptyState({
       <div><Icon size={25} /></div>
       <h3>{title}</h3>
       {text && <p>{text}</p>}
+    </div>
+  );
+}
+
+function CalendarEmptyState({
+  icon: Icon,
+  title,
+  text,
+  onOpenResourceCatalog
+}: {
+  icon: React.ComponentType<{ size?: number }>;
+  title: string;
+  text: string;
+  onOpenResourceCatalog: () => void;
+}) {
+  return (
+    <div className="calendar-empty-state">
+      <div className="calendar-empty-state-icon">
+        <Icon size={26} />
+      </div>
+      <h3>{title}</h3>
+      <p>{text}</p>
+      <button
+        type="button"
+        className="secondary-button"
+        onClick={onOpenResourceCatalog}
+      >
+        <Server size={15} />
+        全部资源
+      </button>
     </div>
   );
 }

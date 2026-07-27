@@ -304,6 +304,12 @@ describe("角色化界面文案", () => {
     expect(source).toContain(
       'frame.addEventListener("wheel", handleTimelineWheel, { passive: false })'
     );
+    expect(source).toContain(
+      "[hasTimelineContent, scrollTimelineToMinutes, timelineScrollTarget]"
+    );
+    expect(source).toContain(
+      "[hasTimelineContent, scrollTimelineToMinutes]"
+    );
     expect(calendarEmptyState).toContain("flex: 1 1 auto");
     expect(calendarEmptyState).toContain("min-height: 0");
     expect(styles).toMatch(

@@ -4495,6 +4495,9 @@ function CalendarPage({
       days
     };
   }, [date, view]);
+  const hasTimelineContent = Boolean(
+    timeline?.machines.length && timeline?.groups.length
+  );
 
   const scrollTimelineToMinutes = useCallback(
     (requestedStartMinutes: number) => {
@@ -4525,7 +4528,7 @@ function CalendarPage({
       scrollTimelineToMinutes(timelineScrollTarget.startMinutes);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [scrollTimelineToMinutes, timelineScrollTarget]);
+  }, [hasTimelineContent, scrollTimelineToMinutes, timelineScrollTarget]);
 
   useEffect(() => {
     if (view !== "day") {
@@ -4558,7 +4561,7 @@ function CalendarPage({
     });
     observer.observe(shell);
     return () => observer.disconnect();
-  }, [scrollTimelineToMinutes]);
+  }, [hasTimelineContent, scrollTimelineToMinutes]);
 
   const handleTimelineScroll = () => {
     const shell = timelineShellRef.current;

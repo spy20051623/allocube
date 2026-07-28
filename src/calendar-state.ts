@@ -376,6 +376,67 @@ export function mergeTimeRanges(ranges: CalendarTimeRange[]) {
   }));
 }
 
+export function eraseCalendarDraftRange(
+  drafts: CalendarDraft[],
+  target: Pick<
+    ReservationSegmentInput,
+    "scope" | "machineId" | "resourceGroupId"
+  >,
+  erasedRange: CalendarTimeRange,
+  createId: () => string,
+  minMinutes = 1,
+  immediateBoundary?: string
+) {
+  const erasedStart = new Date(erasedRange.startAt).getTime();
+  const erasedEnd = new Date(erasedRange.endAt).getTime();
+  if (
+    !Number.isFinite(erasedStart) ||
+    !Number.isFinite(erasedEnd) ||
+    erasedStart >= erasedEnd
+  ) {
+    return { drafts, changed: false };
+  }
+  const targetKey = reservationTargetKey(target);
+  const minimumDuration = Math.max(1, minMinutes) * 60_000;
+  const boundaryTime = immediateBoundary
+    ? new Date(immediateBoundary).getTime()
+    : Number.NaN;
+  let changed = false;
+  const next = drafts.flatMap((draft) => {
+    if (reservationTargetKey(draft) !== targetKey) return [draft];
+    const start = new Date(draft.startAt).getTime();
+    const end = new Date(draft.endAt).getTime();
+    if (
+      !Number.isFinite(start) ||
+      !Number.isFinite(end) ||
+      erasedEnd <= start ||
+      erasedStart >= end
+    ) {
+      return [draft];
+    }
+    changed = true;
+    const ranges = [
+      { start, end: Math.min(end, erasedStart) },
+      { start: Math.max(start, erasedEnd), end }
+    ].filter((range) => range.end - range.start >= minimumDuration);
+    return ranges.map((range, index) => ({
+      ...draft,
+      id: index === 0 ? draft.id : createId(),
+      startAt: new Date(range.start).toISOString(),
+      endAt: new Date(range.end).toISOString(),
+      ...(Number.isFinite(boundaryTime)
+        ? {
+            startMode:
+              range.start <= boundaryTime
+                ? "IMMEDIATE" as const
+                : "SCHEDULED" as const
+          }
+        : {})
+    }));
+  });
+  return { drafts: next, changed };
+}
+
 export function mergeCalendarDrafts(
   drafts: CalendarDraft[],
   additions: Array<ReservationSegmentInput & CalendarTimeRange>,

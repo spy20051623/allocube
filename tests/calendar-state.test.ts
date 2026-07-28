@@ -11,6 +11,7 @@ import {
   currentMinuteStart,
   defaultDayWindowStartMinutes,
   draggedTimeRange,
+  eraseCalendarDraftRange,
   mergeCalendarDrafts,
   mergeTimeRanges,
   parseCalendarQuery,
@@ -416,6 +417,72 @@ describe("资源日历状态", () => {
         endAt: "2026-07-27T05:00:00.000Z"
       }
     ]);
+  });
+
+  it("右键拖动可删除、裁切或拆分同一目标的草稿", () => {
+    const drafts: CalendarDraft[] = [
+      {
+        id: "draft-a",
+        scope: "RESOURCE_GROUP",
+        machineId: "machine-a",
+        resourceGroupId: "group-a",
+        startMode: "IMMEDIATE",
+        startAt: "2026-07-27T01:00:00.000Z",
+        endAt: "2026-07-27T05:00:00.000Z"
+      },
+      {
+        id: "draft-b",
+        scope: "RESOURCE_GROUP",
+        machineId: "machine-a",
+        resourceGroupId: "group-b",
+        startMode: "SCHEDULED",
+        startAt: "2026-07-27T01:00:00.000Z",
+        endAt: "2026-07-27T05:00:00.000Z"
+      }
+    ];
+    expect(
+      eraseCalendarDraftRange(
+        drafts,
+        {
+          scope: "RESOURCE_GROUP",
+          machineId: "machine-a",
+          resourceGroupId: "group-a"
+        },
+        {
+          startAt: "2026-07-27T02:00:00.000Z",
+          endAt: "2026-07-27T04:00:00.000Z"
+        },
+        () => "split-id",
+        30,
+        "2026-07-27T01:00:00.000Z"
+      )
+    ).toEqual({
+      changed: true,
+      drafts: [
+        {
+          ...drafts[0],
+          endAt: "2026-07-27T02:00:00.000Z"
+        },
+        {
+          ...drafts[0],
+          id: "split-id",
+          startMode: "SCHEDULED",
+          startAt: "2026-07-27T04:00:00.000Z"
+        },
+        drafts[1]
+      ]
+    });
+    expect(
+      eraseCalendarDraftRange(
+        [drafts[0]],
+        drafts[0],
+        {
+          startAt: "2026-07-27T00:00:00.000Z",
+          endAt: "2026-07-27T06:00:00.000Z"
+        },
+        () => "unused"
+      )
+    ).toEqual({ changed: true, drafts: [] });
   });
 
   it("编辑后已有草稿首尾相接或重叠时也会自动合并", () => {

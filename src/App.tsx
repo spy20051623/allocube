@@ -155,6 +155,7 @@ import {
   currentMinuteStart,
   defaultDayWindowStartMinutes,
   draggedTimeRange,
+  eraseCalendarDraftRange,
   mergeCalendarDrafts,
   mergeTimeRanges,
   parseCalendarQuery,
@@ -871,7 +872,7 @@ function MouseControlIcon({
   highlight,
   size = 14
 }: {
-  highlight: "LEFT_BUTTON" | "WHEEL";
+  highlight: "LEFT_BUTTON" | "RIGHT_BUTTON" | "WHEEL";
   size?: number;
 }) {
   return (
@@ -891,15 +892,19 @@ function MouseControlIcon({
         d="M5 10V9a7 7 0 0 1 14 0v1Z"
         stroke="none"
       />
-      {highlight === "LEFT_BUTTON" && (
+      {(highlight === "LEFT_BUTTON" || highlight === "RIGHT_BUTTON") && (
         <path
           className="mouse-control-accent"
-          d="M5 10V9a7 7 0 0 1 7-7v8Z"
+          d={
+            highlight === "LEFT_BUTTON"
+              ? "M5 10V9a7 7 0 0 1 7-7v8Z"
+              : "M12 2a7 7 0 0 1 7 7v1h-7Z"
+          }
           stroke="none"
         />
       )}
       <path d="M5 10h14" />
-      {highlight === "LEFT_BUTTON" ? (
+      {highlight === "LEFT_BUTTON" || highlight === "RIGHT_BUTTON" ? (
         <path d="M12 2v8" />
       ) : (
         <rect
@@ -922,6 +927,10 @@ function MouseControlIcon({
 
 function MouseLeftButtonIcon({ size = 14 }: { size?: number }) {
   return <MouseControlIcon highlight="LEFT_BUTTON" size={size} />;
+}
+
+function MouseRightButtonIcon({ size = 14 }: { size?: number }) {
+  return <MouseControlIcon highlight="RIGHT_BUTTON" size={size} />;
 }
 
 function MouseWheelIcon({ size = 14 }: { size?: number }) {
@@ -4550,6 +4559,7 @@ function CalendarPage({
   const [previewing, setPreviewing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [dragPreview, setDragPreview] = useState<{
+    action: "ADD" | "ERASE";
     sourceGroupId: string;
     target: CalendarReservationTarget;
     requested: CalendarTimeRange;
@@ -4570,6 +4580,8 @@ function CalendarPage({
     anchor: DOMRect;
   } | null>(null);
   const dragState = useRef<{
+    action: "ADD" | "ERASE";
+    target: CalendarReservationTarget;
     groupId: string;
     pointerId: number;
     startX: number;
@@ -5755,14 +5767,22 @@ function CalendarPage({
       pointerEnd: endClientX
     });
     if (!dragged) return;
-    const group = groupById.get(groupId);
-    if (!group) return;
+    if (active.action === "ERASE") {
+      const erased = eraseCalendarDraftRange(
+        drafts,
+        active.target,
+        dragged,
+        () => createClientId(),
+        settings.minBookingMinutes,
+        currentMinuteStart(currentTime)
+      );
+      if (!erased.changed) return;
+      setDrafts(erased.drafts);
+      invalidatePreview();
+      return;
+    }
     appendDraft(
-      {
-        scope: reservationMode,
-        machineId: group.machineId,
-        resourceGroupId: group.id
-      },
+      active.target,
       dragged.startAt,
       dragged.endAt
     );
@@ -5828,10 +5848,12 @@ function CalendarPage({
             <div className="calendar-header-actions">
               <div
                 className="calendar-wheel-hint"
-                title="左键拖动：新增占用；滚轮：上下滚动；Shift + 滚轮：左右滚动；Alt + 滚轮：缩放时间轴"
-                aria-label="时间轴操作：鼠标左键拖动新增占用，滚轮上下滚动，Shift 加滚轮左右滚动，Alt 加滚轮缩放"
+                title="左键拖动：新增占用；右键拖动：删除草稿时段；滚轮：上下滚动；Shift + 滚轮：左右滚动；Alt + 滚轮：缩放时间轴"
+                aria-label="时间轴操作：鼠标左键拖动新增占用，鼠标右键拖动删除草稿时段，滚轮上下滚动，Shift 加滚轮左右滚动，Alt 加滚轮缩放"
               >
                 <span><MouseLeftButtonIcon />拖动 新增</span>
+                <i />
+                <span><MouseRightButtonIcon />拖动 删除</span>
                 <i />
                 <span><MouseWheelIcon />上下</span>
                 <i />
@@ -6236,7 +6258,10 @@ function CalendarPage({
                             : undefined
                         }
                         onPointerDown={(event) => {
-                          if (!selectable) return;
+                          if (event.button !== 0 && event.button !== 2) return;
+                          const action =
+                            event.button === 2 ? "ERASE" as const : "ADD" as const;
+                          if (action === "ADD" && !selectable) return;
                           if (
                             (event.target as HTMLElement).closest(
                               ".booking-bar, .unavailability-bar"
@@ -6244,7 +6269,14 @@ function CalendarPage({
                           ) {
                             return;
                           }
+                          const target =
+                            reservationMode === "MACHINE"
+                              ? machineTarget
+                              : groupTarget;
+                          event.preventDefault();
                           dragState.current = {
+                            action,
+                            target,
                             groupId: group.id,
                             pointerId: event.pointerId,
                             startX: event.clientX
@@ -6258,7 +6290,12 @@ function CalendarPage({
                           event.currentTarget.setPointerCapture(event.pointerId);
                         }}
                         onPointerMove={(event) => {
-                          if (selectable) {
+                          const active = dragState.current;
+                          if (
+                            selectable ||
+                            (active?.pointerId === event.pointerId &&
+                              active.groupId === group.id)
+                          ) {
                             updateHoveredTimelineTime(
                               event.currentTarget,
                               group.id,
@@ -6266,8 +6303,8 @@ function CalendarPage({
                             );
                           }
                           if (
-                            dragState.current?.pointerId === event.pointerId &&
-                            dragState.current.groupId === group.id
+                            active?.pointerId === event.pointerId &&
+                            active.groupId === group.id
                           ) {
                             const rect =
                               event.currentTarget.getBoundingClientRect();
@@ -6276,25 +6313,55 @@ function CalendarPage({
                               days: range.days,
                               trackLeft: rect.left,
                               trackWidth: rect.width,
-                              pointerStart: dragState.current.startX,
+                              pointerStart: active.startX,
                               pointerEnd: event.clientX
                             });
                             if (!requested) {
                               setDragPreview(null);
                               return;
                             }
-                            const target =
-                              reservationMode === "MACHINE"
-                                ? machineTarget
-                                : groupTarget;
-                            const projection = projectDraggedRange(
-                              target,
-                              requested
-                            );
-                            setDragPreview({
-                              sourceGroupId: group.id,
-                              ...projection
-                            });
+                            if (active.action === "ERASE") {
+                              const erased = eraseCalendarDraftRange(
+                                drafts,
+                                active.target,
+                                requested,
+                                () => "preview",
+                                settings.minBookingMinutes,
+                                currentMinuteStart(currentTime)
+                              );
+                              setDragPreview({
+                                action: "ERASE",
+                                sourceGroupId: group.id,
+                                target: active.target,
+                                requested,
+                                available: [],
+                                blocked: false,
+                                projected: erased.drafts
+                                  .filter(
+                                    (draft) =>
+                                      reservationTargetKey(draft) ===
+                                      reservationTargetKey(active.target)
+                                  )
+                                  .map((draft) => ({
+                                    scope: draft.scope ?? "RESOURCE_GROUP",
+                                    machineId:
+                                      draft.machineId ?? active.target.machineId,
+                                    resourceGroupId: draft.resourceGroupId,
+                                    startAt: draft.startAt,
+                                    endAt: draft.endAt
+                                  }))
+                              });
+                            } else {
+                              const projection = projectDraggedRange(
+                                active.target,
+                                requested
+                              );
+                              setDragPreview({
+                                action: "ADD",
+                                sourceGroupId: group.id,
+                                ...projection
+                              });
+                            }
                           }
                         }}
                         onPointerCancel={() => {
@@ -6312,6 +6379,7 @@ function CalendarPage({
                             event.clientX
                           )
                         }
+                        onContextMenu={(event) => event.preventDefault()}
                       >
                         <TrackGrid view={view} visibleHours={visibleHours} />
                         <CurrentTimeLine
@@ -6429,7 +6497,7 @@ function CalendarPage({
                               start={draft.startAt}
                               end={draft.endAt}
                               range={range}
-                              className={`draft-timeline-bar${isDragTarget ? " preview" : ""}${draft.scope === "MACHINE" ? " machine-scope" : ""}`}
+                              className={`draft-timeline-bar${isDragTarget && dragPreview?.action === "ADD" ? " preview" : ""}${draft.scope === "MACHINE" ? " machine-scope" : ""}`}
                             >
                               <span className="booking-dot" />
                               <span className="booking-bar-copy">
@@ -6460,6 +6528,20 @@ function CalendarPage({
                           ))}
                         {dragPreview &&
                           isDragTarget &&
+                          dragPreview.action === "ERASE" && (
+                            <TimelineBar
+                              start={dragPreview.requested.startAt}
+                              end={dragPreview.requested.endAt}
+                              range={range}
+                              className="drag-erase-bar"
+                            >
+                              <X size={12} />
+                              删除草稿
+                            </TimelineBar>
+                          )}
+                        {dragPreview &&
+                          isDragTarget &&
+                          dragPreview.action === "ADD" &&
                           dragPreview.blocked && (
                             <TimelineBar
                               start={dragPreview.requested.startAt}

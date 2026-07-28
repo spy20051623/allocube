@@ -6,6 +6,7 @@ import {
   calendarQueryUrl,
   calendarUrlWithoutEditRequest,
   calendarUrlWithEditRequest,
+  createServerClockAnchor,
   clampDayWindowStartMinutes,
   currentMinuteStart,
   defaultDayWindowStartMinutes,
@@ -17,10 +18,11 @@ import {
   parseCalendarEditReservationId,
   previewsByDraftId,
   snappedTimelineInstant,
+  serverTimeFromAnchor,
   subtractBusyTimeRanges,
   splitDrafts,
   timelineWheelAction,
-  trimDraftsBefore,
+  advanceCalendarDrafts,
   type CalendarDraft
 } from "../src/calendar-state";
 
@@ -269,24 +271,27 @@ describe("资源日历状态", () => {
     ).toEqual([]);
   });
 
-  it("时间推进后自动裁剪或删除尚未提交的草稿", () => {
-    const result = trimDraftsBefore(
+  it("服务器时间推进后，立即开始草稿跟随当前分钟并清理过期草稿", () => {
+    const result = advanceCalendarDrafts(
       [
         {
           id: "trimmed",
           resourceGroupId: "group-a",
+          startMode: "IMMEDIATE",
           startAt: "2026-07-27T10:00:00.000Z",
           endAt: "2026-07-27T12:00:00.000Z"
         },
         {
           id: "expired",
           resourceGroupId: "group-a",
+          startMode: "IMMEDIATE",
           startAt: "2026-07-27T09:00:00.000Z",
           endAt: "2026-07-27T10:20:00.000Z"
         },
         {
           id: "future",
           resourceGroupId: "group-b",
+          startMode: "SCHEDULED",
           startAt: "2026-07-27T13:00:00.000Z",
           endAt: "2026-07-27T14:00:00.000Z"
         }
@@ -300,17 +305,58 @@ describe("资源日历状态", () => {
         {
           id: "trimmed",
           resourceGroupId: "group-a",
+          startMode: "IMMEDIATE",
           startAt: "2026-07-27T10:15:00.000Z",
           endAt: "2026-07-27T12:00:00.000Z"
         },
         {
           id: "future",
           resourceGroupId: "group-b",
+          startMode: "SCHEDULED",
           startAt: "2026-07-27T13:00:00.000Z",
           endAt: "2026-07-27T14:00:00.000Z"
         }
       ]
     });
+  });
+
+  it("普通预约到达当前分钟后自动进入立即开始模式", () => {
+    const draft: CalendarDraft = {
+      id: "scheduled",
+      resourceGroupId: "group-a",
+      startMode: "SCHEDULED",
+      startAt: "2026-07-27T10:15:00.000Z",
+      endAt: "2026-07-27T12:00:00.000Z"
+    };
+    expect(
+      advanceCalendarDrafts(
+        [draft],
+        "2026-07-27T10:14:00.000Z",
+        15
+      )
+    ).toEqual({ changed: false, drafts: [draft] });
+    expect(
+      advanceCalendarDrafts(
+        [draft],
+        "2026-07-27T10:15:00.000Z",
+        15
+      ).drafts[0]
+    ).toMatchObject({
+      startMode: "IMMEDIATE",
+      startAt: "2026-07-27T10:15:00.000Z"
+    });
+  });
+
+  it("服务器授时使用往返中点，并以单调时间持续推进", () => {
+    const anchor = createServerClockAnchor(
+      "2026-07-27T10:00:00.000Z",
+      1_000,
+      1_200
+    );
+    expect(anchor).not.toBeNull();
+    expect(serverTimeFromAnchor(anchor!, 1_700)).toBe(
+      new Date("2026-07-27T10:00:00.600Z").getTime()
+    );
   });
 
   it("新增时段与已有草稿重叠或首尾相接时自动合并", () => {

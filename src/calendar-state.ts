@@ -14,6 +14,7 @@ export type CalendarQueryState = {
 
 export type CalendarDraft = ReservationSegmentInput & {
   id: string;
+  startMode?: "IMMEDIATE" | "SCHEDULED";
 };
 
 export type CalendarMetadata = {
@@ -95,6 +96,38 @@ export function defaultDayWindowStartMinutes(
 
 export function currentMinuteStart(now: number) {
   return new Date(Math.floor(now / 60_000) * 60_000).toISOString();
+}
+
+export type ServerClockAnchor = {
+  serverTime: number;
+  monotonicTime: number;
+};
+
+export function createServerClockAnchor(
+  serverNow: string,
+  requestStartedAt: number,
+  responseReceivedAt: number
+): ServerClockAnchor | null {
+  const serverTime = new Date(serverNow).getTime();
+  if (
+    !Number.isFinite(serverTime) ||
+    !Number.isFinite(requestStartedAt) ||
+    !Number.isFinite(responseReceivedAt) ||
+    responseReceivedAt < requestStartedAt
+  ) {
+    return null;
+  }
+  return {
+    serverTime: serverTime + (responseReceivedAt - requestStartedAt) / 2,
+    monotonicTime: responseReceivedAt
+  };
+}
+
+export function serverTimeFromAnchor(
+  anchor: ServerClockAnchor,
+  monotonicTime: number
+) {
+  return anchor.serverTime + Math.max(0, monotonicTime - anchor.monotonicTime);
 }
 
 export function parseCalendarQuery(
@@ -346,8 +379,12 @@ export function mergeTimeRanges(ranges: CalendarTimeRange[]) {
 export function mergeCalendarDrafts(
   drafts: CalendarDraft[],
   additions: Array<ReservationSegmentInput & CalendarTimeRange>,
-  createId: () => string
+  createId: () => string,
+  immediateBoundary?: string
 ) {
+  const boundaryTime = immediateBoundary
+    ? new Date(immediateBoundary).getTime()
+    : Number.NaN;
   const targetOrder = Array.from(
     new Set([
       ...drafts.map(reservationTargetKey),
@@ -375,14 +412,24 @@ export function mergeCalendarDrafts(
       ...ranges.map((range, index) => ({
         ...target,
         id: validExisting[index]?.id ?? createId(),
-        ...range
+        ...range,
+        ...(Number.isFinite(boundaryTime)
+          ? {
+              startMode:
+                new Date(range.startAt).getTime() <= boundaryTime
+                  ? "IMMEDIATE" as const
+                  : "SCHEDULED" as const
+            }
+          : target.startMode
+            ? { startMode: target.startMode }
+            : {})
       })),
       ...invalidExisting
     ];
   });
 }
 
-export function trimDraftsBefore(
+export function advanceCalendarDrafts(
   drafts: CalendarDraft[],
   boundary: string,
   minMinutes: number
@@ -396,19 +443,25 @@ export function trimDraftsBefore(
     const start = new Date(draft.startAt).getTime();
     const end = new Date(draft.endAt).getTime();
     if (!Number.isFinite(start) || !Number.isFinite(end)) return [draft];
+    const immediate = draft.startMode === "IMMEDIATE" || start <= boundaryTime;
+    if (!immediate) {
+      if (draft.startMode === "SCHEDULED") return [draft];
+      changed = true;
+      return [{ ...draft, startMode: "SCHEDULED" as const }];
+    }
     if (
       end <= boundaryTime ||
-      (start < boundaryTime &&
-        (end - boundaryTime) / 60_000 < minMinutes)
+      (end - boundaryTime) / 60_000 < minMinutes
     ) {
       changed = true;
       return [];
     }
-    if (start < boundaryTime) {
+    if (start !== boundaryTime || draft.startMode !== "IMMEDIATE") {
       changed = true;
       return [
         {
           ...draft,
+          startMode: "IMMEDIATE" as const,
           startAt: new Date(boundaryTime).toISOString()
         }
       ];
@@ -426,6 +479,7 @@ export function reservationInput(
     scope: draft.scope,
     machineId: draft.machineId,
     resourceGroupId: draft.resourceGroupId,
+    startMode: draft.startMode,
     startAt: draft.startAt,
     endAt: draft.endAt,
     title: metadata.title,
@@ -442,19 +496,11 @@ export function previewsByDraftId(
   drafts: CalendarDraft[],
   items: ReservationPreviewItem[]
 ) {
-  const buckets = new Map<string, ReservationPreviewItem[]>();
-  for (const item of items) {
-    const key = previewKey(item.input);
-    const bucket = buckets.get(key) ?? [];
-    bucket.push(item);
-    buckets.set(key, bucket);
-  }
   const result = new Map<string, ReservationPreviewItem>();
-  for (const draft of drafts) {
-    const bucket = buckets.get(previewKey(draft));
-    const item = bucket?.shift();
+  drafts.forEach((draft, index) => {
+    const item = items[index];
     if (item) result.set(draft.id, item);
-  }
+  });
   return result;
 }
 
@@ -519,7 +565,8 @@ export function calendarDraftFieldIssues(
   }
   const issues: CalendarDraftFieldIssues = {};
   const minutes = (end - start) / 60_000;
-  if (start < now - 60_000) {
+  const currentMinute = Math.floor(now / 60_000) * 60_000;
+  if (start < currentMinute) {
     issues.startAt = "不能占用已经过去的时间";
   }
   if (minutes < rules.minBookingMinutes) {

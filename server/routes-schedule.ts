@@ -49,7 +49,7 @@ export function registerScheduleRoutes(
     const rows = db
       .prepare(
         `SELECT
-           m.id, m.name, m.tags_json, m.status,
+           m.id, m.name, m.address, m.tags_json, m.status,
            CASE
              WHEN ? = 'SYSTEM_ADMIN' THEN 1
              WHEN mam.id IS NOT NULL THEN 1
@@ -115,6 +115,7 @@ export function registerScheduleRoutes(
       machines: rows.map((row) => ({
         id: row.id,
         name: row.name,
+        address: row.address,
         status: row.status,
         resourceSummary: machineResourceSummary(String(row.id)),
         tags: parseTags(String(row.tags_json)),
@@ -330,6 +331,12 @@ export function registerScheduleRoutes(
     };
   });
 
+  app.get("/api/v1/server-time", async (request, reply) => {
+    const auth = requireSession(request, reply);
+    if (!auth) return;
+    return { serverNow: nowIso() };
+  });
+
   app.get("/api/v1/timeline", async (request, reply) => {
     const auth = requireAuth(request, reply);
     if (!auth) return;
@@ -366,7 +373,8 @@ export function registerScheduleRoutes(
         groups: [],
         reservations: [],
         unavailability: [],
-        revision: getScheduleRevision()
+        revision: getScheduleRevision(),
+        serverNow: nowIso()
       };
     }
     const machineRows = db
@@ -378,7 +386,14 @@ export function registerScheduleRoutes(
       .all(...selectedIds) as Array<Record<string, unknown>>;
     const machineIds = machineRows.map((row) => String(row.id));
     if (!machineIds.length) {
-      return { machines: [], groups: [], reservations: [], unavailability: [], revision: getScheduleRevision() };
+      return {
+        machines: [],
+        groups: [],
+        reservations: [],
+        unavailability: [],
+        revision: getScheduleRevision(),
+        serverNow: nowIso()
+      };
     }
     const placeholders = machineIds.map(() => "?").join(",");
     const allGroups = db
@@ -485,7 +500,8 @@ export function registerScheduleRoutes(
       }),
       reservations,
       unavailability,
-      revision: getScheduleRevision()
+      revision: getScheduleRevision(),
+      serverNow: nowIso()
     };
   });
 
@@ -499,15 +515,14 @@ export function registerScheduleRoutes(
       })
       .parse(request.body);
     assertUserCanAccessSegments(auth.user.id, segments);
-    return {
-      items: replaceReservationId
+    const items = replaceReservationId
         ? previewReplacementSegments(
             auth.user.id,
             replaceReservationId,
             segments
           )
-        : previewSegments(segments)
-    };
+        : previewSegments(segments);
+    return { items, serverNow: nowIso() };
   });
 
   app.post("/api/v1/reservations/batch", async (request, reply) => {

@@ -78,6 +78,47 @@ beforeAll(async () => {
 });
 
 describe("资源占用事务与拆分", () => {
+  it("立即开始和已经到达的预约均以服务器当前分钟为准", () => {
+    const serverMinute = dbModule.currentMinuteIso();
+    const pastStart = new Date(
+      new Date(serverMinute).getTime() - 5 * 60_000
+    ).toISOString();
+    const endAt = new Date(
+      new Date(serverMinute).getTime() + 30 * 60_000
+    ).toISOString();
+    const preview = scheduling.previewSegments([
+      {
+        resourceGroupId: secondGroupId,
+        startMode: "SCHEDULED",
+        startAt: pastStart,
+        endAt
+      }
+    ]);
+    expect(preview[0].input).toMatchObject({
+      startMode: "IMMEDIATE",
+      startAt: serverMinute
+    });
+
+    const committed = scheduling.commitReservationBatch(userId, [
+      {
+        resourceGroupId: secondGroupId,
+        startMode: "IMMEDIATE",
+        startAt: pastStart,
+        endAt
+      }
+    ]);
+    expect(committed.reservations[0].startMode).toBe("IMMEDIATE");
+    expect(committed.reservations[0].startAt >= serverMinute).toBe(true);
+    expect(
+      committed.reservations[0].startAt <= dbModule.currentMinuteIso()
+    ).toBe(true);
+    dbModule.db
+      .prepare(
+        "UPDATE reservations SET status = 'CANCELLED' WHERE id = ?"
+      )
+      .run(committed.reservations[0].id);
+  });
+
   it("允许首尾相接，但拒绝真实重叠", () => {
     const startAt = futureIso(120);
     const endAt = futureIso(180);

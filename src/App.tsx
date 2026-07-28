@@ -166,9 +166,11 @@ import {
   subtractBusyTimeRanges,
   splitDrafts,
   timelineWheelAction,
-  trimDraftsBefore,
+  advanceCalendarDrafts,
   type CalendarDraft,
   type CalendarMetadata,
+  createServerClockAnchor,
+  serverTimeFromAnchor,
   type CalendarTimeRange,
   type CalendarView
 } from "./calendar-state";
@@ -202,6 +204,7 @@ type TimelinePayload = {
   reservations: TimelineReservation[];
   unavailability: UnavailabilityWindow[];
   revision: number;
+  serverNow: string;
 };
 
 type CalendarReservationTarget = {
@@ -3894,6 +3897,7 @@ type CatalogManager = {
 type CatalogMachine = {
   id: string;
   name: string;
+  address: string;
   status: "ACTIVE" | "DISABLED";
   resourceSummary: string;
   tags: string[];
@@ -4225,6 +4229,14 @@ function ResourceCatalogPage({
                   <p title={machine.resourceSummary || "尚未配置资源"}>
                     {machine.resourceSummary || "尚未配置资源"}
                   </p>
+                  <div
+                    className="catalog-machine-login-ip"
+                    title={machine.address || "未填写登录 IP"}
+                  >
+                    <Globe2 size={13} />
+                    <span>登录 IP</span>
+                    <code>{machine.address || "未填写"}</code>
+                  </div>
                   <AdaptiveManagerList managers={machine.managers} />
                   <div className="tag-row">
                     {machine.tags.map((tag) => <span key={tag}>{tag}</span>)}
@@ -4398,6 +4410,7 @@ function CalendarPage({
       initialQuery.machineId || initialCalendarPreference.machineId || ""
   });
   const initialCalendarRouteAppliedRef = useRef(false);
+  const serverDateCorrectionAppliedRef = useRef(false);
   const [machineOptions, setMachineOptions] = useState<
     Array<
       Pick<
@@ -4408,6 +4421,7 @@ function CalendarPage({
   >([]);
   const [timeline, setTimeline] = useState<TimelinePayload | null>(null);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const [serverClockReady, setServerClockReady] = useState(false);
   const [visibleHours, setVisibleHours] = useState(
     initialCalendarPreference.visibleHours
   );
@@ -4484,6 +4498,45 @@ function CalendarPage({
     defaultDayWindowStartMinutes(Date.now())
   );
   const loadTimelineRef = useRef<(background?: boolean) => void>(() => undefined);
+  const serverClockAnchorRef = useRef<ReturnType<
+    typeof createServerClockAnchor
+  >>(null);
+  const initialServerClockAppliedRef = useRef(false);
+
+  const synchronizeServerClock = useCallback(
+    (
+      serverNow: string,
+      requestStartedAt: number,
+      responseReceivedAt = performance.now()
+    ) => {
+      const anchor = createServerClockAnchor(
+        serverNow,
+        requestStartedAt,
+        responseReceivedAt
+      );
+      if (!anchor) return;
+      serverClockAnchorRef.current = anchor;
+      const synchronizedTime = serverTimeFromAnchor(anchor, responseReceivedAt);
+      setCurrentTime(synchronizedTime);
+      setServerClockReady(true);
+      if (!initialServerClockAppliedRef.current) {
+        initialServerClockAppliedRef.current = true;
+        const preferredHours = readCalendarPreference().visibleHours;
+        const startMinutes = defaultDayWindowStartMinutes(
+          synchronizedTime,
+          preferredHours
+        );
+        timelineStartMinutesRef.current = startMinutes;
+        setTimelineWindowStartMinutes(startMinutes);
+        setVisibleHours(preferredHours);
+        setTimelineScrollTarget((current) => ({
+          startMinutes,
+          revision: current.revision + 1
+        }));
+      }
+    },
+    []
+  );
 
   const range = useMemo(() => {
     const startDate = view === "week" ? mondayOf(date) : date;
@@ -4498,6 +4551,9 @@ function CalendarPage({
   const hasTimelineContent = Boolean(
     timeline?.machines.length && timeline?.groups.length
   );
+  const serverToday = isoToChinaLocal(
+    new Date(currentTime).toISOString()
+  ).slice(0, 10);
 
   const scrollTimelineToMinutes = useCallback(
     (requestedStartMinutes: number) => {
@@ -4538,8 +4594,12 @@ function CalendarPage({
       return;
     }
     const preferredHours = readCalendarPreference().visibleHours;
+    const anchor = serverClockAnchorRef.current;
+    const positionedNow = anchor
+      ? serverTimeFromAnchor(anchor, performance.now())
+      : Date.now();
     const startMinutes = defaultDayWindowStartMinutes(
-      Date.now(),
+      positionedNow,
       preferredHours
     );
     timelineStartMinutesRef.current = startMinutes;
@@ -4692,14 +4752,66 @@ function CalendarPage({
   }, [initialCalendarPreference.machineId, routeLocation.searchStr]);
 
   useEffect(() => {
+    if (!serverClockReady || serverDateCorrectionAppliedRef.current) return;
+    serverDateCorrectionAppliedRef.current = true;
+    const params = new URLSearchParams(
+      routeLocation.searchStr.startsWith("?")
+        ? routeLocation.searchStr.slice(1)
+        : routeLocation.searchStr
+    );
+    if (!params.has("date") && date !== serverToday) {
+      setDate(serverToday);
+      writeCalendarRoute({ date: serverToday }, true);
+    }
+  }, [
+    date,
+    routeLocation.searchStr,
+    serverClockReady,
+    serverToday,
+    writeCalendarRoute
+  ]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [search]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setCurrentTime(Date.now()), 30_000);
+    const timer = window.setInterval(() => {
+      const anchor = serverClockAnchorRef.current;
+      setCurrentTime(
+        anchor
+          ? serverTimeFromAnchor(anchor, performance.now())
+          : Date.now()
+      );
+    }, 1_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const refreshServerClock = useCallback(async () => {
+    const requestStartedAt = performance.now();
+    try {
+      const result = await api<{ serverNow: string }>("/server-time");
+      synchronizeServerClock(result.serverNow, requestStartedAt);
+    } catch {
+      // 时间轴请求和下一次定时校时仍会继续尝试，不打断日历操作。
+    }
+  }, [synchronizeServerClock]);
+
+  useEffect(() => {
+    void refreshServerClock();
+    const timer = window.setInterval(() => {
+      void refreshServerClock();
+    }, 5 * 60_000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void refreshServerClock();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [refreshServerClock]);
 
   const loadMachineOptions = useCallback(async () => {
     try {
@@ -4735,6 +4847,7 @@ function CalendarPage({
     if (timelineRef.current) setRefreshing(true);
     else if (!timelineRef.current) setInitialLoading(true);
     try {
+      const requestStartedAt = performance.now();
       const query = new URLSearchParams({
         from: range.from,
         to: range.to,
@@ -4745,6 +4858,7 @@ function CalendarPage({
         signal: controller.signal
       });
       if (requestId !== requestIdRef.current) return;
+      synchronizeServerClock(result.serverNow, requestStartedAt);
       timelineRef.current = result;
       setTimeline(result);
     } catch (error) {
@@ -4761,7 +4875,8 @@ function CalendarPage({
     notify,
     range.from,
     range.to,
-    selectedMachine
+    selectedMachine,
+    synchronizeServerClock
   ]);
 
   useEffect(() => {
@@ -5013,10 +5128,27 @@ function CalendarPage({
     field: "startAt" | "endAt",
     localValue: string
   ) => {
-    const normalizedValue = localValue ? chinaLocalToIso(localValue) : "";
+    const currentMinute = currentMinuteStart(currentTime);
+    const currentMinuteTime = new Date(currentMinute).getTime();
+    let normalizedValue = localValue ? chinaLocalToIso(localValue) : "";
     const original = drafts.find((draft) => draft.id === draftId);
     if (!original) return;
-    const edited = { ...original, [field]: normalizedValue };
+    let startMode = original.startMode;
+    if (
+      field === "startAt" &&
+      normalizedValue &&
+      new Date(normalizedValue).getTime() <= currentMinuteTime
+    ) {
+      normalizedValue = currentMinute;
+      startMode = "IMMEDIATE";
+    } else if (field === "startAt" && normalizedValue) {
+      startMode = "SCHEDULED";
+    }
+    const edited = {
+      ...original,
+      [field]: normalizedValue,
+      startMode
+    };
     const start = new Date(edited.startAt).getTime();
     const end = new Date(edited.endAt).getTime();
     if (
@@ -5050,13 +5182,18 @@ function CalendarPage({
         ? projection.available.map((range, index) => ({
             ...edited,
             id: index === 0 ? draftId : createClientId(),
-            ...range
+            ...range,
+            startMode:
+              new Date(range.startAt).getTime() <= currentMinuteTime
+                ? "IMMEDIATE" as const
+                : "SCHEDULED" as const
           }))
         : [edited];
       return mergeCalendarDrafts(
         [...withoutEdited, ...replacements],
         [],
-        () => createClientId()
+        () => createClientId(),
+        currentMinute
       );
     });
     if (adjusted && projection.available.length) {
@@ -5138,6 +5275,10 @@ function CalendarPage({
         scope: item.scope,
         machineId: item.machineId,
         resourceGroupId: item.resourceGroupId,
+        startMode:
+          new Date(startAt).getTime() <= new Date(currentMinute).getTime()
+            ? "IMMEDIATE"
+            : "SCHEDULED",
         startAt,
         endAt: item.endAt
       }
@@ -5226,20 +5367,28 @@ function CalendarPage({
       }
       return;
     }
-    const trimmed = trimDraftsBefore(
+    const advanced = advanceCalendarDrafts(
       drafts,
       currentMinute,
       settings.minBookingMinutes
     );
-    if (trimmed.changed) {
-      setDrafts(trimmed.drafts);
+    const merged = advanced.changed
+      ? mergeCalendarDrafts(
+          advanced.drafts,
+          [],
+          () => createClientId(),
+          currentMinute
+        )
+      : advanced.drafts;
+    if (advanced.changed) {
+      setDrafts(merged);
       setPreviewByDraft(new Map());
-      if (!originalEnded) {
+      if (!originalEnded && merged.length < drafts.length) {
         notify(
           "success",
-          trimmed.drafts.length
-            ? "已根据当前时间调整未提交的占用时段"
-            : "未提交的占用时段已过期并被移除"
+          merged.length
+            ? "部分未提交时段已经结束并被移除"
+            : "未提交的占用时段已结束"
         );
       }
     }
@@ -5252,12 +5401,12 @@ function CalendarPage({
       setPreviewByDraft(new Map());
       notify(
         "success",
-        trimmed.drafts.length
+        merged.length
           ? "原占用已结束，剩余时段已转为新的占用草稿"
           : "原占用已结束，本次编辑已结束"
       );
     }
-    if (!trimmed.drafts.length) {
+    if (!merged.length) {
       setMetadata({ title: "", purpose: "", note: "" });
     }
   }, [
@@ -5294,10 +5443,16 @@ function CalendarPage({
     endAt: string
   ) => {
     const requested = { startAt, endAt };
+    const currentMinute = currentMinuteStart(currentTime);
+    const currentMinuteTime = new Date(currentMinute).getTime();
     const projection = projectDraggedRange(target, requested);
     const additions = projection.available.map((availableRange) => ({
       ...target,
-      ...availableRange
+      ...availableRange,
+      startMode:
+        new Date(availableRange.startAt).getTime() <= currentMinuteTime
+          ? "IMMEDIATE" as const
+          : "SCHEDULED" as const
     }));
     if (!additions.length) {
       notify(
@@ -5309,7 +5464,12 @@ function CalendarPage({
       return false;
     }
     setDrafts((current) =>
-      mergeCalendarDrafts(current, additions, () => createClientId())
+      mergeCalendarDrafts(
+        current,
+        additions,
+        () => createClientId(),
+        currentMinute
+      )
     );
     invalidatePreview();
     const adjusted =
@@ -5332,8 +5492,12 @@ function CalendarPage({
     const previewRequestId = ++previewRequestIdRef.current;
     setPreviewing(true);
     try {
+      const requestStartedAt = performance.now();
       const segments = drafts.map((draft) => reservationInput(draft, metadata));
-      const result = await api<{ items: ReservationPreviewItem[] }>(
+      const result = await api<{
+        items: ReservationPreviewItem[];
+        serverNow: string;
+      }>(
         "/reservations/preview",
         {
           method: "POST",
@@ -5345,6 +5509,7 @@ function CalendarPage({
           })
         }
       );
+      synchronizeServerClock(result.serverNow, requestStartedAt);
       const mapped = previewsByDraftId(drafts, result.items);
       if (previewRequestId === previewRequestIdRef.current) {
         setPreviewByDraft(mapped);
@@ -5360,7 +5525,14 @@ function CalendarPage({
         setPreviewing(false);
       }
     }
-  }, [draftIssues.length, drafts, editingReservation, metadata, notify]);
+  }, [
+    draftIssues.length,
+    drafts,
+    editingReservation,
+    metadata,
+    notify,
+    synchronizeServerClock
+  ]);
 
   useEffect(() => {
     if (
@@ -5414,15 +5586,19 @@ function CalendarPage({
         return;
       }
       const segments = drafts.map((draft) => reservationInput(draft, metadata));
-      await api("/reservations/batch", {
+      const requestStartedAt = performance.now();
+      const result = await api<{ serverNow?: string }>("/reservations/batch", {
         method: "POST",
         body: jsonBody({
           segments,
           ...(editingReservation
             ? { replaceReservationId: editingReservation.id }
             : {})
-        })
+          })
       });
+      if (result.serverNow) {
+        synchronizeServerClock(result.serverNow, requestStartedAt);
+      }
       notify(
         "success",
         editingReservation
@@ -5532,6 +5708,31 @@ function CalendarPage({
               <button className="secondary-button" onClick={() => navigate("resources")}>
                 <Server size={16} />全部资源
               </button>
+              <div
+                className={`server-clock${serverClockReady ? "" : " synchronizing"}`}
+                title={formatChina(new Date(currentTime).toISOString(), {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                  hour12: false
+                })}
+              >
+                <Clock3 size={14} />
+                <span>服务器时间</span>
+                <strong>
+                  {serverClockReady
+                    ? formatChina(new Date(currentTime).toISOString(), {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                        hour12: false
+                      })
+                    : "同步中"}
+                </strong>
+              </div>
               <div className={`live-state ${connectionState.toLowerCase()}${refreshing ? " refreshing" : ""}`}>
                 <span />{syncLabel}
               </div>
@@ -5543,6 +5744,7 @@ function CalendarPage({
             <button className="icon-button" aria-label="上一时间范围" onClick={() => changeDate(addDays(date, view === "week" ? -7 : -1))}><ChevronLeft size={18} /></button>
             <CalendarDateButton
               date={date}
+              today={serverToday}
               label={
                 view === "day"
                   ? formatChina(range.from, {
@@ -5746,6 +5948,7 @@ function CalendarPage({
             <CalendarWeekOverview
               timeline={timeline}
               range={range}
+              today={serverToday}
               refreshing={refreshing}
               onSelectDay={(selectedDate) => changeView("day", selectedDate)}
             />
@@ -6266,6 +6469,9 @@ function CalendarPage({
                           ? <Server size={15} />
                           : <Cpu size={15} />}
                         <strong>{targetName}</strong>
+                        {draft.startMode === "IMMEDIATE" && (
+                          <span className="immediate-start-label">立即开始</span>
+                        )}
                       </div>
                       <button
                         className="icon-button tiny"
@@ -6361,6 +6567,7 @@ function CalendarPage({
         createPortal(
           <CalendarReservationPopover
             detail={reservationDetail}
+            currentTime={currentTime}
             canManage={Boolean(
               timeline?.machines.find(
                 (machine) =>
@@ -6383,6 +6590,7 @@ function CalendarPage({
           machines={timeline.machines}
           groups={timeline.groups}
           settings={settings}
+          currentTime={currentTime}
           onClose={() => setManualBookingOpen(false)}
           onAdd={(target, startAt, endAt) => {
             setReservationMode(target.scope);
@@ -6400,11 +6608,13 @@ function CalendarPage({
 function CalendarWeekOverview({
   timeline,
   range,
+  today,
   refreshing,
   onSelectDay
 }: {
   timeline: TimelinePayload;
   range: { from: string; to: string; startDate: string; days: number };
+  today: string;
   refreshing: boolean;
   onSelectDay: (date: string) => void;
 }) {
@@ -6430,7 +6640,7 @@ function CalendarWeekOverview({
             <button
               type="button"
               key={day}
-              className={day === todayChina() ? "today" : ""}
+            className={day === today ? "today" : ""}
               onClick={() => onSelectDay(day)}
             >
               <span>
@@ -6488,6 +6698,7 @@ function CalendarWeekOverview({
                       <CalendarWeekDayCell
                         key={day}
                         day={day}
+                        today={today}
                         dayStart={dayStart}
                         dayEnd={dayEnd}
                         groupName={group.name}
@@ -6519,6 +6730,7 @@ function CalendarManualBookingModal({
   machines,
   groups,
   settings,
+  currentTime,
   onClose,
   onAdd
 }: {
@@ -6527,6 +6739,7 @@ function CalendarManualBookingModal({
   machines: Machine[];
   groups: Array<Omit<ResourceGroup, "version">>;
   settings: DashboardBootstrap["settings"];
+  currentTime: number;
   onClose: () => void;
   onAdd: (
     target: CalendarReservationTarget,
@@ -6534,7 +6747,7 @@ function CalendarManualBookingModal({
     endAt: string
   ) => boolean;
 }) {
-  const initialTime = initialBookingTime(date);
+  const initialTime = initialBookingTime(date, currentTime);
   const [mode, setMode] = useState(initialMode);
   const [targetId, setTargetId] = useState("");
   const [startAt, setStartAt] = useState(initialTime.start);
@@ -6587,10 +6800,16 @@ function CalendarManualBookingModal({
       mode === "MACHINE"
         ? machineGroups.get(selectedId)?.[0]?.id ?? ""
         : selectedId,
+    startMode:
+      startAt &&
+      new Date(chinaLocalToIso(startAt)).getTime() <=
+        new Date(currentMinuteStart(currentTime)).getTime()
+        ? "IMMEDIATE"
+        : "SCHEDULED",
     startAt: startAt ? chinaLocalToIso(startAt) : "",
     endAt: endAt ? chinaLocalToIso(endAt) : ""
   };
-  const issues = calendarDraftFieldIssues(draft, settings, Date.now());
+  const issues = calendarDraftFieldIssues(draft, settings, currentTime);
 
   return (
     <Modal title="新增占用" onClose={onClose}>
@@ -6696,6 +6915,7 @@ function CalendarManualBookingModal({
 
 function CalendarWeekDayCell({
   day,
+  today,
   dayStart,
   dayEnd,
   groupName,
@@ -6704,6 +6924,7 @@ function CalendarWeekDayCell({
   onSelect
 }: {
   day: string;
+  today: string;
   dayStart: string;
   dayEnd: string;
   groupName: string;
@@ -6818,7 +7039,7 @@ function CalendarWeekDayCell({
         <button
           ref={buttonRef}
           type="button"
-          className={`${day === todayChina() ? "today" : ""}${
+          className={`${day === today ? "today" : ""}${
             occupiedMinutes ? " occupied" : ""
           }${unavailable.length ? " unavailable" : ""}`}
           aria-label={`${day} ${groupName}，${summary}，点击查看日视图`}
@@ -7051,10 +7272,12 @@ function TimelineHoverGuide({
 
 function CalendarDateButton({
   date,
+  today,
   label,
   onSelect
 }: {
   date: string;
+  today: string;
   label: string;
   onSelect: (date: string) => void;
 }) {
@@ -7063,7 +7286,6 @@ function CalendarDateButton({
   const [focusedDate, setFocusedDate] = useState(date);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const dateButtonRefs = useRef(new Map<string, HTMLButtonElement>());
-  const today = todayChina();
   const dates = calendarMonthDates(month);
 
   useEffect(() => {
@@ -7388,6 +7610,7 @@ function CalendarReservationMetadataFields({
 
 function CalendarReservationPopover({
   detail,
+  currentTime,
   canManage,
   notify,
   onClose,
@@ -7400,6 +7623,7 @@ function CalendarReservationPopover({
     groupName: string;
     anchor: DOMRect;
   };
+  currentTime: number;
   canManage: boolean;
   notify: (kind: "success" | "error", message: string) => void;
   onClose: () => void;
@@ -7410,7 +7634,7 @@ function CalendarReservationPopover({
   const dialog = useAppDialog();
   const [busy, setBusy] = useState(false);
   const popoverRef = useRef<HTMLElement | null>(null);
-  const now = Date.now();
+  const now = currentTime;
   const startTime = new Date(item.startAt).getTime();
   const upcoming = startTime > now;
   const active =
@@ -7654,10 +7878,10 @@ function CalendarReservationPopover({
   );
 }
 
-function initialBookingTime(date: string) {
-  const today = todayChina();
+function initialBookingTime(date: string, nowTime = Date.now()) {
+  const today = isoToChinaLocal(new Date(nowTime).toISOString()).slice(0, 10);
   if (date !== today) return { start: `${date}T09:00`, end: `${date}T11:00` };
-  const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  const now = new Date(nowTime + 8 * 60 * 60 * 1000);
   const total = now.getUTCHours() * 60 + now.getUTCMinutes();
   const rounded = Math.ceil((total + 10) / 15) * 15;
   const startHour = Math.floor(rounded / 60);

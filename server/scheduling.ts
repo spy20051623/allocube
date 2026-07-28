@@ -30,6 +30,7 @@ export const segmentSchema = z.object({
   scope: z.enum(["RESOURCE_GROUP", "MACHINE"]).optional().default("RESOURCE_GROUP"),
   machineId: z.string().uuid().optional(),
   resourceGroupId: z.string().uuid(),
+  startMode: z.enum(["IMMEDIATE", "SCHEDULED"]).optional().default("SCHEDULED"),
   startAt: minuteDateTimeSchema,
   endAt: minuteDateTimeSchema,
   title: z.string().max(120).optional().default(""),
@@ -73,12 +74,48 @@ function getGroup(resourceGroupId: string) {
     .get(resourceGroupId) as GroupRow | undefined;
 }
 
-export function validateSegmentTimes(segment: ReservationSegmentInput) {
+export function normalizeSegmentStart(
+  segment: ReservationSegmentInput,
+  serverMinute = currentMinuteIso()
+): ReservationSegmentInput & {
+  scope: "RESOURCE_GROUP" | "MACHINE";
+  startMode: "IMMEDIATE" | "SCHEDULED";
+} {
+  const scope = segment.scope ?? "RESOURCE_GROUP";
+  const start = new Date(segment.startAt).getTime();
+  const boundary = new Date(serverMinute).getTime();
+  if (
+    Number.isFinite(start) &&
+    Number.isFinite(boundary) &&
+    (segment.startMode === "IMMEDIATE" || start <= boundary)
+  ) {
+    return {
+      ...segment,
+      scope,
+      startMode: "IMMEDIATE",
+      startAt: serverMinute
+    };
+  }
+  return {
+    ...segment,
+    scope,
+    startMode: "SCHEDULED"
+  };
+}
+
+export function validateSegmentTimes(
+  segment: ReservationSegmentInput,
+  serverMinute = currentMinuteIso()
+) {
   const settings = getSettings();
   const start = new Date(segment.startAt);
   const end = new Date(segment.endAt);
+  const current = new Date(serverMinute);
   if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
     throw new BusinessError("时间格式无效");
+  }
+  if (!Number.isFinite(current.getTime())) {
+    throw new BusinessError("服务器时间无效");
   }
   const duration = (end.getTime() - start.getTime()) / 60000;
   if (duration < settings.minBookingMinutes) {
@@ -87,10 +124,11 @@ export function validateSegmentTimes(segment: ReservationSegmentInput) {
   if (duration > settings.maxBookingMinutes) {
     throw new BusinessError(`单次占用最长 ${settings.maxBookingMinutes} 分钟`);
   }
-  if (start.getTime() < Date.now() - 60_000) {
+  if (start.getTime() < current.getTime()) {
     throw new BusinessError("不能占用已经过去的时间");
   }
-  const horizon = Date.now() + settings.advanceDays * 24 * 60 * 60 * 1000;
+  const horizon =
+    current.getTime() + settings.advanceDays * 24 * 60 * 60 * 1000;
   if (end.getTime() > horizon) {
     throw new BusinessError(`占用结束时间不能超过未来 ${settings.advanceDays} 天`);
   }
@@ -159,7 +197,8 @@ function getBusyIntervals(
 function splitByBusy(
   segment: ReservationSegmentInput,
   busy: BusyInterval[],
-  minMinutes: number
+  minMinutes: number,
+  serverMinute: string
 ) {
   const requestedStart = new Date(segment.startAt).getTime();
   const requestedEnd = new Date(segment.endAt).getTime();
@@ -187,6 +226,10 @@ function splitByBusy(
     if ((item.start - cursor) / 60000 >= minMinutes) {
       result.push({
         ...segment,
+        startMode:
+          new Date(cursor).getTime() <= new Date(serverMinute).getTime()
+            ? "IMMEDIATE"
+            : "SCHEDULED",
         startAt: new Date(cursor).toISOString(),
         endAt: new Date(item.start).toISOString()
       });
@@ -196,6 +239,10 @@ function splitByBusy(
   if ((requestedEnd - cursor) / 60000 >= minMinutes) {
     result.push({
       ...segment,
+      startMode:
+        new Date(cursor).getTime() <= new Date(serverMinute).getTime()
+          ? "IMMEDIATE"
+          : "SCHEDULED",
       startAt: new Date(cursor).toISOString(),
       endAt: new Date(requestedEnd).toISOString()
     });
@@ -205,12 +252,16 @@ function splitByBusy(
 
 export function previewSegments(
   rawSegments: unknown[],
-  excludeReservationId?: string
+  excludeReservationId?: string,
+  serverMinute = currentMinuteIso()
 ): ReservationPreviewItem[] {
   const settings = getSettings();
   return rawSegments.map((raw) => {
-    const segment = segmentSchema.parse(raw);
-    validateSegmentTimes(segment);
+    const segment = normalizeSegmentStart(
+      segmentSchema.parse(raw),
+      serverMinute
+    );
+    validateSegmentTimes(segment, serverMinute);
     const group = getGroup(segment.resourceGroupId);
     if (
       group &&
@@ -274,7 +325,8 @@ export function previewSegments(
       splitSegments: splitByBusy(
         normalizedSegment,
         busy,
-        settings.minBookingMinutes
+        settings.minBookingMinutes,
+        serverMinute
       )
     };
   });
@@ -438,20 +490,26 @@ export function commitReservationBatch(userId: string, rawSegments: unknown[]) {
   if (!rawSegments.length || rawSegments.length > 100) {
     throw new BusinessError("一次最多提交 100 条占用");
   }
-  const segments = rawSegments.map((item) => segmentSchema.parse(item));
-  validateSingleReservationScope(segments);
-  segments.forEach(validateSegmentTimes);
-  validateNoInternalOverlap(segments);
+  const parsedSegments = rawSegments.map((item) => segmentSchema.parse(item));
+  validateSingleReservationScope(parsedSegments);
 
   return withImmediateTransaction(() => {
+    const serverMinute = currentMinuteIso();
+    const segments = parsedSegments.map((segment) =>
+      normalizeSegmentStart(segment, serverMinute)
+    );
+    segments.forEach((segment) =>
+      validateSegmentTimes(segment, serverMinute)
+    );
+    validateNoInternalOverlap(segments);
     assertUserCanAccessSegments(userId, segments);
-    const preview = previewSegments(segments);
+    const preview = previewSegments(segments, undefined, serverMinute);
     if (preview.some((item) => !item.available)) {
       throw new BusinessError("资源可用情况已更新，请根据最新结果重新确认", 409, preview);
     }
     const { batchId, reservations } = insertReservationBatch(userId, segments);
     const revision = bumpScheduleRevision();
-    return { batchId, reservations, revision };
+    return { batchId, reservations, revision, serverNow: nowIso() };
   });
 }
 
@@ -463,14 +521,20 @@ export function replaceReservationBatch(
   if (!rawSegments.length || rawSegments.length > 100) {
     throw new BusinessError("一次最多提交 100 条占用");
   }
-  const segments = rawSegments.map((item) => segmentSchema.parse(item));
-  segments.forEach(validateSegmentTimes);
-  validateNoInternalOverlap(segments);
+  const parsedSegments = rawSegments.map((item) => segmentSchema.parse(item));
 
   const result = withImmediateTransaction(() => {
+    const serverMinute = currentMinuteIso();
+    const segments = parsedSegments.map((segment) =>
+      normalizeSegmentStart(segment, serverMinute)
+    );
+    segments.forEach((segment) =>
+      validateSegmentTimes(segment, serverMinute)
+    );
+    validateNoInternalOverlap(segments);
     const existing = getReplaceableReservation(reservationId, userId);
     const actionAt = nowIso();
-    const changedAt = currentMinuteIso();
+    const changedAt = serverMinute;
     const originalIsActive =
       String(existing.start_at) <= actionAt &&
       String(existing.end_at) > actionAt;
@@ -481,11 +545,17 @@ export function replaceReservationBatch(
             : segment
         )
       : segments;
-    effectiveSegments.forEach(validateSegmentTimes);
+    effectiveSegments.forEach((segment) =>
+      validateSegmentTimes(segment, serverMinute)
+    );
     validateNoInternalOverlap(effectiveSegments);
     validateReplacementScope(existing, effectiveSegments);
     assertUserCanAccessSegments(userId, effectiveSegments);
-    const preview = previewSegments(effectiveSegments, reservationId);
+    const preview = previewSegments(
+      effectiveSegments,
+      reservationId,
+      serverMinute
+    );
     if (preview.some((item) => !item.available)) {
       throw new BusinessError(
         "资源可用情况已更新，原占用保持不变，请重新确认",
@@ -536,12 +606,13 @@ export function replaceReservationBatch(
       reservationId
     );
     const revision = bumpScheduleRevision();
-    return { ...created, revision };
+    return { ...created, revision, serverNow: nowIso() };
   });
   return {
     batchId: result.batchId,
     reservations: result.reservations,
-    revision: result.revision
+    revision: result.revision,
+    serverNow: result.serverNow
   };
 }
 

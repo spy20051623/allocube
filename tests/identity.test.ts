@@ -703,6 +703,7 @@ describe("用户身份与审批生命周期", () => {
     });
     expect(timeline.statusCode).toBe(200);
     const payload = timeline.json();
+    expect(Number.isFinite(new Date(payload.serverNow).getTime())).toBe(true);
     const reservation = payload.reservations.find(
       (item: Record<string, unknown>) => item.resourceGroupId === groupId
     );

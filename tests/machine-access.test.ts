@@ -99,9 +99,9 @@ beforeAll(async () => {
   dbModule.db
     .prepare(
       `INSERT INTO machines(
-        id, name, management_notes,
+        id, name, address, management_notes,
         created_at, updated_at
-      ) VALUES(?, 'Access-Test-Machine',
+      ) VALUES(?, 'Access-Test-Machine', '10.40.0.12',
         '仅管理员可见的运维信息', ?, ?)`
     )
     .run(machineId, now, now);
@@ -164,6 +164,7 @@ describe("机器使用权与管理员专用信息", () => {
     const machine = catalog.json().machines.find((item: any) => item.id === machineId);
     expect(machine).toMatchObject({
       name: "Access-Test-Machine",
+      address: "10.40.0.12",
       resourceSummary: "逻辑核 · 32 核",
       hasAccess: false,
       managers: [
@@ -173,7 +174,6 @@ describe("机器使用权与管理员专用信息", () => {
         }
       ]
     });
-    expect(machine).not.toHaveProperty("address");
     expect(machine).not.toHaveProperty("managementNotes");
     expect(machine.managers[0]).not.toHaveProperty("id");
     expect(machine.managers[0]).not.toHaveProperty("email");
@@ -324,7 +324,7 @@ describe("机器使用权与管理员专用信息", () => {
       .machines.find((item: any) => item.id === machineId);
     expect(option).toMatchObject({
       name: "Access-Test-Machine",
-      address: "",
+      address: "10.40.0.12",
       resourceSummary: "逻辑核 · 32 核",
       isManager: false
     });

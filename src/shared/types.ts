@@ -186,6 +186,7 @@ export interface ReservationSegmentInput {
   scope?: "RESOURCE_GROUP" | "MACHINE";
   machineId?: string;
   resourceGroupId: string;
+  startMode?: "IMMEDIATE" | "SCHEDULED";
   startAt: string;
   endAt: string;
   title?: string;

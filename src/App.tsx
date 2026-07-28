@@ -824,19 +824,108 @@ function AuthLayout({
 
 function PageHeader({
   title,
+  titleExtras,
   actions,
   className = ""
 }: {
   title: string;
+  titleExtras?: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={`page-header${className ? ` ${className}` : ""}`}>
-      <h1>{title}</h1>
+      <div className="page-header-title-group">
+        <h1>{title}</h1>
+        {titleExtras}
+      </div>
       {actions && <div className="page-header-actions">{actions}</div>}
     </div>
   );
+}
+
+function CalendarMachineTags({
+  tags,
+  className = ""
+}: {
+  tags: string[];
+  className?: string;
+}) {
+  if (!tags.length) return null;
+  const visibleTags = tags.slice(0, 3);
+  const remaining = tags.length - visibleTags.length;
+  return (
+    <span
+      className={`calendar-machine-tags${className ? ` ${className}` : ""}`}
+      title={tags.join("、")}
+    >
+      {visibleTags.map((tag) => (
+        <span key={tag}>{tag}</span>
+      ))}
+      {remaining > 0 && <span>+{remaining}</span>}
+    </span>
+  );
+}
+
+function MouseControlIcon({
+  highlight,
+  size = 14
+}: {
+  highlight: "LEFT_BUTTON" | "WHEEL";
+  size?: number;
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path
+        className="mouse-control-base"
+        d="M5 10V9a7 7 0 0 1 14 0v1Z"
+        stroke="none"
+      />
+      {highlight === "LEFT_BUTTON" && (
+        <path
+          className="mouse-control-accent"
+          d="M5 10V9a7 7 0 0 1 7-7v8Z"
+          stroke="none"
+        />
+      )}
+      <path d="M5 10h14" />
+      {highlight === "LEFT_BUTTON" ? (
+        <path d="M12 2v8" />
+      ) : (
+        <rect
+          className="mouse-control-accent"
+          x="9.25"
+          y="2.5"
+          width="5.5"
+          height="8.5"
+          rx="2.75"
+          stroke="none"
+        />
+      )}
+      <path
+        d="M5 9a7 7 0 0 1 14 0v5a7 7 0 0 1-14 0Z"
+        fill="none"
+      />
+    </svg>
+  );
+}
+
+function MouseLeftButtonIcon({ size = 14 }: { size?: number }) {
+  return <MouseControlIcon highlight="LEFT_BUTTON" size={size} />;
+}
+
+function MouseWheelIcon({ size = 14 }: { size?: number }) {
+  return <MouseControlIcon highlight="WHEEL" size={size} />;
 }
 
 function SectionHeader({
@@ -5703,11 +5792,8 @@ function CalendarPage({
       <section className="calendar-main">
         <PageHeader
           title="资源日历"
-          actions={(
-            <div className="calendar-header-actions">
-              <button className="secondary-button" onClick={() => navigate("resources")}>
-                <Server size={16} />全部资源
-              </button>
+          titleExtras={(
+            <div className="calendar-title-status">
               <div
                 className={`server-clock${serverClockReady ? "" : " synchronizing"}`}
                 title={formatChina(new Date(currentTime).toISOString(), {
@@ -5736,6 +5822,26 @@ function CalendarPage({
               <div className={`live-state ${connectionState.toLowerCase()}${refreshing ? " refreshing" : ""}`}>
                 <span />{syncLabel}
               </div>
+            </div>
+          )}
+          actions={(
+            <div className="calendar-header-actions">
+              <div
+                className="calendar-wheel-hint"
+                title="左键拖动：新增占用；滚轮：上下滚动；Shift + 滚轮：左右滚动；Alt + 滚轮：缩放时间轴"
+                aria-label="时间轴操作：鼠标左键拖动新增占用，滚轮上下滚动，Shift 加滚轮左右滚动，Alt 加滚轮缩放"
+              >
+                <span><MouseLeftButtonIcon />拖动 新增</span>
+                <i />
+                <span><MouseWheelIcon />上下</span>
+                <i />
+                <span><kbd>Shift</kbd> + <MouseWheelIcon />左右</span>
+                <i />
+                <span><kbd>Alt</kbd> + <MouseWheelIcon />缩放</span>
+              </div>
+              <button className="secondary-button" onClick={() => navigate("resources")}>
+                <Server size={16} />全部资源
+              </button>
             </div>
           )}
         />
@@ -6006,6 +6112,7 @@ function CalendarPage({
                     <span className="machine-group-count">
                       {machineGroups.length} 组
                     </span>
+                    <CalendarMachineTags tags={machine.tags} />
                   </span>
                   <span className="machine-strip-summary">
                     {machine.status === "DISABLED" && (
@@ -6666,6 +6773,7 @@ function CalendarWeekOverview({
                 <Server size={15} />
                 <strong>{machine.name}</strong>
                 <code>{machine.address}</code>
+                <CalendarMachineTags tags={machine.tags} className="week" />
               </div>
               {groups.map((group) => (
                 <div className="week-overview-row" key={group.id}>

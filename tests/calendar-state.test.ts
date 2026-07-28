@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calendarDraftFieldIssues,
   calendarDraftIssues,
+  calendarDragAction,
   calendarEditUrl,
   calendarQueryUrl,
   calendarUrlWithoutEditRequest,
@@ -28,6 +29,32 @@ import {
 } from "../src/calendar-state";
 
 describe("资源日历状态", () => {
+  it("左键新增，右键或 Ctrl 加左键删除草稿", () => {
+    expect(calendarDragAction({ button: 0, ctrlKey: false })).toBe("ADD");
+    expect(calendarDragAction({ button: 0, ctrlKey: true })).toBe("ERASE");
+    expect(calendarDragAction({ button: 2, ctrlKey: false })).toBe("ERASE");
+    expect(calendarDragAction({ button: 1, ctrlKey: false })).toBeNull();
+  });
+
+  it("拖拽期间横向滚动时保持时间起点不变", () => {
+    const rangeStart = "2026-07-26T00:00:00.000Z";
+    const anchorAt = "2026-07-26T02:00:00.000Z";
+    expect(
+      draggedTimeRange({
+        rangeStart,
+        days: 1,
+        trackLeft: -120,
+        trackWidth: 1_440,
+        pointerStart: 120,
+        pointerEnd: 420,
+        anchorAt
+      })
+    ).toEqual({
+      startAt: anchorAt,
+      endAt: "2026-07-26T09:00:00.000Z"
+    });
+  });
+
   it("日视图默认展示十二小时并按北京时间选择窗口", () => {
     expect(
       defaultDayWindowStartMinutes(

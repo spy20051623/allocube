@@ -148,6 +148,7 @@ import {
   DAY_ZOOM_LEVELS,
   calendarDraftFieldIssues,
   calendarDraftIssues,
+  calendarDragAction,
   calendarEditUrl,
   calendarQueryUrl,
   calendarUrlWithoutEditRequest,
@@ -4585,6 +4586,7 @@ function CalendarPage({
     groupId: string;
     pointerId: number;
     startX: number;
+    anchorAt: string;
   } | null>(null);
   const requestIdRef = useRef(0);
   const previewRequestIdRef = useRef(0);
@@ -5764,7 +5766,8 @@ function CalendarPage({
       trackLeft: rect.left,
       trackWidth: rect.width,
       pointerStart: active.startX,
-      pointerEnd: endClientX
+      pointerEnd: endClientX,
+      anchorAt: active.anchorAt
     });
     if (!dragged) return;
     if (active.action === "ERASE") {
@@ -5812,61 +5815,65 @@ function CalendarPage({
       <section className="calendar-main">
         <PageHeader
           title="资源日历"
-          titleExtras={(
-            <div className="calendar-title-status">
-              <div
-                className={`server-clock${serverClockReady ? "" : " synchronizing"}`}
-                title={formatChina(new Date(currentTime).toISOString(), {
-                  year: "numeric",
-                  month: "2-digit",
-                  day: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                  hour12: false
-                })}
-              >
-                <Clock3 size={14} />
-                <span>服务器时间</span>
-                <strong>
-                  {serverClockReady
-                    ? formatChina(new Date(currentTime).toISOString(), {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                        hour12: false
-                      })
-                    : "同步中"}
-                </strong>
-              </div>
-              <div className={`live-state ${connectionState.toLowerCase()}${refreshing ? " refreshing" : ""}`}>
-                <span />{syncLabel}
-              </div>
-            </div>
-          )}
           actions={(
             <div className="calendar-header-actions">
-              <div
-                className="calendar-wheel-hint"
-                title="左键拖动：新增占用；右键拖动：删除草稿时段；滚轮：上下滚动；Shift + 滚轮：左右滚动；Alt + 滚轮：缩放时间轴"
-                aria-label="时间轴操作：鼠标左键拖动新增占用，鼠标右键拖动删除草稿时段，滚轮上下滚动，Shift 加滚轮左右滚动，Alt 加滚轮缩放"
-              >
-                <span><MouseLeftButtonIcon />拖动 新增</span>
-                <i />
-                <span><MouseRightButtonIcon />拖动 删除</span>
-                <i />
-                <span><MouseWheelIcon />上下</span>
-                <i />
-                <span><kbd>Shift</kbd> + <MouseWheelIcon />左右</span>
-                <i />
-                <span><kbd>Alt</kbd> + <MouseWheelIcon />缩放</span>
-              </div>
               <button className="secondary-button" onClick={() => navigate("resources")}>
                 <Server size={16} />全部资源
               </button>
             </div>
           )}
         />
+        <div className="calendar-utility-row">
+          <div className="calendar-title-status">
+            <div
+              className={`server-clock${serverClockReady ? "" : " synchronizing"}`}
+              title={formatChina(new Date(currentTime).toISOString(), {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: false
+              })}
+            >
+              <Clock3 size={14} />
+              <span>服务器时间</span>
+              <strong>
+                {serverClockReady
+                  ? formatChina(new Date(currentTime).toISOString(), {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                      hour12: false
+                    })
+                  : "同步中"}
+              </strong>
+            </div>
+            <div className={`live-state ${connectionState.toLowerCase()}${refreshing ? " refreshing" : ""}`}>
+              <span />{syncLabel}
+            </div>
+          </div>
+          <div
+            className="calendar-wheel-hint"
+            title="左键拖动：新增占用；右键拖动或 Ctrl + 左键拖动：删除草稿时段；滚轮：上下滚动；Shift + 滚轮：左右滚动；Alt + 滚轮：缩放时间轴"
+            aria-label="时间轴操作：鼠标左键拖动新增占用，鼠标右键拖动或 Control 加鼠标左键拖动删除草稿时段，滚轮上下滚动，Shift 加滚轮左右滚动，Alt 加滚轮缩放"
+          >
+            <span><MouseLeftButtonIcon />拖动 新增</span>
+            <i />
+            <span>
+              <MouseRightButtonIcon />拖动
+              <b>/</b>
+              <kbd>Ctrl</kbd>+<MouseLeftButtonIcon />拖动 删除
+            </span>
+            <i />
+            <span><MouseWheelIcon />上下</span>
+            <i />
+            <span><kbd>Shift</kbd> + <MouseWheelIcon />左右</span>
+            <i />
+            <span><kbd>Alt</kbd> + <MouseWheelIcon />缩放</span>
+          </div>
+        </div>
         <div className="toolbar">
           <div className="toolbar-group">
             <button className="icon-button" aria-label="上一时间范围" onClick={() => changeDate(addDays(date, view === "week" ? -7 : -1))}><ChevronLeft size={18} /></button>
@@ -6258,9 +6265,8 @@ function CalendarPage({
                             : undefined
                         }
                         onPointerDown={(event) => {
-                          if (event.button !== 0 && event.button !== 2) return;
-                          const action =
-                            event.button === 2 ? "ERASE" as const : "ADD" as const;
+                          const action = calendarDragAction(event);
+                          if (!action) return;
                           if (action === "ADD" && !selectable) return;
                           if (
                             (event.target as HTMLElement).closest(
@@ -6273,13 +6279,24 @@ function CalendarPage({
                             reservationMode === "MACHINE"
                               ? machineTarget
                               : groupTarget;
+                          const rect =
+                            event.currentTarget.getBoundingClientRect();
+                          const anchorAt = snappedTimelineInstant({
+                            rangeStart: range.from,
+                            days: range.days,
+                            trackLeft: rect.left,
+                            trackWidth: rect.width,
+                            pointer: event.clientX
+                          });
+                          if (!anchorAt) return;
                           event.preventDefault();
                           dragState.current = {
                             action,
                             target,
                             groupId: group.id,
                             pointerId: event.pointerId,
-                            startX: event.clientX
+                            startX: event.clientX,
+                            anchorAt
                           };
                           setDragPreview(null);
                           updateHoveredTimelineTime(
@@ -6314,7 +6331,8 @@ function CalendarPage({
                               trackLeft: rect.left,
                               trackWidth: rect.width,
                               pointerStart: active.startX,
-                              pointerEnd: event.clientX
+                              pointerEnd: event.clientX,
+                              anchorAt: active.anchorAt
                             });
                             if (!requested) {
                               setDragPreview(null);

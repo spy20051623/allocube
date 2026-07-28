@@ -41,6 +41,16 @@ export type CalendarDraftFieldIssues = {
 
 export const DAY_ZOOM_LEVELS = [6, 12, 24] as const;
 
+export function calendarDragAction(input: {
+  button: number;
+  ctrlKey: boolean;
+}): "ADD" | "ERASE" | null {
+  if (input.button === 2 || (input.button === 0 && input.ctrlKey)) {
+    return "ERASE";
+  }
+  return input.button === 0 ? "ADD" : null;
+}
+
 export function timelineWheelAction(input: {
   altKey: boolean;
   shiftKey: boolean;
@@ -231,6 +241,7 @@ export function draggedTimeRange({
   trackWidth,
   pointerStart,
   pointerEnd,
+  anchorAt,
   snapMinutes = 15
 }: {
   rangeStart: string;
@@ -239,24 +250,37 @@ export function draggedTimeRange({
   trackWidth: number;
   pointerStart: number;
   pointerEnd: number;
+  anchorAt?: string;
   snapMinutes?: number;
 }) {
   if (trackWidth <= 0 || Math.abs(pointerEnd - pointerStart) < 4) return null;
   const clamp = (value: number) => Math.max(0, Math.min(1, value));
-  const first = clamp((pointerStart - trackLeft) / trackWidth);
   const second = clamp((pointerEnd - trackLeft) / trackWidth);
   const totalMinutes = days * 24 * 60;
   const snap = (fraction: number) =>
     Math.round((fraction * totalMinutes) / snapMinutes) * snapMinutes;
-  const startMinutes = snap(Math.min(first, second));
+  const rangeStartTime = new Date(rangeStart).getTime();
+  const anchorTime = anchorAt ? new Date(anchorAt).getTime() : Number.NaN;
+  const firstMinutes = anchorAt
+    ? Math.round((anchorTime - rangeStartTime) / 60_000 / snapMinutes) *
+      snapMinutes
+    : snap(clamp((pointerStart - trackLeft) / trackWidth));
+  if (!Number.isFinite(firstMinutes)) return null;
+  const clampedFirstMinutes = Math.max(
+    0,
+    Math.min(totalMinutes, firstMinutes)
+  );
+  const secondMinutes = snap(second);
+  const startMinutes = Math.min(clampedFirstMinutes, secondMinutes);
   const endMinutes = Math.max(
     startMinutes + snapMinutes,
-    snap(Math.max(first, second))
+    Math.max(clampedFirstMinutes, secondMinutes)
   );
-  const start = new Date(rangeStart).getTime();
   return {
-    startAt: new Date(start + startMinutes * 60_000).toISOString(),
-    endAt: new Date(start + Math.min(totalMinutes, endMinutes) * 60_000).toISOString()
+    startAt: new Date(rangeStartTime + startMinutes * 60_000).toISOString(),
+    endAt: new Date(
+      rangeStartTime + Math.min(totalMinutes, endMinutes) * 60_000
+    ).toISOString()
   };
 }
 

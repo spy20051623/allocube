@@ -12018,14 +12018,14 @@ function SettingsPanel({
 
   const saveSiteOrigin = async () => {
     if (!adminSettings || savingSiteOrigin) return;
-    const issue = siteOriginValidationError(siteOrigin, import.meta.env.DEV);
+    const issue = siteOriginValidationError(siteOrigin);
     if (issue) {
       setSiteOriginError(issue);
       return;
     }
     setSavingSiteOrigin(true);
     try {
-      const normalized = normalizeSiteOrigin(siteOrigin, import.meta.env.DEV);
+      const normalized = normalizeSiteOrigin(siteOrigin);
       const result = await api<{ settings: AdminSettingsPayload }>(
         "/admin/settings/site-origin",
         {

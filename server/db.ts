@@ -353,10 +353,7 @@ async function initializePersistentConfiguration() {
     bootstrap.allowedEmailDomains
   );
   const siteOrigin = bootstrap.siteOrigin
-    ? normalizeSiteOrigin(
-        bootstrap.siteOrigin,
-        !config.isProduction
-      )
+    ? normalizeSiteOrigin(bootstrap.siteOrigin)
     : "";
   const initializedAt = nowIso();
   db.exec("BEGIN EXCLUSIVE");
@@ -581,11 +578,11 @@ export function getPublicSiteOrigin() {
   const value = row?.value.trim() ?? "";
   if (
     !value ||
-    siteOriginValidationError(value, !config.isProduction)
+    siteOriginValidationError(value)
   ) {
     return "";
   }
-  return normalizeSiteOrigin(value, !config.isProduction);
+  return normalizeSiteOrigin(value);
 }
 
 export function getAdminSettings() {

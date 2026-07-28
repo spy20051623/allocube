@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { normalizeSiteOrigin } from "../src/shared/site-origin.js";
-import { config } from "./config.js";
 import {
   canAccessMachine,
   canManageMachine,
@@ -3308,10 +3307,7 @@ export function registerAdminRoutes(
         .parse(request.body);
       let siteOrigin: string;
       try {
-        siteOrigin = normalizeSiteOrigin(
-          body.siteOrigin,
-          !config.isProduction
-        );
+        siteOrigin = normalizeSiteOrigin(body.siteOrigin);
       } catch (error) {
         return reply.code(400).send({
           error:

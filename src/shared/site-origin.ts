@@ -1,8 +1,5 @@
-const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
-
 export function siteOriginValidationError(
-  rawValue: string,
-  allowLocalHttp = false
+  rawValue: string
 ): string | null {
   const value = rawValue.trim();
   if (!value) return "请输入站点地址";
@@ -16,14 +13,7 @@ export function siteOriginValidationError(
   }
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    return "站点地址必须使用 HTTPS";
-  }
-  const localHttpAllowed =
-    allowLocalHttp &&
-    url.protocol === "http:" &&
-    LOCAL_HOSTNAMES.has(url.hostname);
-  if (url.protocol !== "https:" && !localHttpAllowed) {
-    return "站点地址必须使用 HTTPS";
+    return "站点地址必须使用 HTTP 或 HTTPS";
   }
   if (url.username || url.password) {
     return "站点地址不能包含账号信息";
@@ -41,10 +31,9 @@ export function siteOriginValidationError(
 }
 
 export function normalizeSiteOrigin(
-  rawValue: string,
-  allowLocalHttp = false
+  rawValue: string
 ) {
-  const issue = siteOriginValidationError(rawValue, allowLocalHttp);
+  const issue = siteOriginValidationError(rawValue);
   if (issue) throw new Error(issue);
   return new URL(rawValue.trim()).origin;
 }

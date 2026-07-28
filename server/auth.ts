@@ -2,17 +2,13 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypt
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { db, nowIso } from "./db.js";
 import type { AuthUser } from "../src/shared/types.js";
-import { config } from "./config.js";
 import {
   canAccessMachine as checkMachineAccess,
   getAccessibleMachineIds as accessibleMachineIds
 } from "./machine-access.js";
 export { checkPassword, hashPassword } from "./password-hashing.js";
 
-const secureCookies = config.isProduction;
-export const SESSION_COOKIE = secureCookies
-  ? "__Host-resource_session"
-  : "resource_session";
+export const SESSION_COOKIE = "resource_session";
 const SESSION_DAYS = 7;
 const MINUTE_IN_MS = 60_000;
 
@@ -104,7 +100,7 @@ export function createSession(userId: string, reply: FastifyReply) {
   reply.setCookie(SESSION_COOKIE, token, {
     path: "/",
     httpOnly: true,
-    secure: secureCookies,
+    secure: reply.request.protocol === "https",
     sameSite: "lax",
     priority: "high",
     expires
@@ -117,7 +113,7 @@ export function destroySession(request: FastifyRequest, reply: FastifyReply) {
   if (token) db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(hashToken(token));
   reply.clearCookie(SESSION_COOKIE, {
     path: "/",
-    secure: secureCookies,
+    secure: request.protocol === "https",
     sameSite: "lax"
   });
 }

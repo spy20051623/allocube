@@ -58,6 +58,7 @@ const app = Fastify({
 
 await app.register(cookie, { secret: config.sessionSecret });
 await app.register(helmet, {
+  strictTransportSecurity: false,
   contentSecurityPolicy: config.isProduction
     ? {
         directives: {
@@ -69,7 +70,8 @@ await app.register(helmet, {
           objectSrc: ["'none'"],
           baseUri: ["'self'"],
           formAction: ["'self'"],
-          frameAncestors: ["'none'"]
+          frameAncestors: ["'none'"],
+          upgradeInsecureRequests: null
         }
       }
     : false
@@ -137,6 +139,12 @@ app.addHook("preHandler", async (request, reply) => {
 });
 
 app.addHook("onSend", async (request, reply, payload) => {
+  if (config.isProduction && request.protocol === "https") {
+    reply.header(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains"
+    );
+  }
   reply.header(
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
@@ -145,17 +153,6 @@ app.addHook("onSend", async (request, reply, payload) => {
     reply.header("Cache-Control", "no-store");
   }
   return payload;
-});
-
-app.addHook("onRequest", async (request, reply) => {
-  if (!config.isProduction) return;
-  const pathname = request.url.split("?")[0];
-  if (pathname === "/health") return;
-  if (request.protocol === "https") return;
-  return reply
-    .code(426)
-    .header("Upgrade", "TLS/1.2")
-    .send({ error: "生产环境仅允许通过 HTTPS 访问" });
 });
 
 const publicMutationPaths = new Set([

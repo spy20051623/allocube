@@ -54,7 +54,7 @@ Allocube 是面向内部团队的计算资源占用系统。它将机器上的�
 - 服务端：Fastify、TypeScript。
 - 数据库：SQLite、`better-sqlite3`，启用 WAL、外键和写入超时。
 - 邮件：Nodemailer，支持隐式 SSL/TLS 和 STARTTLS。
-- 部署：单个 Node.js 应用实例，Caddy 提供 HTTPS，Docker Compose 管理应用和备份。
+- 部署：单个 Node.js 应用实例，Caddy 提供 HTTP/HTTPS 入口，Docker Compose 管理应用和备份。
 
 生产构建后，Fastify 在一个端口同时提供静态页面和 `/api/v1` 接口。SQLite 只支持单应用实例；需要横向扩容前必须先迁移到 PostgreSQL 等独立数据库。
 
@@ -105,7 +105,7 @@ npm run dev
 | `PORT` | 指定 Fastify 监听端口 |
 | `DATABASE_PATH` | 指定 SQLite 主数据库的位置 |
 
-Docker Compose 还会读取 `APP_DOMAIN`，用于配置 Caddy 的正式域名和 HTTPS 证书。它不属于应用内的持久设置。
+Docker Compose 还会读取 `APP_DOMAIN`，用于配置 Caddy 的访问域名及可选 HTTPS 证书。它不属于应用内的持久设置。
 
 #### 仅首次初始化读取
 
@@ -165,7 +165,7 @@ SMTP 引导配置只有在服务器、账号、密码和发件邮箱全部提供
 
 SMTP 密码使用 AES-256-GCM 加密后写入数据库，接口、审计和页面不会返回密码明文。修改配置后无需重启服务。
 
-邮件中的查看与密码重置链接使用“系统设置 → 站点地址”。开发环境允许本机 HTTP 地址；生产环境只接受不带业务路径的 HTTPS 地址。
+邮件中的查看与密码重置链接使用“系统设置 → 站点地址”。HTTP 和 HTTPS 地址均可使用，但不能包含业务路径、查询参数、片段或账号信息。
 
 邮件服务停用时，不会创建新的邮件任务；站内通知仍正常工作。依赖邮件的注册验证码和密码找回会提示服务暂不可用。
 
@@ -174,13 +174,13 @@ SMTP 密码使用 AES-256-GCM 加密后写入数据库，接口、审计和页�
 ### 部署前准备
 
 1. 准备一个解析到服务器的域名。
-2. 在防火墙或安全组开放 TCP 80 和 443。
+2. 在防火墙或安全组开放需要使用的 TCP 80 和/或 443。
 3. 安装 Docker 与 Docker Compose。
 4. 将 `.env.production.example` 复制为 `.env.production`。
 5. 至少填写：
    - `APP_DOMAIN=allocube.your-company.com`
    - `BOOTSTRAP_ADMIN_PASSWORD=随机生成的强密码`
-   - `BOOTSTRAP_SITE_ORIGIN=https://allocube.your-company.com`
+   - `BOOTSTRAP_SITE_ORIGIN=http://allocube.your-company.com` 或 `https://allocube.your-company.com`
 6. 在 Linux 上执行 `chmod 600 .env.production`。
 
 不要把 `.env.production`、真实域名、邮箱账号、SMTP 密码、内网地址或其他本地配置提交到代码仓库。
@@ -191,18 +191,18 @@ SMTP 密码使用 AES-256-GCM 加密后写入数据库，接口、审计和页�
 docker compose --env-file .env.production up -d --build
 ```
 
-Caddy 会将 HTTP 永久跳转到 HTTPS，并自动申请和续期证书。应用容器的 `8787` 端口只用于容器内部通信，不应通过 Docker 端口映射、防火墙或云安全组暴露到公网。
+Caddy 同时提供 HTTP 和 HTTPS 入口，不会强制跳转；域名和网络条件满足时会自动申请及续期 HTTPS 证书。应用容器的 `8787` 端口只用于容器内部通信，不应通过 Docker 端口映射、防火墙或云安全组暴露到公网。
 
 部署完成后：
 
-1. 打开 `https://你的域名`。
+1. 打开配置的 `http://你的域名` 或 `https://你的域名`。
 2. 使用 Administrator 登录并修改初始密码。
 3. 在系统设置中确认站点地址。
 4. 配置注册邮箱白名单和占用规则。
 5. 配置 SMTP 并发送测试邮件。
 6. 检查 `/health`、注册、登录、邮件和备份。
 
-生产环境启用 HTTPS 强制、安全 Cookie、来源校验、CSRF 校验、限流和严格安全响应头。不要使用开发服务代替生产部署验收。
+生产环境允许 HTTP 和 HTTPS。会话 Cookie 会按实际协议设置；HTTPS 响应额外启用 HSTS。来源校验、CSRF 校验、限流和其他安全响应头始终启用。不要使用开发服务代替生产部署验收。
 
 ### 更新
 
@@ -252,7 +252,7 @@ docker compose --env-file .env.production run --rm backup node scripts/backup.mj
 - 登录会话使用服务端记录和 HttpOnly Cookie。
 - 修改请求实施同源、CSRF 和来源检查。
 - 登录、验证码、注册和密码找回实施限流。
-- 生产环境拒绝 HTTP 业务请求，必须通过受信任反向代理使用 HTTPS。
+- 生产环境支持 HTTP 和 HTTPS；公网或不受信任网络仍建议优先使用 HTTPS。
 - SMTP 只允许加密连接，不支持忽略证书错误或明文中继。
 - 数据库查询使用参数绑定，结构化输入在前后端重复校验。
 - 页面输出和邮件模板对用户内容进行转义或结构化渲染。

@@ -8,10 +8,9 @@ describe("生产站点地址校验", () => {
     expect(siteOriginValidationError("https://allocube.company.test:8443")).toBeNull();
   });
 
-  it("拒绝生产环境 HTTP 地址", () => {
-    expect(siteOriginValidationError("http://allocube.company.test")).toContain(
-      "必须使用 HTTPS"
-    );
+  it("接受不带业务路径的 HTTP 地址", () => {
+    expect(siteOriginValidationError("http://allocube.company.test")).toBeNull();
+    expect(siteOriginValidationError("http://192.168.1.10:38887")).toBeNull();
   });
 
   it("拒绝未替换的示例域名", () => {
@@ -32,12 +31,10 @@ describe("生产站点地址校验", () => {
     expect(siteOriginValidationError("")).not.toBeNull();
   });
 
-  it("仅在开发环境允许本机 HTTP 地址", () => {
+  it("HTTP 地址仍拒绝账号信息", () => {
+    expect(siteOriginValidationError("http://localhost:5173")).toBeNull();
     expect(
-      siteOriginValidationError("http://localhost:5173", true)
-    ).toBeNull();
-    expect(
-      siteOriginValidationError("http://192.168.1.10:5173", true)
+      siteOriginValidationError("http://user:pass@192.168.1.10:5173")
     ).not.toBeNull();
   });
 });

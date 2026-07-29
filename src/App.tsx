@@ -167,6 +167,7 @@ import {
   snappedTimelineInstant,
   subtractBusyTimeRanges,
   splitDrafts,
+  timelineDragAutoScrollDelta,
   timelineWheelAction,
   advanceCalendarDrafts,
   type CalendarDraft,
@@ -213,6 +214,18 @@ type CalendarReservationTarget = {
   scope: "RESOURCE_GROUP" | "MACHINE";
   machineId: string;
   resourceGroupId: string;
+};
+
+type CalendarDragState = {
+  action: "ADD" | "ERASE";
+  target: CalendarReservationTarget;
+  groupId: string;
+  pointerId: number;
+  startX: number;
+  lastX: number;
+  anchorAt: string;
+  track: HTMLDivElement;
+  engaged: boolean;
 };
 
 const TIMELINE_RESOURCE_COLUMN_WIDTH = 260;
@@ -4580,14 +4593,12 @@ function CalendarPage({
     groupName: string;
     anchor: DOMRect;
   } | null>(null);
-  const dragState = useRef<{
-    action: "ADD" | "ERASE";
-    target: CalendarReservationTarget;
-    groupId: string;
-    pointerId: number;
-    startX: number;
-    anchorAt: string;
-  } | null>(null);
+  const dragState = useRef<CalendarDragState | null>(null);
+  const dragPreviewUpdaterRef = useRef<
+    (active: CalendarDragState, endClientX: number) => void
+  >(() => undefined);
+  const dragAutoScrollFrameRef = useRef<number | null>(null);
+  const dragAutoScrollTickRef = useRef<FrameRequestCallback>(() => undefined);
   const requestIdRef = useRef(0);
   const previewRequestIdRef = useRef(0);
   const requestControllerRef = useRef<AbortController | null>(null);
@@ -4756,6 +4767,49 @@ function CalendarPage({
     if (!controller || !shell) return;
     shell.scrollLeft = controller.scrollLeft;
   };
+
+  const stopDragAutoScroll = useCallback(() => {
+    if (dragAutoScrollFrameRef.current === null) return;
+    window.cancelAnimationFrame(dragAutoScrollFrameRef.current);
+    dragAutoScrollFrameRef.current = null;
+  }, []);
+
+  dragAutoScrollTickRef.current = () => {
+    dragAutoScrollFrameRef.current = null;
+    const active = dragState.current;
+    const shell = timelineShellRef.current;
+    if (!active?.engaged || !shell) return;
+    const shellRect = shell.getBoundingClientRect();
+    const delta = timelineDragAutoScrollDelta({
+      pointer: active.lastX,
+      viewportStart: shellRect.left + TIMELINE_RESOURCE_COLUMN_WIDTH,
+      viewportEnd: shellRect.left + shell.clientWidth
+    });
+    if (delta === 0) return;
+    const maximum = Math.max(0, shell.scrollWidth - shell.clientWidth);
+    const nextScrollLeft = Math.max(
+      0,
+      Math.min(maximum, shell.scrollLeft + delta)
+    );
+    if (Math.abs(nextScrollLeft - shell.scrollLeft) < 0.5) return;
+    shell.scrollLeft = nextScrollLeft;
+    if (timelineHorizontalScrollRef.current) {
+      timelineHorizontalScrollRef.current.scrollLeft = nextScrollLeft;
+    }
+    dragPreviewUpdaterRef.current(active, active.lastX);
+    dragAutoScrollFrameRef.current = window.requestAnimationFrame(
+      dragAutoScrollTickRef.current
+    );
+  };
+
+  const startDragAutoScroll = useCallback(() => {
+    if (dragAutoScrollFrameRef.current !== null) return;
+    dragAutoScrollFrameRef.current = window.requestAnimationFrame(
+      dragAutoScrollTickRef.current
+    );
+  }, []);
+
+  useEffect(() => stopDragAutoScroll, [stopDragAutoScroll]);
 
   const changeTimelineZoom = useCallback((direction: "IN" | "OUT") => {
     const currentIndex = DAY_ZOOM_LEVELS.indexOf(
@@ -5741,6 +5795,73 @@ function CalendarPage({
     setHoveredTime(at ? { groupId, at } : null);
   };
 
+  const updateDragSelection = useCallback(
+    (active: CalendarDragState, endClientX: number) => {
+      const rect = active.track.getBoundingClientRect();
+      const requested = draggedTimeRange({
+        rangeStart: range.from,
+        days: range.days,
+        trackLeft: rect.left,
+        trackWidth: rect.width,
+        pointerStart: active.startX,
+        pointerEnd: endClientX,
+        anchorAt: active.anchorAt
+      });
+      if (!requested) {
+        setDragPreview(null);
+        return;
+      }
+      if (active.action === "ERASE") {
+        const erased = eraseCalendarDraftRange(
+          drafts,
+          active.target,
+          requested,
+          () => "preview",
+          settings.minBookingMinutes,
+          currentMinuteStart(currentTime)
+        );
+        setDragPreview({
+          action: "ERASE",
+          sourceGroupId: active.groupId,
+          target: active.target,
+          requested,
+          available: [],
+          blocked: false,
+          projected: erased.drafts
+            .filter(
+              (draft) =>
+                reservationTargetKey(draft) ===
+                reservationTargetKey(active.target)
+            )
+            .map((draft) => ({
+              scope: draft.scope ?? "RESOURCE_GROUP",
+              machineId: draft.machineId ?? active.target.machineId,
+              resourceGroupId: draft.resourceGroupId,
+              startAt: draft.startAt,
+              endAt: draft.endAt
+            }))
+        });
+        return;
+      }
+      const projection = projectDraggedRange(active.target, requested);
+      setDragPreview({
+        action: "ADD",
+        sourceGroupId: active.groupId,
+        ...projection
+      });
+    },
+    [
+      currentTime,
+      drafts,
+      projectDraggedRange,
+      range.days,
+      range.from,
+      settings.minBookingMinutes
+    ]
+  );
+
+  dragPreviewUpdaterRef.current = updateDragSelection;
+
   const finishDrag = (
     track: HTMLDivElement,
     groupId: string,
@@ -5749,6 +5870,7 @@ function CalendarPage({
   ) => {
     const active = dragState.current;
     dragState.current = null;
+    stopDragAutoScroll();
     setDragPreview(null);
     updateHoveredTimelineTime(track, groupId, endClientX);
     if (
@@ -6296,7 +6418,10 @@ function CalendarPage({
                             groupId: group.id,
                             pointerId: event.pointerId,
                             startX: event.clientX,
-                            anchorAt
+                            lastX: event.clientX,
+                            anchorAt,
+                            track: event.currentTarget,
+                            engaged: false
                           };
                           setDragPreview(null);
                           updateHoveredTimelineTime(
@@ -6323,67 +6448,18 @@ function CalendarPage({
                             active?.pointerId === event.pointerId &&
                             active.groupId === group.id
                           ) {
-                            const rect =
-                              event.currentTarget.getBoundingClientRect();
-                            const requested = draggedTimeRange({
-                              rangeStart: range.from,
-                              days: range.days,
-                              trackLeft: rect.left,
-                              trackWidth: rect.width,
-                              pointerStart: active.startX,
-                              pointerEnd: event.clientX,
-                              anchorAt: active.anchorAt
-                            });
-                            if (!requested) {
-                              setDragPreview(null);
-                              return;
-                            }
-                            if (active.action === "ERASE") {
-                              const erased = eraseCalendarDraftRange(
-                                drafts,
-                                active.target,
-                                requested,
-                                () => "preview",
-                                settings.minBookingMinutes,
-                                currentMinuteStart(currentTime)
-                              );
-                              setDragPreview({
-                                action: "ERASE",
-                                sourceGroupId: group.id,
-                                target: active.target,
-                                requested,
-                                available: [],
-                                blocked: false,
-                                projected: erased.drafts
-                                  .filter(
-                                    (draft) =>
-                                      reservationTargetKey(draft) ===
-                                      reservationTargetKey(active.target)
-                                  )
-                                  .map((draft) => ({
-                                    scope: draft.scope ?? "RESOURCE_GROUP",
-                                    machineId:
-                                      draft.machineId ?? active.target.machineId,
-                                    resourceGroupId: draft.resourceGroupId,
-                                    startAt: draft.startAt,
-                                    endAt: draft.endAt
-                                  }))
-                              });
-                            } else {
-                              const projection = projectDraggedRange(
-                                active.target,
-                                requested
-                              );
-                              setDragPreview({
-                                action: "ADD",
-                                sourceGroupId: group.id,
-                                ...projection
-                              });
-                            }
+                            active.lastX = event.clientX;
+                            active.track = event.currentTarget;
+                            active.engaged =
+                              active.engaged ||
+                              Math.abs(active.lastX - active.startX) >= 4;
+                            updateDragSelection(active, event.clientX);
+                            if (active.engaged) startDragAutoScroll();
                           }
                         }}
                         onPointerCancel={() => {
                           dragState.current = null;
+                          stopDragAutoScroll();
                           setDragPreview(null);
                         }}
                         onPointerLeave={() => {

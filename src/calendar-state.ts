@@ -51,6 +51,43 @@ export function calendarDragAction(input: {
   return input.button === 0 ? "ADD" : null;
 }
 
+export function timelineDragAutoScrollDelta({
+  pointer,
+  viewportStart,
+  viewportEnd,
+  edgeSize = 72,
+  maxStep = 12
+}: {
+  pointer: number;
+  viewportStart: number;
+  viewportEnd: number;
+  edgeSize?: number;
+  maxStep?: number;
+}) {
+  if (
+    !Number.isFinite(pointer) ||
+    !Number.isFinite(viewportStart) ||
+    !Number.isFinite(viewportEnd) ||
+    viewportEnd <= viewportStart ||
+    edgeSize <= 0 ||
+    maxStep <= 0
+  ) {
+    return 0;
+  }
+  const normalizedStep = (distance: number) => {
+    const strength = Math.max(0, Math.min(1, distance / edgeSize));
+    return strength === 0
+      ? 0
+      : Math.max(1, Math.round(maxStep * strength * strength));
+  };
+  const leftDistance = viewportStart + edgeSize - pointer;
+  if (leftDistance > 0) {
+    return -normalizedStep(leftDistance);
+  }
+  const rightDistance = pointer - (viewportEnd - edgeSize);
+  return rightDistance > 0 ? normalizedStep(rightDistance) : 0;
+}
+
 export function timelineWheelAction(input: {
   altKey: boolean;
   shiftKey: boolean;

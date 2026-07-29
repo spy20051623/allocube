@@ -23,6 +23,7 @@ import {
   serverTimeFromAnchor,
   subtractBusyTimeRanges,
   splitDrafts,
+  timelineDragAutoScrollDelta,
   timelineWheelAction,
   advanceCalendarDrafts,
   type CalendarDraft
@@ -53,6 +54,44 @@ describe("资源日历状态", () => {
       startAt: anchorAt,
       endAt: "2026-07-26T09:00:00.000Z"
     });
+  });
+
+  it("拖拽接近时间轴边缘时按距离决定自动滚动方向和速度", () => {
+    expect(
+      timelineDragAutoScrollDelta({
+        pointer: 500,
+        viewportStart: 100,
+        viewportEnd: 900
+      })
+    ).toBe(0);
+    expect(
+      timelineDragAutoScrollDelta({
+        pointer: 100,
+        viewportStart: 100,
+        viewportEnd: 900
+      })
+    ).toBe(-12);
+    expect(
+      timelineDragAutoScrollDelta({
+        pointer: 900,
+        viewportStart: 100,
+        viewportEnd: 900
+      })
+    ).toBe(12);
+    expect(
+      timelineDragAutoScrollDelta({
+        pointer: 136,
+        viewportStart: 100,
+        viewportEnd: 900
+      })
+    ).toBe(-3);
+    expect(
+      timelineDragAutoScrollDelta({
+        pointer: 864,
+        viewportStart: 100,
+        viewportEnd: 900
+      })
+    ).toBe(3);
   });
 
   it("日视图默认展示十二小时并按北京时间选择窗口", () => {

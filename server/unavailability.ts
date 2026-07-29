@@ -258,7 +258,8 @@ function applyReservationImpacts(
   actorUserId: string,
   sourceId: string | null,
   reason: string,
-  targetName: string
+  targetName: string,
+  changeType: "MAINTENANCE" | "DISABLE"
 ) {
   const now = nowIso();
   const users = new Map<string, { name: string; impacts: ReservationImpact[] }>();
@@ -294,7 +295,8 @@ function applyReservationImpacts(
     if (!row || row.status !== "CONFIRMED") {
       throw new BusinessError("占用情况已变化，请重新查看影响", 409);
     }
-    const reasonText = reason || `${targetName}停用`;
+    const reasonText =
+      reason || `${targetName}${changeType === "MAINTENANCE" ? "维护" : "停用"}`;
     if (impact.action === "CANCEL") {
       cancelReservation.run(
         now,
@@ -377,8 +379,10 @@ function applyReservationImpacts(
     createNotification(
       userId,
       "RESOURCE_UNAVAILABILITY",
-      "资源占用因停用安排发生变化",
-      `${targetName}已设置停用，${details}。${reason ? `原因：${reason}` : ""}`,
+      changeType === "MAINTENANCE"
+        ? "资源占用因维护发生变化"
+        : "资源占用因停用发生变化",
+      `${targetName}${changeType === "MAINTENANCE" ? "已安排维护" : "已停用"}，${details}。${reason ? `原因：${reason}` : ""}`,
       "/reservations"
     );
   }
@@ -389,13 +393,13 @@ function validatePlannedTimes(startAt: string, endAt: string) {
   const end = Date.parse(endAt);
   const currentMinute = Math.floor(Date.now() / 60_000) * 60_000;
   if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
-    throw new BusinessError("停用结束时间必须晚于开始时间");
+    throw new BusinessError("维护结束时间必须晚于开始时间");
   }
   if (start % 60_000 !== 0 || end % 60_000 !== 0) {
-    throw new BusinessError("停用时间只能精确到分钟");
+    throw new BusinessError("维护时间只能精确到分钟");
   }
   if (start < currentMinute) {
-    throw new BusinessError("计划停用不能早于当前时间");
+    throw new BusinessError("维护不能早于当前时间");
   }
 }
 
@@ -421,7 +425,7 @@ export function createPlannedUnavailability(input: {
     }
     const target = resolveUnavailabilityTarget(input.type, input.id);
     if (target.status !== "ACTIVE" || target.machineStatus !== "ACTIVE") {
-      throw new BusinessError("长期停用的资源不能安排计划停用", 409);
+      throw new BusinessError("已停用的资源不能安排维护", 409);
     }
     const overlap = db
       .prepare(
@@ -442,7 +446,7 @@ export function createPlannedUnavailability(input: {
         input.startAt
       );
     if (overlap) {
-      throw new BusinessError("该对象已有重叠的计划停用时段", 409);
+      throw new BusinessError("该对象已有重叠的维护时段", 409);
     }
     db.prepare(
       `INSERT INTO resource_unavailability(
@@ -465,7 +469,8 @@ export function createPlannedUnavailability(input: {
       input.actorUserId,
       recordId,
       input.reason?.trim() ?? "",
-      target.name
+      target.name,
+      "MAINTENANCE"
     );
     addAudit(
       input.actorUserId,
@@ -525,15 +530,15 @@ export function cancelUnavailability(id: string, actorUserId: string) {
     const row = db
       .prepare("SELECT * FROM resource_unavailability WHERE id = ?")
       .get(id) as Record<string, unknown> | undefined;
-    if (!row) throw new BusinessError("计划停用不存在", 404);
+    if (!row) throw new BusinessError("维护安排不存在", 404);
     if (row.status !== "ACTIVE") {
-      throw new BusinessError("计划停用已经取消", 409);
+      throw new BusinessError("维护安排已经取消", 409);
     }
     if (row.kind !== "PLANNED") {
-      throw new BusinessError("长期停用只能通过重新启用结束", 409);
+      throw new BusinessError("停用状态只能通过重新启用结束", 409);
     }
     if (Date.parse(String(row.end_at)) <= Date.now()) {
-      throw new BusinessError("已经结束的停用安排不能取消", 409);
+      throw new BusinessError("已经结束的维护不能取消", 409);
     }
     const changed = db
       .prepare(
@@ -543,7 +548,7 @@ export function cancelUnavailability(id: string, actorUserId: string) {
       )
       .run(actorUserId, nowIso(), id);
     if (!changed.changes) {
-      throw new BusinessError("计划停用已经更新，请刷新后重试", 409);
+      throw new BusinessError("维护安排已经更新，请刷新后重试", 409);
     }
     addAudit(
       actorUserId,
@@ -649,7 +654,8 @@ export function disableLongTerm(input: {
       input.actorUserId,
       sourceId,
       input.reason?.trim() ?? "",
-      target.name
+      target.name,
+      "DISABLE"
     );
     addAudit(
       input.actorUserId,

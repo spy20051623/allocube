@@ -11,7 +11,7 @@ describe("角色化界面文案", () => {
   it("把内部状态统一映射为中文任务语言", () => {
     expect(userStatusLabel("PENDING_APPROVAL")).toBe("等待审核");
     expect(resourceGroupStatusLabel("ACTIVE")).toBe("启用");
-    expect(resourceGroupStatusLabel("DISABLED")).toBe("长期停用");
+    expect(resourceGroupStatusLabel("DISABLED")).toBe("停用");
     expect(
       reservationStatusLabel(
         "CONFIRMED",
@@ -178,28 +178,80 @@ describe("角色化界面文案", () => {
     expect(styles).toMatch(/\.user-list-panel\s*\{\s*order:\s*2/);
   });
 
-  it("资源组支持计划停用、长期停用、恢复和彻底删除", () => {
+  it("维护统一管理，资源组支持停用、恢复和彻底删除", () => {
     const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const calendarUnavailability = fs.readFileSync(
+      new URL("../src/calendar-unavailability.ts", import.meta.url),
+      "utf8"
+    );
     const server = fs.readFileSync(new URL("../server/routes-admin.ts", import.meta.url), "utf8");
     expect(source).toContain('title="重新启用"');
     expect(source).toContain('title="永久删除"');
     expect(source).toContain("/enable");
-    expect(source).toContain("/unavailability");
-    expect(source).toContain('className="machine-unavailability-row"');
-    expect(source.match(/className="unavailability-bar"/g)).toHaveLength(1);
+    expect(source).toContain("visibleUnavailability.map");
+    expect(source).toContain("mergeProjectedUnavailability");
+    expect(source).toContain("CalendarUnavailabilityPopover");
+    expect(calendarUnavailability).toContain('window.kind === "PLANNED"');
+    expect(calendarUnavailability).toContain("sourceStart > previousEnd");
+    expect(source).toContain('" long-term-disabled"');
+    expect(source).toContain("function MaintenanceModal");
+    expect(source).not.toContain("function GroupUnavailabilityModal");
+    expect(server).toContain(
+      '"/api/v1/admin/machines/:id/maintenance'
+    );
     expect(server).toContain("disableLongTerm");
     expect(server).toContain("resource_unavailability");
   });
 
-  it("机器停用、恢复和删除操作集中在停用管理卡片", () => {
+  it("机器和资源组状态标签只使用启用、停用和维护", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    expect(source).not.toContain('"维护中"');
+    expect(source).not.toContain(">整机停用</span>");
+    expect(source).toContain('? "维护"');
+    expect(source).toContain('? "停用"');
+    expect(source).toContain(': "启用"');
+  });
+
+  it("资源管理顶部机器栏不重复显示状态标签", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const contextStart = source.indexOf('className="machine-context-identity"');
+    const contextEnd = source.indexOf("</div>", source.indexOf("</div>", contextStart) + 1);
+    const context = source.slice(contextStart, contextEnd);
+    expect(context).not.toContain("state-chip");
+    expect(context).not.toContain("availabilityStatus");
+  });
+
+  it("周视图不展示长期停用的内部结束时间", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    expect(source).toContain("function formatWeekDayDetailPeriod");
+    expect(source).toContain('"全天停用"');
+    expect(source).toContain("–24:00");
+    expect(source).not.toContain("–持续停用");
+    expect(source).toContain('persistent: item.kind === "LONG_TERM"');
+  });
+
+  it("周视图占用详情不重复标注我的占用", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    expect(source).not.toContain('"我的 · "');
+  });
+
+  it("当天时间轴将跨日区间裁切为零点和二十四点", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    expect(source).toContain("function formatTimelineDayPeriod");
+    expect(source).toContain('start <= from ? "00:00"');
+    expect(source).toContain('end >= to ? "24:00"');
+    expect(source.match(/formatTimelineDayPeriod\(/g)?.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("机器维护与停用使用独立卡片", () => {
     const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
     const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
     const machineInfoStart = source.indexOf('className="card panel-card machine-info-panel"');
     const unavailabilityStart = source.indexOf(
-      'className="card panel-card machine-unavailability-panel"',
+      "machine-unavailability-panel",
       machineInfoStart
     );
-    const unavailabilityEnd = source.indexOf("{editMachine &&", unavailabilityStart);
+    const unavailabilityEnd = source.indexOf("{maintenanceOpen &&", unavailabilityStart);
     const machineInfoCard = source.slice(machineInfoStart, unavailabilityStart);
     const unavailabilityCard = source.slice(unavailabilityStart, unavailabilityEnd);
     expect(machineInfoCard).toContain("<Pencil");
@@ -210,23 +262,20 @@ describe("角色化界面文案", () => {
     expect(machineInfoCard).not.toContain('className="machine-info-notes"');
     expect(machineInfoCard).not.toContain("setDisableMode");
     expect(machineInfoCard).not.toContain("handleDelete");
-    expect(unavailabilityCard).toContain(
-      'title={canManage ? "停用管理" : "停用安排"}'
-    );
-    expect(unavailabilityCard).toContain('setDisableMode("PLANNED")');
-    expect(unavailabilityCard).toContain('setDisableMode("LONG_TERM")');
-    expect(unavailabilityCard).toContain("<span>停用方式</span>");
-    expect(unavailabilityCard).not.toContain("<span>范围</span>");
-    expect(unavailabilityCard).not.toContain(': "整机"');
-    expect(unavailabilityCard).toContain("长期停用");
+    expect(unavailabilityCard).toContain('title="维护管理"');
+    expect(unavailabilityCard).toContain("setMaintenanceOpen(true)");
+    expect(unavailabilityCard).toContain("<span>范围</span>");
+    expect(unavailabilityCard).toContain("<span>维护时间</span>");
+    expect(unavailabilityCard).toContain("<span>原因</span>");
+    expect(unavailabilityCard).toContain('title="机器状态"');
+    expect(unavailabilityCard).toContain("setStopOpen(true)");
     expect(unavailabilityCard).toContain("重新启用");
     expect(unavailabilityCard).toContain("永久删除");
-    expect(source).toContain("function MachineDisableModal");
+    expect(source).toContain("function MaintenanceModal");
+    expect(source).toContain("function MachineStopModal");
     expect(source).toContain("<Eye size={15} />查看影响");
     expect(source).toContain("确认停用");
-    expect(styles).toMatch(
-      /\.machine-disable-entry-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s
-    );
+    expect(styles).toContain(".machine-disabled-state.active");
   });
 
   it("所有已启用用户都能进入管理页，具体操作按机器权限显示", () => {
@@ -246,7 +295,7 @@ describe("角色化界面文案", () => {
     );
     expect(source).toContain("canManage={isSystemAdmin}");
     expect(source).toContain('canManage={Boolean(');
-    expect(source).toContain('title={canManage ? "停用管理" : "停用安排"}');
+    expect(source).toContain('title="维护管理"');
     expect(source).toContain(
       "{canManage && access.requests.length > 0 && ("
     );
@@ -356,7 +405,7 @@ describe("角色化界面文案", () => {
     );
     const resourcesStart = source.indexOf("function MachineResourcesSection");
     const resourcesEnd = source.indexOf(
-      "function GroupUnavailabilityModal",
+      "function MachineUsersSection",
       resourcesStart
     );
     const resourcesPage = source.slice(resourcesStart, resourcesEnd);
@@ -368,8 +417,9 @@ describe("角色化界面文案", () => {
     expect(resourcesPage).not.toContain('title="永久删除资源项"');
     expect(resourcesPage).not.toContain('title="编辑资源项"');
     expect(resourcesPage).not.toContain('title="编辑资源组"');
-    expect(resourcesPage).toContain('title="计划停用"');
-    expect(resourcesPage).toContain('title="长期停用"');
+    expect(resourcesPage).toContain('title="停用"');
+    expect(resourcesPage).not.toContain('title="计划停用"');
+    expect(resourcesPage).not.toContain("GroupUnavailabilityModal");
     expect(source).toContain("function ResourceConfigurationModal");
     expect(source).toContain('<option value="EXCLUSIVE">独占分配</option>');
     expect(source).toContain('<option value="SHARED">共享使用</option>');

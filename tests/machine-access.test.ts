@@ -165,6 +165,7 @@ describe("机器使用权与管理员专用信息", () => {
     expect(machine).toMatchObject({
       name: "Access-Test-Machine",
       address: "10.40.0.12",
+      availabilityStatus: "ACTIVE",
       resourceSummary: "逻辑核 · 32 核",
       hasAccess: false,
       managers: [
@@ -300,6 +301,25 @@ describe("机器使用权与管理员专用信息", () => {
         .get(machineId, applicantId)
     ).toEqual({ count: 1 });
 
+    const unavailabilityId = randomUUID();
+    dbModule.db
+      .prepare(
+        `INSERT INTO resource_unavailability(
+          id, machine_id, resource_group_id, kind, start_at, end_at,
+          reason, created_by, created_at
+        ) VALUES(?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?)`
+      )
+      .run(
+        unavailabilityId,
+        machineId,
+        null,
+        futureIso(75),
+        futureIso(90),
+        "普通用户可见的停用原因",
+        managerId,
+        dbModule.nowIso()
+      );
+
     const timeline = await app.inject({
       method: "GET",
       url: `/api/v1/timeline?from=${encodeURIComponent(
@@ -312,6 +332,34 @@ describe("机器使用权与管理员专用信息", () => {
       .machines.find((item: any) => item.id === machineId);
     expect(visibleMachine).toBeTruthy();
     expect(visibleMachine).not.toHaveProperty("managementNotes");
+    expect(timeline.json().unavailability).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: unavailabilityId,
+          reason: "普通用户可见的停用原因"
+        })
+      ])
+    );
+    const viewerUnavailability = await app.inject({
+      method: "GET",
+      url: `/api/v1/admin/machines/${machineId}/unavailability`,
+      headers: { cookie: memberCookie }
+    });
+    expect(viewerUnavailability.statusCode).toBe(200);
+    expect(viewerUnavailability.json().unavailability).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: unavailabilityId,
+          resourceGroupId: null,
+          reason: "普通用户可见的停用原因"
+        })
+      ])
+    );
+    dbModule.db
+      .prepare(
+        "UPDATE resource_unavailability SET status = 'CANCELLED' WHERE id = ?"
+      )
+      .run(unavailabilityId);
 
     const machineOptions = await app.inject({
       method: "GET",
@@ -701,6 +749,101 @@ describe("机器使用权与管理员专用信息", () => {
     expect(auditActions).toContain("MACHINE_MEMBER_REMOVE");
   });
 
+  it("统一维护接口可以管理整机和资源组维护", async () => {
+    const groupPreview = await app.inject({
+      method: "POST",
+      url: `/api/v1/admin/machines/${machineId}/maintenance/preview`,
+      headers: { cookie: adminCookie },
+      payload: {
+        resourceGroupId: groupId,
+        startAt: futureIso(500),
+        endAt: futureIso(520)
+      }
+    });
+    expect(groupPreview.statusCode).toBe(200);
+    const groupCreated = await app.inject({
+      method: "POST",
+      url: `/api/v1/admin/machines/${machineId}/maintenance`,
+      headers: { cookie: adminCookie },
+      payload: {
+        resourceGroupId: groupId,
+        startAt: futureIso(500),
+        endAt: futureIso(520),
+        reason: "资源组维护测试",
+        expectedRevision: groupPreview.json().revision
+      }
+    });
+    expect(groupCreated.statusCode).toBe(201);
+
+    const machinePreview = await app.inject({
+      method: "POST",
+      url: `/api/v1/admin/machines/${machineId}/maintenance/preview`,
+      headers: { cookie: adminCookie },
+      payload: {
+        resourceGroupId: null,
+        startAt: futureIso(540),
+        endAt: futureIso(560)
+      }
+    });
+    expect(machinePreview.statusCode).toBe(200);
+    const machineCreated = await app.inject({
+      method: "POST",
+      url: `/api/v1/admin/machines/${machineId}/maintenance`,
+      headers: { cookie: adminCookie },
+      payload: {
+        resourceGroupId: null,
+        startAt: futureIso(540),
+        endAt: futureIso(560),
+        reason: "整机维护测试",
+        expectedRevision: machinePreview.json().revision
+      }
+    });
+    expect(machineCreated.statusCode).toBe(201);
+
+    const listed = await app.inject({
+      method: "GET",
+      url: `/api/v1/admin/machines/${machineId}/maintenance`,
+      headers: { cookie: adminCookie }
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().maintenance).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: groupCreated.json().id,
+          resourceGroupId: groupId,
+          resourceGroupName: "Access-Group",
+          reason: "资源组维护测试"
+        }),
+        expect.objectContaining({
+          id: machineCreated.json().id,
+          resourceGroupId: null,
+          reason: "整机维护测试"
+        })
+      ])
+    );
+
+    const forbidden = await app.inject({
+      method: "POST",
+      url: `/api/v1/admin/machines/${machineId}/maintenance/preview`,
+      headers: { cookie: memberCookie },
+      payload: {
+        resourceGroupId: null,
+        startAt: futureIso(600),
+        endAt: futureIso(620)
+      }
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    for (const id of [groupCreated.json().id, machineCreated.json().id]) {
+      const cancelled = await app.inject({
+        method: "DELETE",
+        url: `/api/v1/admin/maintenance/${id}`,
+        headers: { cookie: adminCookie }
+      });
+      expect(cancelled.statusCode).toBe(200);
+    }
+  });
+
   it("资源组长期停用后可以重新启用，删除必须单独执行", async () => {
     const lifecycleGroupId = randomUUID();
     const now = dbModule.nowIso();
@@ -844,6 +987,45 @@ describe("机器使用权与管理员专用信息", () => {
       }
     });
     expect(disabled.statusCode).toBe(200);
+
+    const disabledTimelineMachines = await app.inject({
+      method: "GET",
+      url: "/api/v1/timeline/machines",
+      headers: { cookie: adminCookie }
+    });
+    expect(disabledTimelineMachines.statusCode).toBe(200);
+    expect(
+      disabledTimelineMachines.json().machines.find(
+        (machine: { id: string }) => machine.id === machineId
+      )
+    ).toMatchObject({
+      id: machineId,
+      status: "DISABLED"
+    });
+
+    const disabledTimeline = await app.inject({
+      method: "GET",
+      url: `/api/v1/timeline?from=${encodeURIComponent(
+        new Date(Date.now() - 60_000).toISOString()
+      )}&to=${encodeURIComponent(
+        new Date(Date.now() + 60 * 60_000).toISOString()
+      )}`,
+      headers: { cookie: adminCookie }
+    });
+    expect(disabledTimeline.statusCode).toBe(200);
+    expect(
+      disabledTimeline.json().machines.find(
+        (machine: { id: string }) => machine.id === machineId
+      )
+    ).toMatchObject({
+      id: machineId,
+      status: "DISABLED"
+    });
+    expect(
+      disabledTimeline.json().groups.some(
+        (group: { machineId: string }) => group.machineId === machineId
+      )
+    ).toBe(true);
 
     const disabledMachine = dbModule.db
       .prepare("SELECT version FROM machines WHERE id = ?")

@@ -15,7 +15,7 @@ export function resourceGroupStatusLabel(status: string) {
   return (
     {
       ACTIVE: "启用",
-      DISABLED: "长期停用"
+      DISABLED: "停用"
     } as Record<string, string>
   )[status] ?? unknownStatus;
 }
@@ -27,7 +27,7 @@ export function reservationStatusLabel(
   now = Date.now()
 ) {
   if (status === "CANCELLED") return "已取消";
-  if (status === "CANCELLED_UNAVAILABILITY") return "因停用取消";
+  if (status === "CANCELLED_UNAVAILABILITY") return "因维护取消";
   if (status !== "CONFIRMED") return unknownStatus;
   if (new Date(endAt).getTime() <= now) return "已结束";
   if (new Date(startAt).getTime() <= now) return "进行中";
@@ -62,16 +62,16 @@ export function auditActionLabel(action: string) {
       MACHINE_MEMBER_REMOVE: "移除机器用户",
       RESOURCE_GROUP_CREATE: "创建资源组",
       RESOURCE_GROUP_UPDATE: "修改资源组",
-      RESOURCE_GROUP_DISABLE_LONG_TERM: "长期停用资源组",
+      RESOURCE_GROUP_DISABLE_LONG_TERM: "停用资源组",
       RESOURCE_GROUP_ENABLE: "重新启用资源组",
       RESOURCE_GROUP_DELETE: "永久删除资源组",
       RESOURCE_POOL_DELETE: "永久删除资源项",
-      MACHINE_DISABLE_LONG_TERM: "长期停用机器",
+      MACHINE_DISABLE_LONG_TERM: "停用机器",
       MACHINE_ENABLE: "重新启用机器",
       MACHINE_DELETE: "永久删除机器",
-      UNAVAILABILITY_CREATE: "创建计划停用",
-      UNAVAILABILITY_CANCEL: "取消计划停用",
-      RESERVATION_ADJUST_UNAVAILABILITY: "因停用调整占用",
+      UNAVAILABILITY_CREATE: "创建维护安排",
+      UNAVAILABILITY_CANCEL: "取消维护安排",
+      RESERVATION_ADJUST_UNAVAILABILITY: "因维护调整占用",
       RESERVATION_CREATE: "登记资源占用",
       RESERVATION_UPDATE: "修改占用时间",
       RESERVATION_CANCEL: "取消资源占用",

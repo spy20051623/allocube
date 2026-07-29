@@ -1359,7 +1359,7 @@ export function registerAdminRoutes(
         | undefined;
       if (!machine) throw new BusinessError("机器不存在", 404);
       if (machine.status !== "DISABLED") {
-        throw new BusinessError("请先长期停用机器，再进行删除", 409);
+        throw new BusinessError("请先停用机器，再进行删除", 409);
       }
       if (machine.version !== expectedVersion) {
         throw new BusinessError("机器信息已更新，请刷新后重试", 409);
@@ -2558,8 +2558,8 @@ export function registerAdminRoutes(
              WHERE drgt.resource_group_id = resource_groups.id
            )
          ORDER BY sort_order, name`
-      )
-      .all(auth.machineId) as Array<Record<string, unknown>>;
+        )
+        .all(auth.machineId) as Array<Record<string, unknown>>;
     const now = nowIso();
     return {
       groups: rows.map((row) => {
@@ -2568,23 +2568,25 @@ export function registerAdminRoutes(
           ? group
           : (({ version: _version, ...visible }) => visible)(group);
         return {
-        ...visibleGroup,
-        scheduledUnavailabilityCount: countRows(
-          `SELECT COUNT(*) AS count FROM resource_unavailability
-           WHERE resource_group_id = ? AND kind = 'PLANNED'
-             AND status = 'ACTIVE' AND start_at > ?`,
-          row.id,
-          now
-        ),
-        hasCurrentPlannedUnavailability: Boolean(countRows(
-          `SELECT COUNT(*) AS count FROM resource_unavailability
-           WHERE resource_group_id = ? AND kind = 'PLANNED'
-             AND status = 'ACTIVE' AND start_at <= ? AND end_at > ?`,
-          row.id,
-          now,
-          now
-        ))
-      };
+          ...visibleGroup,
+          scheduledUnavailabilityCount: countRows(
+            `SELECT COUNT(*) AS count FROM resource_unavailability
+             WHERE resource_group_id = ? AND kind = 'PLANNED'
+               AND status = 'ACTIVE' AND start_at > ?`,
+            row.id,
+            now
+          ),
+          hasCurrentPlannedUnavailability: Boolean(
+            countRows(
+              `SELECT COUNT(*) AS count FROM resource_unavailability
+               WHERE resource_group_id = ? AND kind = 'PLANNED'
+                 AND status = 'ACTIVE' AND start_at <= ? AND end_at > ?`,
+              row.id,
+              now,
+              now
+            )
+          )
+        };
       })
     };
   });
@@ -2912,7 +2914,7 @@ export function registerAdminRoutes(
       .object({ expectedVersion: z.number().int().min(1) })
       .parse(request.body);
     if (group.status !== "DISABLED") {
-      return reply.code(409).send({ error: "请先长期停用资源组，再进行删除" });
+      return reply.code(409).send({ error: "请先停用资源组，再进行删除" });
     }
     withImmediateTransaction(() => {
       const fresh = getCurrentResourceGroupRow(id) as
@@ -2954,8 +2956,8 @@ export function registerAdminRoutes(
     const auth = requireMachineViewer(request, reply);
     if (!auth) return;
     return {
-      unavailability: listUnavailability(auth.machineId).map((item) =>
-        auth.canManage ? item : { ...item, reason: "" }
+      unavailability: listUnavailability(auth.machineId).filter(
+        (item) => item.resourceGroupId === null
       )
     };
   });
@@ -2978,17 +2980,99 @@ export function registerAdminRoutes(
     return reply.code(201).send(result);
   });
 
+  app.get("/api/v1/admin/machines/:id/maintenance", async (request, reply) => {
+    const auth = requireMachineViewer(request, reply);
+    if (!auth) return;
+    return {
+      maintenance: listUnavailability(auth.machineId).filter(
+        (item) => item.kind === "PLANNED"
+      )
+    };
+  });
+
+  app.post(
+    "/api/v1/admin/machines/:id/maintenance/preview",
+    async (request, reply) => {
+      const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+      const body = maintenancePreviewSchema.parse(request.body);
+      const auth = requireMachineManagerForId(request, reply, id);
+      if (!auth) return;
+      if (body.resourceGroupId) {
+        const target = resolveUnavailabilityTarget(
+          "RESOURCE_GROUP",
+          body.resourceGroupId
+        );
+        if (target.machineId !== id) {
+          return reply.code(400).send({ error: "资源组不属于当前机器" });
+        }
+        return previewUnavailability(
+          "RESOURCE_GROUP",
+          body.resourceGroupId,
+          body.startAt,
+          body.endAt
+        );
+      }
+      return previewUnavailability("MACHINE", id, body.startAt, body.endAt);
+    }
+  );
+
+  app.post("/api/v1/admin/machines/:id/maintenance", async (request, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = maintenanceSchema.parse(request.body);
+    const auth = requireMachineManagerForId(request, reply, id);
+    if (!auth) return;
+    let type: "MACHINE" | "RESOURCE_GROUP" = "MACHINE";
+    let targetId = id;
+    if (body.resourceGroupId) {
+      const target = resolveUnavailabilityTarget(
+        "RESOURCE_GROUP",
+        body.resourceGroupId
+      );
+      if (target.machineId !== id) {
+        return reply.code(400).send({ error: "资源组不属于当前机器" });
+      }
+      type = "RESOURCE_GROUP";
+      targetId = body.resourceGroupId;
+    }
+    const result = createPlannedUnavailability({
+      type,
+      id: targetId,
+      startAt: body.startAt,
+      endAt: body.endAt,
+      reason: body.reason,
+      expectedRevision: body.expectedRevision,
+      actorUserId: auth.user.id
+    });
+    publishRevision(result.revision);
+    return reply.code(201).send(result);
+  });
+
+  app.delete("/api/v1/admin/maintenance/:id", async (request, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const window = db
+      .prepare("SELECT * FROM resource_unavailability WHERE id = ?")
+      .get(id) as Record<string, any> | undefined;
+    if (!window || window.kind !== "PLANNED") {
+      return reply.code(404).send({ error: "维护安排不存在" });
+    }
+    const auth = requireMachineManagerForId(request, reply, window.machine_id);
+    if (!auth) return;
+    const result = cancelUnavailability(id, auth.user.id);
+    publishRevision(result.revision);
+    return { message: "维护安排已取消" };
+  });
+
   app.delete("/api/v1/admin/unavailability/:id", async (request, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const window = db
       .prepare("SELECT * FROM resource_unavailability WHERE id = ?")
       .get(id) as Record<string, any> | undefined;
-    if (!window) return reply.code(404).send({ error: "计划停用不存在" });
+    if (!window) return reply.code(404).send({ error: "维护安排不存在" });
     const auth = requireMachineManagerForId(request, reply, window.machine_id);
     if (!auth) return;
     const result = cancelUnavailability(id, auth.user.id);
     publishRevision(result.revision);
-    return { message: "计划停用已取消" };
+    return { message: "维护安排已取消" };
   });
 
   app.get("/api/v1/admin/smtp-settings", async (request, reply) => {
@@ -3605,10 +3689,23 @@ const plannedUnavailabilityPreviewSchema = z
     endAt: z.string().datetime()
   })
   .refine((value) => value.startAt < value.endAt, {
-    message: "停用结束时间必须晚于开始时间"
+    message: "维护结束时间必须晚于开始时间"
   });
 
 const plannedUnavailabilitySchema = plannedUnavailabilityPreviewSchema.and(
+  z.object({
+    reason: z.string().max(1000).optional().default(""),
+    expectedRevision: z.number().int().min(1)
+  })
+);
+
+const maintenancePreviewSchema = plannedUnavailabilityPreviewSchema.and(
+  z.object({
+    resourceGroupId: z.string().uuid().nullable().optional()
+  })
+);
+
+const maintenanceSchema = maintenancePreviewSchema.and(
   z.object({
     reason: z.string().max(1000).optional().default(""),
     expectedRevision: z.number().int().min(1)

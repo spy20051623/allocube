@@ -181,6 +181,10 @@ import {
   readCalendarPreference,
   writeCalendarPreference
 } from "./calendar-preference";
+import {
+  mergeProjectedUnavailability,
+  type ProjectedUnavailability
+} from "./calendar-unavailability";
 import { createClientId } from "./client-id";
 import type {
   AuthUser,
@@ -197,7 +201,6 @@ import type {
 import {
   auditActionLabel,
   reservationStatusLabel,
-  resourceGroupStatusLabel,
   userStatusLabel
 } from "./ui-copy";
 
@@ -4011,6 +4014,7 @@ type CatalogMachine = {
   name: string;
   address: string;
   status: "ACTIVE" | "DISABLED";
+  availabilityStatus: "ACTIVE" | "DISABLED" | "MAINTENANCE";
   resourceSummary: string;
   tags: string[];
   managers: CatalogManager[];
@@ -4334,9 +4338,21 @@ function ResourceCatalogPage({
                 <div className="catalog-machine-copy">
                   <div className="catalog-machine-heading">
                     <h2 title={machine.name}>{machine.name}</h2>
-                    {machine.status === "DISABLED" && (
-                      <span className="state-chip disabled">长期停用</span>
-                    )}
+                    <span
+                      className={`state-chip ${
+                        machine.availabilityStatus === "DISABLED"
+                          ? "disabled"
+                          : machine.availabilityStatus === "MAINTENANCE"
+                            ? "scheduled"
+                            : "active"
+                      }`}
+                    >
+                      {machine.availabilityStatus === "DISABLED"
+                        ? "停用"
+                        : machine.availabilityStatus === "MAINTENANCE"
+                          ? "维护"
+                          : "启用"}
+                    </span>
                   </div>
                   <p title={machine.resourceSummary || "尚未配置资源"}>
                     {machine.resourceSummary || "尚未配置资源"}
@@ -4586,9 +4602,14 @@ function CalendarPage({
     at: string;
   } | null>(null);
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
-  const [legendOpen, setLegendOpen] = useState(false);
   const [reservationDetail, setReservationDetail] = useState<{
     item: TimelineReservation;
+    machineName: string;
+    groupName: string;
+    anchor: DOMRect;
+  } | null>(null);
+  const [unavailabilityDetail, setUnavailabilityDetail] = useState<{
+    item: ProjectedUnavailability;
     machineName: string;
     groupName: string;
     anchor: DOMRect;
@@ -6140,40 +6161,6 @@ function CalendarPage({
             {refreshing ? <RefreshCw size={16} className="spin" /> : <RefreshCw size={16} />}
             刷新
           </button>
-          <div
-            className="calendar-legend-control"
-            onBlur={(event) => {
-              if (
-                !(event.relatedTarget instanceof Node) ||
-                !event.currentTarget.contains(event.relatedTarget)
-              ) {
-                setLegendOpen(false);
-              }
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setLegendOpen(false);
-            }}
-          >
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="查看日历图例"
-              aria-expanded={legendOpen}
-              title="日历图例"
-              onClick={() => setLegendOpen((current) => !current)}
-            >
-              <Info size={16} />
-            </button>
-            {legendOpen && (
-              <div className="calendar-legend-popover" role="tooltip">
-                <span><i className="mine" />我的占用</span>
-                <span><i />他人占用</span>
-                <span><i className="machine" />整机占用</span>
-                <span><i className="draft" />占用草稿</span>
-                <span><i className="unavailable" />停用时段</span>
-              </div>
-            )}
-          </div>
         </div>
         <div ref={timelineFrameRef} className="timeline-scroll-frame">
           {initialLoading && !timeline ? (
@@ -6234,6 +6221,14 @@ function CalendarPage({
             const machineGroups = groupsByMachine.get(machine.id) ?? [];
             if (!machineGroups.length) return null;
             const unavailable = machineUnavailability.get(machine.id) ?? [];
+            const machineMaintenance = unavailable.filter(
+              (item) => item.kind === "PLANNED"
+            );
+            const machineMaintenanceNow = machineMaintenance.some(
+              (item) =>
+                new Date(item.startAt).getTime() <= currentTime &&
+                new Date(item.endAt).getTime() > currentTime
+            );
             const machineCollapsed = collapsedMachineIds.has(machine.id);
             const machineContentsId = `calendar-machine-${machine.id}-contents`;
             return (
@@ -6266,14 +6261,21 @@ function CalendarPage({
                     <CalendarMachineTags tags={machine.tags} />
                   </span>
                   <span className="machine-strip-summary">
-                    {machine.status === "DISABLED" && (
-                      <span className="state-chip disabled">长期停用</span>
-                    )}
-                    {unavailable.length > 0 && (
-                      <span className="state-chip scheduled">
-                        {unavailable.length} 项停用安排
-                      </span>
-                    )}
+                    <span
+                      className={`state-chip ${
+                        machine.status === "DISABLED"
+                          ? "disabled"
+                          : machineMaintenanceNow
+                            ? "scheduled"
+                            : "active"
+                      }`}
+                    >
+                      {machine.status === "DISABLED"
+                        ? "停用"
+                        : machineMaintenanceNow
+                          ? "维护"
+                          : "启用"}
+                    </span>
                     <span className="machine-resource-summary">
                       {machine.resourceSummary || "尚未配置资源"}
                     </span>
@@ -6285,32 +6287,6 @@ function CalendarPage({
                   aria-hidden={machineCollapsed}
                 >
                 <div className="machine-contents-inner">
-                {unavailable.length > 0 && (
-                  <div className="machine-unavailability-row">
-                    <div className="machine-unavailability-label">
-                      <PowerOff size={14} />
-                      <strong>计划停用</strong>
-                    </div>
-                    <div className="time-track machine-unavailability-track">
-                      <TrackGrid view={view} visibleHours={visibleHours} />
-                      <CurrentTimeLine
-                        range={range}
-                        currentTime={currentTime}
-                      />
-                      {unavailable.map((item) => (
-                        <TimelineBar
-                          key={item.id}
-                          start={item.startAt}
-                          end={item.endAt}
-                          range={range}
-                          className="unavailability-bar"
-                        >
-                          <PowerOff size={13} />{item.reason || "整机计划停用"}
-                        </TimelineBar>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 {machineGroups.map((group) => {
                   const groupTarget: CalendarReservationTarget = {
                     scope: "RESOURCE_GROUP",
@@ -6341,6 +6317,19 @@ function CalendarPage({
                     ];
                   });
                   const groupUnavailability = unavailabilityByGroup.get(group.id) ?? [];
+                  const longTermDisabled =
+                    machine.status === "DISABLED" ||
+                    group.status === "DISABLED";
+                  const visibleUnavailability =
+                    mergeProjectedUnavailability(
+                      unavailable,
+                      groupUnavailability
+                    );
+                  const groupMaintenanceNow = visibleUnavailability.some(
+                    (item) =>
+                      new Date(item.startAt).getTime() <= currentTime &&
+                      new Date(item.endAt).getTime() > currentTime
+                  );
                   const isDragTarget =
                     dragPreview?.target.scope === "MACHINE"
                       ? dragPreview.target.machineId === machine.id
@@ -6362,31 +6351,47 @@ function CalendarPage({
                     (reservationMode === "RESOURCE_GROUP" ||
                       machineGroups.every((item) => item.status === "ACTIVE"));
                   return (
-                    <div className="timeline-row" key={group.id}>
+                    <div
+                      className={`timeline-row${longTermDisabled ? " long-term-disabled" : ""}`}
+                      key={group.id}
+                    >
                       <div className="resource-cell">
                         <span className="resource-copy">
                           <strong>{group.name}</strong>
                           <ResourceSummary value={group.resourceSummary} />
                         </span>
-                        {group.status === "DISABLED" && (
-                          <span className="state-chip disabled">长期停用</span>
-                        )}
+                        <span
+                          className={`state-chip ${
+                            longTermDisabled
+                              ? "disabled"
+                              : groupMaintenanceNow
+                                ? "scheduled"
+                                : "active"
+                          }`}
+                        >
+                          {longTermDisabled
+                            ? "停用"
+                            : groupMaintenanceNow
+                              ? "维护"
+                              : "启用"}
+                        </span>
                         <span className="allocation-badge">{group.allocations.length} 项</span>
                       </div>
                       <div
-                        className={`time-track${!selectable ? " not-selectable" : ""}`}
+                        className={`time-track${!selectable ? " not-selectable" : ""}${longTermDisabled ? " long-term-disabled" : ""}`}
                         title={
                           !selectable
                             ? machine.status !== "ACTIVE"
-                              ? "机器当前长期停用"
+                              ? "机器当前停用"
                               : group.status !== "ACTIVE"
-                                ? "资源组当前长期停用"
+                                ? "资源组当前停用"
                                 : reservationMode === "MACHINE"
                                   ? "机器内存在停用的资源组，当前不能整机占用"
                                   : undefined
                             : undefined
                         }
                         onPointerDown={(event) => {
+                          if (longTermDisabled) return;
                           const action = calendarDragAction(event);
                           if (!action) return;
                           if (action === "ADD" && !selectable) return;
@@ -6432,6 +6437,7 @@ function CalendarPage({
                           event.currentTarget.setPointerCapture(event.pointerId);
                         }}
                         onPointerMove={(event) => {
+                          if (longTermDisabled) return;
                           const active = dragState.current;
                           if (
                             selectable ||
@@ -6466,16 +6472,28 @@ function CalendarPage({
                           if (!dragState.current) setHoveredTime(null);
                         }}
                         onPointerUp={(event) =>
-                          finishDrag(
-                            event.currentTarget,
-                            group.id,
-                            event.pointerId,
-                            event.clientX
-                          )
+                          longTermDisabled
+                            ? undefined
+                            : finishDrag(
+                                event.currentTarget,
+                                group.id,
+                                event.pointerId,
+                                event.clientX
+                              )
                         }
                         onContextMenu={(event) => event.preventDefault()}
                       >
                         <TrackGrid view={view} visibleHours={visibleHours} />
+                        {longTermDisabled && (
+                          <div className="long-term-disabled-state">
+                            <PowerOff size={14} />
+                            <span>
+                              {machine.status === "DISABLED"
+                                ? "机器已停用"
+                                : "资源组已停用"}
+                            </span>
+                          </div>
+                        )}
                         <CurrentTimeLine
                           range={range}
                           currentTime={currentTime}
@@ -6490,43 +6508,79 @@ function CalendarPage({
                           hoveredTime?.groupId === group.id && (
                             <TimelineHoverGuide
                               range={range}
-                              at={hoveredTime.at}
-                              label={
-                                dragPreview?.sourceGroupId === group.id
-                                  ? `${formatChina(
-                                      dragPreview.requested.startAt,
-                                      {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                        hour12: false
-                                      }
-                                    )}–${formatChina(
-                                      dragPreview.requested.endAt,
-                                      {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                        hour12: false
-                                      }
-                                    )}`
-                                  : formatChina(hoveredTime.at, {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                      hour12: false
-                                    })
-                              }
-                            />
-                          )}
-                        {groupUnavailability.map((item) => (
+                               at={hoveredTime.at}
+                               label={
+                                 dragPreview?.sourceGroupId === group.id
+                                   ? `${formatChina(
+                                       dragPreview.requested.startAt,
+                                       {
+                                         hour: "2-digit",
+                                         minute: "2-digit",
+                                         hour12: false
+                                       }
+                                     )}–${formatChina(
+                                       dragPreview.requested.endAt,
+                                       {
+                                         hour: "2-digit",
+                                         minute: "2-digit",
+                                         hour12: false
+                                       }
+                                     )}`
+                                   : formatChina(hoveredTime.at, {
+                                       hour: "2-digit",
+                                       minute: "2-digit",
+                                       hour12: false
+                                     })
+                               }
+                             />
+                           )}
+                        {visibleUnavailability.map((item) => {
+                          const onlySource =
+                            item.sources.length === 1
+                              ? item.sources[0]
+                              : null;
+                          const label =
+                            item.sources.length > 1
+                              ? `维护 · ${item.sources.length}项`
+                              : onlySource?.window.reason ||
+                                (onlySource?.scope === "MACHINE"
+                                  ? "整机维护"
+                                  : "资源组维护");
+                          return (
                           <TimelineBar
-                            key={item.id}
+                            key={`${group.id}-${item.startAt}-${item.endAt}-${item.sources.map((source) => source.window.id).join("-")}`}
                             start={item.startAt}
                             end={item.endAt}
                             range={range}
-                            className="unavailability-bar group-unavailability-bar"
+                            className="unavailability-bar"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setReservationDetail(null);
+                              setUnavailabilityDetail({
+                                item,
+                                machineName: machine.name,
+                                groupName: group.name,
+                                anchor:
+                                  event.currentTarget.getBoundingClientRect()
+                              });
+                            }}
                           >
-                            <PowerOff size={13} />{item.reason || "资源组计划停用"}
+                            <PowerOff className="unavailability-icon" size={11} />
+                            <span className="booking-bar-copy">
+                              <span>{label}</span>
+                              {view === "day" && (
+                                <small>
+                                  {formatTimelineDayPeriod(
+                                    item.startAt,
+                                    item.endAt,
+                                    range
+                                  )}
+                                </small>
+                              )}
+                            </span>
                           </TimelineBar>
-                        ))}
+                          );
+                        })}
                         {visibleReservations.map((item) => (
                           <TimelineBar
                             key={item.id}
@@ -6535,10 +6589,12 @@ function CalendarPage({
                             range={range}
                             className={`${item.mine ? "booking-bar mine" : "booking-bar"}${item.scope === "MACHINE" ? " machine-scope" : ""}${item.id === editingReservation?.id ? " editing-history" : ""}`}
                             onClick={
-                              item.id === editingReservation?.id
+                                  longTermDisabled ||
+                                  item.id === editingReservation?.id
                                 ? undefined
                                 : (event) => {
                                     event.stopPropagation();
+                                    setUnavailabilityDetail(null);
                                     setReservationDetail({
                                       item,
                                       machineName: machine.name,
@@ -6563,17 +6619,11 @@ function CalendarPage({
                               </span>
                               {view === "day" && (
                                 <small>
-                                  {formatChina(item.startAt, {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                    hour12: false
-                                  })}
-                                  –
-                                  {formatChina(item.endAt, {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                    hour12: false
-                                  })}
+                                  {formatTimelineDayPeriod(
+                                    item.startAt,
+                                    item.endAt,
+                                    range
+                                  )}
                                 </small>
                               )}
                             </span>
@@ -6604,17 +6654,11 @@ function CalendarPage({
                                 </span>
                                 {view === "day" && (
                                   <small>
-                                    {formatChina(draft.startAt, {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                      hour12: false
-                                    })}
-                                    –
-                                    {formatChina(draft.endAt, {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                      hour12: false
-                                    })}
+                                    {formatTimelineDayPeriod(
+                                      draft.startAt,
+                                      draft.endAt,
+                                      range
+                                    )}
                                   </small>
                                 )}
                               </span>
@@ -6863,6 +6907,14 @@ function CalendarPage({
             onEdit={() =>
               void requestEditingReservation(reservationDetail.item)
             }
+          />,
+          document.body
+        )}
+      {unavailabilityDetail &&
+        createPortal(
+          <CalendarUnavailabilityPopover
+            detail={unavailabilityDetail}
+            onClose={() => setUnavailabilityDetail(null)}
           />,
           document.body
         )}
@@ -7245,9 +7297,10 @@ function CalendarWeekDayCell({
   const details = [
     ...reservations.map((item) => ({
       id: item.id,
-      kind: "reservation" as const,
+      kind: item.mine ? "mine" as const : "reservation" as const,
       startAt: item.startAt,
       endAt: item.endAt,
+      persistent: false,
       label: `${item.applicantName}${
         item.applicantEmployeeNumber
           ? ` · ${item.applicantEmployeeNumber}`
@@ -7259,6 +7312,7 @@ function CalendarWeekDayCell({
       kind: "unavailable" as const,
       startAt: item.startAt,
       endAt: item.endAt,
+      persistent: item.kind === "LONG_TERM",
       label: item.reason || "资源不可用"
     }))
   ].sort((left, right) => left.startAt.localeCompare(right.startAt));
@@ -7370,16 +7424,12 @@ function CalendarWeekDayCell({
               <div key={`${item.kind}-${item.id}`}>
                 <span className={item.kind} />
                 <time>
-                  {formatChina(item.startAt, {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    hour12: false
-                  })}
-                  –
-                  {formatChina(item.endAt, {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    hour12: false
+                  {formatWeekDayDetailPeriod({
+                    startAt: item.startAt,
+                    endAt: item.endAt,
+                    dayStart,
+                    dayEnd,
+                    persistent: item.persistent
                   })}
                 </time>
                 <em>{item.label}</em>
@@ -7390,6 +7440,39 @@ function CalendarWeekDayCell({
         )}
     </>
   );
+}
+
+function formatWeekDayDetailPeriod({
+  startAt,
+  endAt,
+  dayStart,
+  dayEnd,
+  persistent
+}: {
+  startAt: string;
+  endAt: string;
+  dayStart: string;
+  dayEnd: string;
+  persistent: boolean;
+}) {
+  const start = new Date(startAt).getTime();
+  const end = new Date(endAt).getTime();
+  const from = new Date(dayStart).getTime();
+  const to = new Date(dayEnd).getTime();
+  const time = (value: number) =>
+    formatChina(new Date(value).toISOString(), {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    });
+
+  if (persistent) {
+    return start <= from ? "全天停用" : `${time(Math.max(start, from))}–24:00`;
+  }
+
+  const startLabel = start <= from ? "00:00" : time(Math.max(start, from));
+  const endLabel = end >= to ? "24:00" : time(Math.min(end, to));
+  return `${startLabel}–${endLabel}`;
 }
 
 function TimelineScale({
@@ -7788,6 +7871,26 @@ function TimelineBar({
   return <div className={className} style={style}>{children}</div>;
 }
 
+function formatTimelineDayPeriod(
+  startAt: string,
+  endAt: string,
+  range: { from: string; to: string }
+) {
+  const start = new Date(startAt).getTime();
+  const end = new Date(endAt).getTime();
+  const from = new Date(range.from).getTime();
+  const to = new Date(range.to).getTime();
+  const time = (value: number) =>
+    formatChina(new Date(value).toISOString(), {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    });
+  const startLabel = start <= from ? "00:00" : time(start);
+  const endLabel = end >= to ? "24:00" : time(end);
+  return `${startLabel}–${endLabel}`;
+}
+
 function CalendarReservationTimeFields({
   startValue,
   endValue,
@@ -8162,6 +8265,153 @@ function CalendarReservationPopover({
   );
 }
 
+function CalendarUnavailabilityPopover({
+  detail,
+  onClose
+}: {
+  detail: {
+    item: ProjectedUnavailability;
+    machineName: string;
+    groupName: string;
+    anchor: DOMRect;
+  };
+  onClose: () => void;
+}) {
+  const popoverRef = useRef<HTMLElement | null>(null);
+  const popoverWidth = 360;
+  const viewportPadding = 12;
+  const anchorGap = 8;
+  const preferredLeft = detail.anchor.right + anchorGap;
+  const left =
+    preferredLeft + popoverWidth <= window.innerWidth - viewportPadding
+      ? preferredLeft
+      : Math.max(
+          viewportPadding,
+          detail.anchor.left - popoverWidth - anchorGap
+        );
+  const top = Math.min(
+    Math.max(viewportPadding, detail.anchor.top - 8),
+    Math.max(viewportPadding, window.innerHeight - 440)
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    const handleViewportChange = () => onClose();
+    const handleViewportScroll = (event: Event) => {
+      if (
+        event.target instanceof Node &&
+        popoverRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportScroll, true);
+    window.requestAnimationFrame(() => popoverRef.current?.focus());
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportScroll, true);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="reservation-popover-layer">
+      <article
+        ref={popoverRef}
+        className="reservation-popover unavailability-popover"
+        style={{ left, top }}
+        role="dialog"
+        aria-modal="false"
+        aria-label="维护详情"
+        tabIndex={-1}
+      >
+        <div className="reservation-popover-head">
+          <div>
+            <strong>维护详情</strong>
+            <span className="state-chip scheduled">
+              {detail.item.sources.length}项安排
+            </span>
+          </div>
+          <div className="reservation-popover-actions">
+            <button
+              className="reservation-popover-action"
+              type="button"
+              aria-label="关闭"
+              title="关闭"
+              onClick={onClose}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+        <dl className="reservation-popover-details">
+          <div><dt>机器</dt><dd>{detail.machineName}</dd></div>
+          <div><dt>资源组</dt><dd>{detail.groupName}</dd></div>
+          <div>
+            <dt>有效时间</dt>
+            <dd>
+              {formatChina(detail.item.startAt, {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit"
+              })}
+              <span className="reservation-popover-time-separator">至</span>
+              {formatChina(detail.item.endAt, {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit"
+              })}
+            </dd>
+          </div>
+        </dl>
+        <div className="unavailability-source-list">
+          {detail.item.sources.map((source) => (
+            <section
+              key={`${source.scope}-${source.window.id}`}
+              className="unavailability-source-item"
+            >
+              <div>
+                <strong>
+                  {source.scope === "MACHINE"
+                    ? "整机维护"
+                    : "资源组维护"}
+                </strong>
+              </div>
+              <time>
+                {formatChina(source.window.startAt, {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit"
+                })}
+                <span>至</span>
+                {formatChina(source.window.endAt, {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit"
+                })}
+              </time>
+              <p>{source.window.reason || "未填写原因"}</p>
+            </section>
+          ))}
+        </div>
+      </article>
+    </div>
+  );
+}
+
 function initialBookingTime(date: string, nowTime = Date.now()) {
   const today = isoToChinaLocal(new Date(nowTime).toISOString()).slice(0, 10);
   if (date !== today) return { start: `${date}T09:00`, end: `${date}T11:00` };
@@ -8347,7 +8597,7 @@ function MyReservationsPage({
                     </span>
                     {item.adjustmentType && (
                       <small className="change-note">
-                        <PowerOff size={12} />因资源停用调整
+                        <PowerOff size={12} />因维护或停用调整
                       </small>
                     )}
                   </div>
@@ -8460,7 +8710,7 @@ function bookingState(item: any, now = Date.now()) {
 }
 
 function stateClass(state: string) {
-  return ({ "未开始": "upcoming", "进行中": "active", "已结束": "done", "已取消": "cancelled", "因停用取消": "cancelled" } as Record<string, string>)[state] ?? "";
+  return ({ "未开始": "upcoming", "进行中": "active", "已结束": "done", "已取消": "cancelled", "因维护取消": "cancelled" } as Record<string, string>)[state] ?? "";
 }
 
 function NotificationsPage({
@@ -8952,15 +9202,6 @@ function MachineAdminPanel({
             <strong>{machine.name}</strong>
             <small>{machine.address || "未填写地址"}</small>
           </div>
-          {machine.availabilityStatus !== "ACTIVE" && (
-            <span
-              className={`state-chip ${
-                machine.availabilityStatus === "LONG_TERM" ? "disabled" : "scheduled"
-              }`}
-            >
-              {machine.availabilityStatus === "LONG_TERM" ? "长期停用" : "计划停用"}
-            </span>
-          )}
         </div>
       </div>
       <div className="machine-section-content" role="tabpanel">
@@ -9030,6 +9271,22 @@ function ExpandableMachineText({ value }: { value: string }) {
   );
 }
 
+function formatUnavailabilityPeriod(
+  startAt: string,
+  endAt: string
+) {
+  const start = formatChinaFullMinute(startAt);
+  const end =
+    formatChinaDate(startAt) === formatChinaDate(endAt)
+      ? formatChina(endAt, {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false
+        })
+      : formatChinaFullMinute(endAt);
+  return `${start} — ${end}`;
+}
+
 function MachineInfoSection({
   machine,
   isSystemAdmin,
@@ -9046,20 +9303,25 @@ function MachineInfoSection({
   const dialog = useAppDialog();
   const [detail, setDetail] = useState<any | null>(null);
   const [unavailabilityWindows, setUnavailabilityWindows] = useState<any[]>([]);
+  const [maintenanceGroups, setMaintenanceGroups] = useState<ResourceGroup[]>([]);
   const [editMachine, setEditMachine] = useState(false);
-  const [disableMode, setDisableMode] =
-    useState<"PLANNED" | "LONG_TERM" | null>(null);
+  const [maintenanceOpen, setMaintenanceOpen] = useState(false);
+  const [stopOpen, setStopOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [machineResult, unavailabilityResult] = await Promise.all([
+      const [machineResult, maintenanceResult, groupResult] = await Promise.all([
         api<{ machine: any }>(`/admin/machines/${machine.id}`),
-        api<{ unavailability: any[] }>(
-          `/admin/machines/${machine.id}/unavailability`
+        api<{ maintenance: any[] }>(
+          `/admin/machines/${machine.id}/maintenance`
+        ),
+        api<{ groups: ResourceGroup[] }>(
+          `/admin/machines/${machine.id}/groups`
         )
       ]);
       setDetail(machineResult.machine);
-      setUnavailabilityWindows(unavailabilityResult.unavailability);
+      setUnavailabilityWindows(maintenanceResult.maintenance);
+      setMaintenanceGroups(groupResult.groups);
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "机器信息加载失败");
     }
@@ -9076,18 +9338,18 @@ function MachineInfoSection({
     return <div className="content-loading"><RefreshCw className="spin" />正在载入</div>;
   }
 
-  const currentUnavailability = unavailabilityWindows.filter(
+  const currentMaintenance = unavailabilityWindows.filter(
     (item) => item.status === "ACTIVE" && new Date(item.endAt).getTime() > Date.now()
-  );
-  const machinePlannedUnavailableNow = currentUnavailability.some(
+  ).sort((left, right) => left.startAt.localeCompare(right.startAt));
+  const machineMaintenanceNow = currentMaintenance.some(
     (item) =>
-      item.kind === "PLANNED" &&
+      item.resourceGroupId === null &&
       new Date(item.startAt).getTime() <= Date.now()
   );
   const machineStatus = detail.status === "DISABLED"
-    ? { label: "长期停用", className: "disabled" }
-    : machinePlannedUnavailableNow
-      ? { label: "计划停用", className: "scheduled" }
+    ? { label: "停用", className: "disabled" }
+    : machineMaintenanceNow
+      ? { label: "维护", className: "scheduled" }
       : { label: "启用", className: "active" };
 
   const handleEnable = async () => {
@@ -9120,11 +9382,11 @@ function MachineInfoSection({
         `机器管理员 ${impact.counts.managers ?? 0} 人`,
         `使用权申请 ${impact.counts.accessRequests ?? 0} 条`,
         `占用 ${impact.counts.reservations ?? 0} 条`,
-        `停用记录 ${impact.counts.unavailability ?? 0} 条`
+        `维护记录 ${impact.counts.unavailability ?? 0} 条`
       ].join("\n");
       if (!(await dialog.confirm({
         title: "永久删除机器",
-        message: `删除后无法恢复 ${detail.name} 的配置和权限。\n${countLines}\n共涉及 ${total} 条记录；占用、审批、停用和审计历史会继续保留，并以“机器已删除”“资源组已删除”等名称显示。`,
+        message: `删除后无法恢复 ${detail.name} 的配置和权限。\n${countLines}\n共涉及 ${total} 条记录；占用、审批、维护和审计历史会继续保留，并以“机器已删除”“资源组已删除”等名称显示。`,
         confirmLabel: "永久删除",
         tone: "danger"
       }))) return;
@@ -9193,105 +9455,146 @@ function MachineInfoSection({
         </div>
       </section>
 
-      <section className="card panel-card machine-unavailability-panel">
-        <SectionHeader title={canManage ? "停用管理" : "停用安排"} />
-        {detail.status === "ACTIVE" && canManage && (
-          <div className="machine-disable-entry-grid">
-            <button
-              type="button"
-              className="machine-disable-entry"
-              aria-haspopup="dialog"
-              onClick={() => setDisableMode("PLANNED")}
-            >
-              <CalendarDays size={18} />
-              <span>计划停用</span>
-            </button>
-            <button
-              type="button"
-              className="machine-disable-entry long-term"
-              aria-haspopup="dialog"
-              onClick={() => setDisableMode("LONG_TERM")}
-            >
-              <PowerOff size={18} />
-              <span>长期停用</span>
-            </button>
-          </div>
-        )}
-        {detail.status === "DISABLED" && (
-          <div className="machine-disabled-state">
-            <div>
-              <PowerOff size={17} />
-              <strong>当前为长期停用</strong>
-            </div>
-            {canManage && <div className="section-header-actions">
+      <section className="card panel-card machine-unavailability-panel maintenance-panel">
+        <SectionHeader
+          title="维护管理"
+          actions={
+            canManage && detail.status === "ACTIVE" ? (
               <button
+                type="button"
                 className="secondary-button compact"
-                onClick={() => void handleEnable()}
+                onClick={() => setMaintenanceOpen(true)}
               >
-                <Power size={14} />重新启用
+                <Plus size={14} />安排维护
               </button>
-              {isSystemAdmin && (
-                <button
-                  className="secondary-button compact danger"
-                  title="永久删除机器"
-                  aria-label={`永久删除 ${detail.name}`}
-                  onClick={() => void handleDelete()}
-                >
-                  <Trash2 size={14} />永久删除
-                </button>
-              )}
-            </div>}
-          </div>
-        )}
-        {currentUnavailability.length > 0 && (
-          <div className="unavailability-table">
-            <div className="unavailability-table-row head">
-              <span>停用方式</span><span>时间</span><span />
+            ) : undefined
+          }
+        />
+        {currentMaintenance.length > 0 && (
+          <div className="unavailability-table machine-unavailability-table">
+            <div className="unavailability-table-row machine-unavailability-table-row head">
+              <span>范围</span>
+              <span>维护时间</span>
+              <span>原因</span>
+              <span />
             </div>
-            {currentUnavailability.map((item) => (
-              <div className="unavailability-table-row" key={item.id}>
-                <strong>
-                  {item.kind === "LONG_TERM" ? "长期停用" : "计划停用"}
-                  {item.reason && <small>{item.reason}</small>}
-                </strong>
-                <span>
-                  {formatChinaFullMinute(item.startAt)} —{" "}
-                  {item.kind === "LONG_TERM"
-                    ? "重新启用"
-                    : formatChinaFullMinute(item.endAt)}
+            {currentMaintenance.map((item) => (
+              <div
+                className="unavailability-table-row machine-unavailability-table-row"
+                key={item.id}
+              >
+                <span
+                  className={`unavailability-kind-chip ${
+                    item.resourceGroupId ? "group" : "planned"
+                  }`}
+                  title={item.resourceGroupName || "整机"}
+                >
+                  {item.resourceGroupName || "整机"}
                 </span>
-                {item.kind === "PLANNED" && canManage ? (
-                <button className="icon-button tiny danger" title="取消计划停用" onClick={async () => {
-                  if (!(await dialog.confirm({
-                    title: "取消计划停用",
-                    message: "此前因停用被取消或调整的占用不会自动恢复。",
-                    confirmLabel: "取消停用",
-                    tone: "danger"
-                  }))) return;
-                  try {
-                    await api(`/admin/unavailability/${item.id}`, { method: "DELETE" });
-                    notify("success", "计划停用已取消");
-                    await load();
-                  } catch (error) {
-                    notify("error", error instanceof Error ? error.message : "取消停用失败");
-                  }
-                }}><X size={14} /></button>
-                ) : <span />}
+                <span
+                  className="unavailability-period"
+                  title={formatUnavailabilityPeriod(
+                    item.startAt,
+                    item.endAt
+                  )}
+                >
+                  {formatUnavailabilityPeriod(
+                    item.startAt,
+                    item.endAt
+                  )}
+                </span>
+                <span
+                  className={`unavailability-reason${item.reason ? "" : " empty"}`}
+                  title={item.reason || "未填写"}
+                >
+                  {item.reason || "未填写"}
+                </span>
+                {canManage ? (
+                  <span className="unavailability-row-action">
+                    <button className="icon-button tiny danger" title="取消维护" onClick={async () => {
+                      if (!(await dialog.confirm({
+                        title: "取消维护",
+                        message: "此前因维护被取消或调整的占用不会自动恢复。",
+                        confirmLabel: "取消维护",
+                        tone: "danger"
+                      }))) return;
+                      try {
+                        await api(`/admin/maintenance/${item.id}`, { method: "DELETE" });
+                        notify("success", "维护安排已取消");
+                        await load();
+                      } catch (error) {
+                        notify("error", error instanceof Error ? error.message : "取消维护失败");
+                      }
+                    }}><X size={14} /></button>
+                  </span>
+                ) : <span className="unavailability-row-action" />}
               </div>
             ))}
           </div>
         )}
-        {currentUnavailability.length === 0 && (
-          <div className="unavailability-empty">暂无停用安排</div>
+        {currentMaintenance.length === 0 && (
+          <div className="unavailability-empty">暂无维护安排</div>
         )}
       </section>
-      {disableMode && canManage && (
-        <MachineDisableModal
+
+      <section className="card panel-card machine-state-panel">
+        <SectionHeader title="机器状态" />
+        <div className={`machine-disabled-state${detail.status === "ACTIVE" ? " active" : ""}`}>
+          <div>
+            {detail.status === "ACTIVE" ? <Power size={17} /> : <PowerOff size={17} />}
+            <strong>{detail.status === "ACTIVE" ? "启用" : "停用"}</strong>
+          </div>
+          {canManage && (
+            <div className="section-header-actions">
+              {detail.status === "ACTIVE" ? (
+                <button
+                  className="secondary-button compact danger"
+                  onClick={() => setStopOpen(true)}
+                >
+                  <PowerOff size={14} />停用
+                </button>
+              ) : (
+                <>
+                  <button
+                    className="secondary-button compact"
+                    onClick={() => void handleEnable()}
+                  >
+                    <Power size={14} />重新启用
+                  </button>
+                  {isSystemAdmin && (
+                    <button
+                      className="secondary-button compact danger"
+                      title="永久删除机器"
+                      aria-label={`永久删除 ${detail.name}`}
+                      onClick={() => void handleDelete()}
+                    >
+                      <Trash2 size={14} />永久删除
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+      {maintenanceOpen && canManage && (
+        <MaintenanceModal
           machine={detail}
-          mode={disableMode}
-          onClose={() => setDisableMode(null)}
+          groups={maintenanceGroups}
+          onClose={() => setMaintenanceOpen(false)}
           onCompleted={async () => {
-            setDisableMode(null);
+            setMaintenanceOpen(false);
+            await Promise.all([load(), reloadMachines()]);
+          }}
+          notify={notify}
+        />
+      )}
+      {stopOpen && canManage && (
+        <MachineStopModal
+          machine={detail}
+          onClose={() => setStopOpen(false)}
+          onCompleted={async () => {
+            setStopOpen(false);
             await Promise.all([load(), reloadMachines()]);
           }}
           notify={notify}
@@ -9313,9 +9616,7 @@ function MachineInfoSection({
   );
 }
 
-type MachineDisableMode = "PLANNED" | "LONG_TERM";
-
-type MachineDisablePreview = {
+type MaintenancePreview = {
   affectedReservations: any[];
   revision: number;
   summary: {
@@ -9326,29 +9627,29 @@ type MachineDisablePreview = {
   };
 };
 
-function MachineDisableModal({
+function MaintenanceModal({
   machine,
-  mode,
+  groups,
   onClose,
   onCompleted,
   notify
 }: {
   machine: any;
-  mode: MachineDisableMode;
+  groups: ResourceGroup[];
   onClose: () => void;
   onCompleted: () => Promise<void>;
   notify: (kind: "success" | "error", message: string) => void;
 }) {
   const initial = initialBookingTime(todayChina());
+  const [targetId, setTargetId] = useState("MACHINE");
   const [form, setForm] = useState({
     startAt: initial.start,
     endAt: initial.end,
     reason: ""
   });
-  const [preview, setPreview] = useState<MachineDisablePreview | null>(null);
+  const [preview, setPreview] = useState<MaintenancePreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const planned = mode === "PLANNED";
 
   const updateForm = (
     field: "startAt" | "endAt" | "reason",
@@ -9361,24 +9662,20 @@ function MachineDisableModal({
   const runPreview = async () => {
     setPreviewing(true);
     try {
-      const result = await api<MachineDisablePreview>(
-        planned
-          ? `/admin/machines/${machine.id}/unavailability/preview`
-          : `/admin/machines/${machine.id}/disable/preview`,
+      const result = await api<MaintenancePreview>(
+        `/admin/machines/${machine.id}/maintenance/preview`,
         {
           method: "POST",
-          body: planned
-            ? jsonBody({
-                startAt: chinaLocalToIso(form.startAt),
-                endAt: chinaLocalToIso(form.endAt)
-              })
-            : undefined
-        }
-      );
+          body: jsonBody({
+            resourceGroupId: targetId === "MACHINE" ? null : targetId,
+            startAt: chinaLocalToIso(form.startAt),
+            endAt: chinaLocalToIso(form.endAt)
+          })
+        });
       setPreview(result);
     } catch (error) {
       setPreview(null);
-      notify("error", error instanceof Error ? error.message : "停用预览失败");
+      notify("error", error instanceof Error ? error.message : "维护影响加载失败");
     } finally {
       setPreviewing(false);
     }
@@ -9388,28 +9685,17 @@ function MachineDisableModal({
     if (!preview) return;
     setSubmitting(true);
     try {
-      if (planned) {
-        await api(`/admin/machines/${machine.id}/unavailability`, {
-          method: "POST",
-          body: jsonBody({
-            startAt: chinaLocalToIso(form.startAt),
-            endAt: chinaLocalToIso(form.endAt),
-            reason: form.reason,
-            expectedRevision: preview.revision
-          })
-        });
-        notify("success", "计划停用已创建");
-      } else {
-        await api(`/admin/machines/${machine.id}/disable`, {
-          method: "POST",
-          body: jsonBody({
-            expectedVersion: machine.version,
-            expectedRevision: preview.revision,
-            reason: form.reason
-          })
-        });
-        notify("success", "机器已长期停用");
-      }
+      await api(`/admin/machines/${machine.id}/maintenance`, {
+        method: "POST",
+        body: jsonBody({
+          resourceGroupId: targetId === "MACHINE" ? null : targetId,
+          startAt: chinaLocalToIso(form.startAt),
+          endAt: chinaLocalToIso(form.endAt),
+          reason: form.reason,
+          expectedRevision: preview.revision
+        })
+      });
+      notify("success", "维护安排已创建");
       await onCompleted();
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
@@ -9417,11 +9703,7 @@ function MachineDisableModal({
       }
       notify(
         "error",
-        error instanceof Error
-          ? error.message
-          : planned
-            ? "创建计划停用失败"
-            : "长期停用失败"
+        error instanceof Error ? error.message : "创建维护失败"
       );
     } finally {
       setSubmitting(false);
@@ -9430,35 +9712,45 @@ function MachineDisableModal({
 
   return (
     <Modal
-      title={`${planned ? "计划停用" : "长期停用"}：${machine.name}`}
+      title={`安排维护：${machine.name}`}
       onClose={onClose}
       wide
     >
       <div className="stack-form machine-disable-modal">
-        {!planned && (
-          <div className="modal-note warning">
-            <CircleAlert size={15} />
-            <span>长期停用将从当前时间开始，重新启用前机器不可用于新的占用。</span>
-          </div>
-        )}
-        {planned && (
-          <div className="machine-disable-time-grid">
-            <Field label="开始时间">
-              <input
-                type="datetime-local"
-                value={form.startAt}
-                onChange={(event) => updateForm("startAt", event.target.value)}
-              />
-            </Field>
-            <Field label="结束时间">
-              <input
-                type="datetime-local"
-                value={form.endAt}
-                onChange={(event) => updateForm("endAt", event.target.value)}
-              />
-            </Field>
-          </div>
-        )}
+        <Field label="维护范围">
+          <select
+            value={targetId}
+            onChange={(event) => {
+              setTargetId(event.target.value);
+              setPreview(null);
+            }}
+          >
+            <option value="MACHINE">整机</option>
+            {groups
+              .filter((group) => group.status === "ACTIVE")
+              .map((group) => (
+                <option key={group.id} value={group.id}>
+                  资源组 · {group.name}
+                </option>
+              ))}
+          </select>
+        </Field>
+        <div className="machine-disable-time-grid">
+          <Field label="开始时间">
+            <input
+              type="datetime-local"
+              value={form.startAt}
+              onChange={(event) => updateForm("startAt", event.target.value)}
+            />
+          </Field>
+          <Field label="结束时间">
+            <input
+              type="datetime-local"
+              value={form.endAt}
+              onChange={(event) => updateForm("endAt", event.target.value)}
+            />
+          </Field>
+        </div>
         <Field label="原因（选填）">
           <textarea
             value={form.reason}
@@ -9483,9 +9775,9 @@ function MachineDisableModal({
                     拆分 {preview.summary.split} 条
                   </small>
                 )}
-                {preview.affectedReservations.slice(0, 3).map((item) => (
+                  {preview.affectedReservations.slice(0, 3).map((item) => (
                   <small key={item.id}>
-                    {item.applicantName} · {item.resourceGroupName} ·
+                    {item.applicantName} · {item.resourceGroupName || "整机"} ·
                     {" "}{formatChinaFullMinute(item.startAt)}
                   </small>
                 ))}
@@ -9519,6 +9811,130 @@ function MachineDisableModal({
             onClick={() => void submit()}
             disabled={!preview || previewing || submitting}
           >
+            创建维护
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function MachineStopModal({
+  machine,
+  onClose,
+  onCompleted,
+  notify
+}: {
+  machine: any;
+  onClose: () => void;
+  onCompleted: () => Promise<void>;
+  notify: (kind: "success" | "error", message: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [preview, setPreview] = useState<MaintenancePreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const runPreview = async () => {
+    setPreviewing(true);
+    try {
+      setPreview(
+        await api<MaintenancePreview>(
+          `/admin/machines/${machine.id}/disable/preview`,
+          { method: "POST" }
+        )
+      );
+    } catch (error) {
+      setPreview(null);
+      notify("error", error instanceof Error ? error.message : "停用影响加载失败");
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  const submit = async () => {
+    if (!preview) return;
+    setSubmitting(true);
+    try {
+      await api(`/admin/machines/${machine.id}/disable`, {
+        method: "POST",
+        body: jsonBody({
+          expectedVersion: machine.version,
+          expectedRevision: preview.revision,
+          reason
+        })
+      });
+      notify("success", "机器已停用");
+      await onCompleted();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) setPreview(null);
+      notify("error", error instanceof Error ? error.message : "停用机器失败");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal title={`停用机器：${machine.name}`} onClose={onClose} wide>
+      <div className="stack-form machine-disable-modal">
+        <div className="modal-note warning">
+          <CircleAlert size={15} />
+          <span>停用后将持续不可用，重新启用前不能创建新的占用。</span>
+        </div>
+        <Field label="原因（选填）">
+          <textarea
+            value={reason}
+            maxLength={1000}
+            rows={3}
+            onChange={(event) => {
+              setReason(event.target.value);
+              setPreview(null);
+            }}
+          />
+        </Field>
+        {preview && (
+          <div className={`unavailability-impact-bar ${preview.summary.total ? "warning" : "safe"}`}>
+            <div>
+              {preview.summary.total ? <CircleAlert size={16} /> : <Check size={16} />}
+              <span>
+                <strong>
+                  {preview.summary.total
+                    ? `影响 ${preview.summary.total} 条占用`
+                    : "没有受影响的占用"}
+                </strong>
+                {preview.summary.total > 0 && (
+                  <small>
+                    取消 {preview.summary.cancelled} 条 · 裁切 {preview.summary.trimmed} 条 ·
+                    拆分 {preview.summary.split} 条
+                  </small>
+                )}
+              </span>
+            </div>
+          </div>
+        )}
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onClose}
+            disabled={previewing || submitting}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className="secondary-button machine-disable-modal-action"
+            onClick={() => void runPreview()}
+            disabled={previewing || submitting}
+          >
+            <Eye size={15} />查看影响
+          </button>
+          <button
+            type="button"
+            className="danger-button machine-disable-modal-action"
+            onClick={() => void submit()}
+            disabled={!preview || previewing || submitting}
+          >
             确认停用
           </button>
         </div>
@@ -9544,8 +9960,6 @@ function MachineResourcesSection({
   const [pools, setPools] = useState<ResourcePool[]>([]);
   const [resourceEditorOpen, setResourceEditorOpen] = useState(false);
   const [openingResourceEditor, setOpeningResourceEditor] = useState(false);
-  const [groupUnavailability, setGroupUnavailability] =
-    useState<ResourceGroup | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -9597,8 +10011,8 @@ function MachineResourcesSection({
 
   const disableGroup = async (group: ResourceGroup) => {
     const reason = await dialog.prompt({
-      title: "长期停用资源组",
-      message: `长期停用 ${group.name} 会立即处理进行中和未来的占用。`,
+      title: "停用资源组",
+      message: `停用 ${group.name} 会立即处理进行中和未来的占用。`,
       label: "原因（选填）",
       multiline: true,
       maxLength: 1000
@@ -9611,11 +10025,11 @@ function MachineResourcesSection({
       }>(`/admin/groups/${group.id}/disable/preview`, { method: "POST" });
       const summary = preview.summary;
       if (!(await dialog.confirm({
-        title: "确认长期停用",
+        title: "确认停用",
         message: summary.total
           ? `将影响 ${summary.total} 条占用：取消 ${summary.cancelled} 条、裁切 ${summary.trimmed} 条、拆分 ${summary.split} 条。`
           : "当前没有受影响的占用。",
-        confirmLabel: "长期停用",
+        confirmLabel: "停用",
         tone: "danger"
       }))) return;
       await api(`/admin/groups/${group.id}/disable`, {
@@ -9626,10 +10040,10 @@ function MachineResourcesSection({
           reason
         })
       });
-      notify("success", "资源组已长期停用");
+      notify("success", "资源组已停用");
       await load();
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "长期停用失败");
+      notify("error", error instanceof Error ? error.message : "停用失败");
     }
   };
 
@@ -9658,12 +10072,12 @@ function MachineResourcesSection({
       const countLines = [
         `资源分配 ${impact.counts.allocations ?? 0} 项`,
         `占用 ${impact.counts.reservations ?? 0} 条`,
-        `停用记录 ${impact.counts.unavailability ?? 0} 条`,
+        `维护记录 ${impact.counts.unavailability ?? 0} 条`,
         `配置历史 ${impact.counts.revisions ?? 0} 条`
       ].join("\n");
       if (!(await dialog.confirm({
         title: "永久删除资源组",
-        message: `删除后无法恢复 ${group.name} 的配置。\n${countLines}\n共涉及 ${total} 条记录；占用、停用和审计历史会继续保留，并以“资源组已删除”“资源已删除”等名称显示。`,
+        message: `删除后无法恢复 ${group.name} 的配置。\n${countLines}\n共涉及 ${total} 条记录；占用、维护和审计历史会继续保留，并以“资源组已删除”“资源已删除”等名称显示。`,
         confirmLabel: "永久删除",
         tone: "danger"
       }))) return;
@@ -9697,54 +10111,54 @@ function MachineResourcesSection({
           <div className="group-admin-row head" aria-hidden="true">
             <span>资源组信息</span><span>状态</span><span />
           </div>
-          {groups.map((group) => (
-            <div className={`group-admin-row ${group.status.toLowerCase()}`} key={group.id}>
-              <div className="group-admin-info">
-                <span className="group-admin-copy">
-                  <strong className="group-admin-name" title={group.name}>{group.name}</strong>
-                  <ResourceSummary value={group.resourceSummary} />
+          {groups.map((group) => {
+            const effectiveStatus =
+              group.status === "DISABLED" ||
+              machine.availabilityStatus === "LONG_TERM"
+                ? "DISABLED"
+                : group.hasCurrentPlannedUnavailability ||
+                    machine.availabilityStatus === "PLANNED"
+                  ? "MAINTENANCE"
+                  : "ACTIVE";
+            return (
+              <div className={`group-admin-row ${group.status.toLowerCase()}`} key={group.id}>
+                <div className="group-admin-info">
+                  <span className="group-admin-copy">
+                    <strong className="group-admin-name" title={group.name}>{group.name}</strong>
+                    <ResourceSummary value={group.resourceSummary} />
+                  </span>
+                </div>
+                <span className="group-status-cell">
+                  <span
+                    className={`state-chip ${
+                      effectiveStatus === "DISABLED"
+                        ? "disabled"
+                        : effectiveStatus === "MAINTENANCE"
+                          ? "scheduled"
+                          : "active"
+                    }`}
+                  >
+                    {effectiveStatus === "DISABLED"
+                      ? "停用"
+                      : effectiveStatus === "MAINTENANCE"
+                        ? "维护"
+                        : "启用"}
+                  </span>
                 </span>
+                <div className="group-admin-actions">
+                  {canManage && group.status === "ACTIVE" && (
+                    <button className="icon-button tiny danger" title="停用" onClick={() => void disableGroup(group)}><PowerOff size={14} /></button>
+                  )}
+                  {canManage && group.status === "DISABLED" && (
+                    <>
+                      <button className="icon-button tiny" title="重新启用" onClick={() => void enableGroup(group)}><Power size={14} /></button>
+                      <button className="icon-button tiny danger" title="永久删除" onClick={() => void deleteGroup(group)}><Trash2 size={14} /></button>
+                    </>
+                  )}
+                </div>
               </div>
-              <span className="group-status-cell">
-                <span
-                  className={`state-chip ${
-                    group.status === "DISABLED"
-                      ? "disabled"
-                      : group.hasCurrentPlannedUnavailability
-                        ? "scheduled"
-                        : "active"
-                  }`}
-                >
-                  {group.status === "DISABLED"
-                    ? "长期停用"
-                    : group.hasCurrentPlannedUnavailability
-                      ? "计划停用"
-                      : resourceGroupStatusLabel(group.status)}
-                </span>
-                {group.scheduledUnavailabilityCount ? (
-                  <span className="state-chip scheduled">已安排</span>
-                ) : null}
-              </span>
-              <div className="group-admin-actions">
-                {canManage && group.status === "ACTIVE" && (
-                  <>
-                    <button
-                      className="icon-button tiny"
-                      title="计划停用"
-                      onClick={() => setGroupUnavailability(group)}
-                    ><Clock3 size={14} /></button>
-                    <button className="icon-button tiny danger" title="长期停用" onClick={() => void disableGroup(group)}><PowerOff size={14} /></button>
-                  </>
-                )}
-                {canManage && group.status === "DISABLED" && (
-                  <>
-                    <button className="icon-button tiny" title="重新启用" onClick={() => void enableGroup(group)}><Power size={14} /></button>
-                    <button className="icon-button tiny danger" title="永久删除" onClick={() => void deleteGroup(group)}><Trash2 size={14} /></button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {!groupsLoaded && <div className="mini-empty">正在加载资源组</div>}
           {groupsLoaded && !groups.length && (
             <div className="mini-empty">尚未配置资源组</div>
@@ -9764,224 +10178,10 @@ function MachineResourcesSection({
           notify={notify}
         />
       )}
-      {groupUnavailability && canManage && (
-        <GroupUnavailabilityModal
-          group={groupUnavailability}
-          onClose={() => setGroupUnavailability(null)}
-          onChanged={async () => {
-            await load();
-          }}
-          notify={notify}
-        />
-      )}
     </div>
   );
 }
 
-function GroupUnavailabilityModal({
-  group,
-  onClose,
-  onChanged,
-  notify
-}: {
-  group: ResourceGroup;
-  onClose: () => void;
-  onChanged: () => Promise<void>;
-  notify: (kind: "success" | "error", message: string) => void;
-}) {
-  const dialog = useAppDialog();
-  const initial = initialBookingTime(todayChina());
-  const [form, setForm] = useState({
-    startAt: initial.start,
-    endAt: initial.end,
-    reason: ""
-  });
-  const [windows, setWindows] = useState<any[]>([]);
-  const [preview, setPreview] = useState<{
-    revision: number;
-    affectedReservations: any[];
-    summary: { total: number; cancelled: number; trimmed: number; split: number };
-  } | null>(null);
-
-  const loadWindows = useCallback(async () => {
-    try {
-      const result = await api<{ unavailability: any[] }>(
-        `/admin/groups/${group.id}/unavailability`
-      );
-      setWindows(
-        result.unavailability.filter(
-          (item) =>
-            item.kind === "PLANNED" &&
-            item.status === "ACTIVE" &&
-            new Date(item.endAt).getTime() > Date.now()
-        )
-      );
-    } catch (error) {
-      notify("error", error instanceof Error ? error.message : "停用安排加载失败");
-    }
-  }, [group.id, notify]);
-
-  useEffect(() => {
-    void loadWindows();
-  }, [loadWindows]);
-
-  const runPreview = async () => {
-    try {
-      const result = await api<{
-        revision: number;
-        affectedReservations: any[];
-        summary: { total: number; cancelled: number; trimmed: number; split: number };
-      }>(`/admin/groups/${group.id}/unavailability/preview`, {
-        method: "POST",
-        body: jsonBody({
-          startAt: chinaLocalToIso(form.startAt),
-          endAt: chinaLocalToIso(form.endAt)
-        })
-      });
-      setPreview(result);
-    } catch (error) {
-      notify("error", error instanceof Error ? error.message : "停用预览失败");
-    }
-  };
-
-  return (
-    <Modal title={`计划停用：${group.name}`} onClose={onClose} wide>
-      <div className="stack-form">
-        <div className="unavailability-form-grid">
-          <Field label="开始">
-            <input
-              type="datetime-local"
-              value={form.startAt}
-              onChange={(event) => {
-                setForm({ ...form, startAt: event.target.value });
-                setPreview(null);
-              }}
-            />
-          </Field>
-          <Field label="结束">
-            <input
-              type="datetime-local"
-              value={form.endAt}
-              onChange={(event) => {
-                setForm({ ...form, endAt: event.target.value });
-                setPreview(null);
-              }}
-            />
-          </Field>
-          <Field label="原因（选填）">
-            <input
-              value={form.reason}
-              maxLength={1000}
-              onChange={(event) => {
-                setForm({ ...form, reason: event.target.value });
-                setPreview(null);
-              }}
-            />
-          </Field>
-          <button
-            type="button"
-            className="secondary-button unavailability-preview-button"
-            onClick={() => void runPreview()}
-          >
-            <Eye size={15} />查看影响
-          </button>
-        </div>
-        {preview && (
-          <div className={`unavailability-impact-bar ${preview.summary.total ? "warning" : "safe"}`}>
-            <div>
-              {preview.summary.total ? <CircleAlert size={16} /> : <Check size={16} />}
-              <span>
-                <strong>
-                  {preview.summary.total
-                    ? `影响 ${preview.summary.total} 条占用`
-                    : "没有受影响的占用"}
-                </strong>
-                {preview.summary.total > 0 && (
-                  <small>
-                    取消 {preview.summary.cancelled} 条 · 裁切 {preview.summary.trimmed} 条 ·
-                    拆分 {preview.summary.split} 条
-                  </small>
-                )}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="primary-button compact"
-              onClick={async () => {
-                if (
-                  preview.summary.total > 0 &&
-                  !(await dialog.confirm({
-                    title: "创建计划停用",
-                    message: "确认按以上结果调整占用并通知相关用户？",
-                    confirmLabel: "创建停用",
-                    tone: "danger"
-                  }))
-                ) return;
-                try {
-                  await api(`/admin/groups/${group.id}/unavailability`, {
-                    method: "POST",
-                    body: jsonBody({
-                      startAt: chinaLocalToIso(form.startAt),
-                      endAt: chinaLocalToIso(form.endAt),
-                      reason: form.reason,
-                      expectedRevision: preview.revision
-                    })
-                  });
-                  notify("success", "计划停用已创建");
-                  setPreview(null);
-                  await Promise.all([loadWindows(), onChanged()]);
-                } catch (error) {
-                  notify("error", error instanceof Error ? error.message : "创建停用失败");
-                }
-              }}
-            >
-              创建停用
-            </button>
-          </div>
-        )}
-        {windows.length > 0 && (
-          <div className="unavailability-table">
-            <div className="unavailability-table-row head">
-              <span>原因</span><span>时间</span><span />
-            </div>
-            {windows.map((item) => (
-              <div className="unavailability-table-row" key={item.id}>
-                <strong>{item.reason || "未填写"}</strong>
-                <span>
-                  {formatChinaFullMinute(item.startAt)} — {formatChinaFullMinute(item.endAt)}
-                </span>
-                <button
-                  type="button"
-                  className="icon-button tiny danger"
-                  title="取消计划停用"
-                  onClick={async () => {
-                    if (!(await dialog.confirm({
-                      title: "取消计划停用",
-                      message: "此前被取消或调整的占用不会自动恢复。",
-                      confirmLabel: "取消停用",
-                      tone: "danger"
-                    }))) return;
-                    try {
-                      await api(`/admin/unavailability/${item.id}`, {
-                        method: "DELETE"
-                      });
-                      notify("success", "计划停用已取消");
-                      await Promise.all([loadWindows(), onChanged()]);
-                    } catch (error) {
-                      notify("error", error instanceof Error ? error.message : "取消失败");
-                    }
-                  }}
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </Modal>
-  );
-}
 
 function MachineUsersSection({
   machine,

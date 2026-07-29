@@ -48,8 +48,7 @@ export function getAccessibleMachineIds(userId: string, role: string): string[] 
   if (role === "SYSTEM_ADMIN") {
     return (db.prepare(
       `SELECT id FROM machines m
-       WHERE status = 'ACTIVE'
-         AND NOT EXISTS (
+       WHERE NOT EXISTS (
            SELECT 1 FROM deleted_machine_tombstones dmt
            WHERE dmt.machine_id = m.id
          )`
@@ -63,7 +62,7 @@ export function getAccessibleMachineIds(userId: string, role: string): string[] 
         `SELECT mam.machine_id AS id
          FROM machine_access_memberships mam
          JOIN machines m ON m.id = mam.machine_id
-         WHERE mam.user_id = ? AND m.status = 'ACTIVE'
+         WHERE mam.user_id = ?
            AND NOT EXISTS (
              SELECT 1 FROM deleted_machine_tombstones dmt
              WHERE dmt.machine_id = m.id

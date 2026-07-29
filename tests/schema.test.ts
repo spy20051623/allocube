@@ -110,5 +110,13 @@ describe("最终数据库结构", () => {
         "status"
       ])
     );
+    const unavailabilitySchema = dbModule.db
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'resource_unavailability'"
+      )
+      .get() as { sql: string };
+    expect(unavailabilitySchema.sql).not.toContain(
+      "resource_group_id IS NULL OR kind = 'LONG_TERM'"
+    );
   });
 });

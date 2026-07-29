@@ -189,7 +189,7 @@ function getBusyIntervals(
       type: "UNAVAILABILITY" as const,
       startAt: row.start_at,
       endAt: row.end_at,
-      label: "资源计划停用"
+      label: "资源维护"
     }))
   ].sort((a, b) => a.startAt.localeCompare(b.startAt));
 }

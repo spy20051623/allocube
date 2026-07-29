@@ -46,10 +46,17 @@ export function registerScheduleRoutes(
   app.get("/api/v1/machines/catalog", async (request, reply) => {
     const auth = requireAuth(request, reply);
     if (!auth) return;
+    const currentAt = nowIso();
     const rows = db
       .prepare(
-        `SELECT
+         `SELECT
            m.id, m.name, m.address, m.tags_json, m.status,
+           EXISTS(
+             SELECT 1 FROM resource_unavailability ru
+             WHERE ru.machine_id = m.id AND ru.resource_group_id IS NULL
+               AND ru.kind = 'PLANNED' AND ru.status = 'ACTIVE'
+               AND ru.start_at <= ? AND ru.end_at > ?
+           ) AS maintenance_now,
            CASE
              WHEN ? = 'SYSTEM_ADMIN' THEN 1
              WHEN mam.id IS NOT NULL THEN 1
@@ -75,6 +82,8 @@ export function registerScheduleRoutes(
          ORDER BY m.name`
       )
       .all(
+        currentAt,
+        currentAt,
         auth.user.role,
         auth.user.role,
         auth.user.id,
@@ -117,6 +126,12 @@ export function registerScheduleRoutes(
         name: row.name,
         address: row.address,
         status: row.status,
+        availabilityStatus:
+          row.status === "DISABLED"
+            ? "DISABLED"
+            : Number(row.maintenance_now)
+              ? "MAINTENANCE"
+              : "ACTIVE",
         resourceSummary: machineResourceSummary(String(row.id)),
         tags: parseTags(String(row.tags_json)),
         managers: managersByMachine.get(String(row.id)) ?? [],
@@ -478,7 +493,7 @@ export function registerScheduleRoutes(
         kind: row.kind,
         startAt: row.start_at,
         endAt: row.end_at,
-        reason: managerMap.get(String(row.machine_id)) ? row.reason : "",
+        reason: row.reason,
         status: row.status
       }));
 

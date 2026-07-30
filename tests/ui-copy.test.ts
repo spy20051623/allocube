@@ -21,6 +21,12 @@ describe("角色化界面文案", () => {
       )
     ).toBe("未开始");
     expect(auditActionLabel("RESERVATION_CREATE")).toBe("登记资源占用");
+    expect(auditActionLabel("RESERVATION_SPLIT_UNAVAILABILITY")).toBe(
+      "因维护拆分占用"
+    );
+    expect(auditActionLabel("UNAVAILABILITY_INTERRUPT_DISABLE")).toBe(
+      "因停用中止维护"
+    );
     expect(auditActionLabel("SMTP_SETTINGS_ENABLE")).toBe("启用邮件发送");
     expect(auditActionLabel("PROFILE_CHANGE_APPROVE")).toBe("通过资料修改");
     expect(auditActionLabel("USER_DELETE")).toBe("永久删除用户");
@@ -235,6 +241,93 @@ describe("角色化界面文案", () => {
     expect(source).not.toContain('"我的 · "');
   });
 
+  it("占用详情空状态提示用户在时间轴拖动添加", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    expect(source).toContain("暂无占用时段");
+    expect(source).toContain("在日历时间轴上拖动，以添加一段占用。");
+  });
+
+  it("占用详情存在草稿时仍提供手动新增入口并锁定占用模式", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    expect(source).toContain('className="drawer-manual-add-button"');
+    expect(source).toContain("lockMode={drafts.length > 0}");
+    expect(source.match(/disabled=\{lockMode\}/g)).toHaveLength(2);
+  });
+
+  it("手动新增的整机和资源组模式复用两级选择组件", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    expect(source).toContain("function CalendarTargetFields");
+    expect(source).toContain("<CalendarTargetFields");
+    expect(source).toContain('<Field label="机器">');
+    expect(source).toContain('<Field label="资源组">');
+    expect(source).toContain('{ id: "MACHINE", label: "整机" }');
+  });
+
+  it("手动新增占用使用打开时的服务器当前分钟和两小时默认时长", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    expect(source).toContain("function initialReservationTime(nowTime: number)");
+    expect(source).toContain("const startAt = currentMinuteStart(nowTime)");
+    expect(source).toContain("new Date(startAt).getTime() + 2 * 60 * 60 * 1000");
+    expect(source).toContain(
+      "useState(() => initialReservationTime(currentTime))"
+    );
+  });
+
+  it("安排维护使用打开时的服务器当前分钟和两小时默认时长", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const machineInfoStart = source.indexOf("function MachineInfoSection");
+    const maintenanceModalStart = source.indexOf(
+      "function MaintenanceModal",
+      machineInfoStart
+    );
+    const machineInfoSource = source.slice(
+      machineInfoStart,
+      maintenanceModalStart
+    );
+    expect(source).toContain(
+      "<ServerClockProvider initialServerNow={bootstrap.serverNow}>"
+    );
+    expect(machineInfoSource).toContain(
+      "const { currentTime } = useServerClock()"
+    );
+    expect(machineInfoSource).toContain(
+      "setMaintenanceInitialTime(currentTime)"
+    );
+    expect(machineInfoSource).not.toContain('api<{ serverNow: string }>("/server-time")');
+    expect(source).toContain("openingTime={maintenanceInitialTime}");
+    expect(source).toContain("const { currentTime } = useServerClock()");
+    expect(source).toContain(
+      "const [timeRangeEdited, setTimeRangeEdited] = useState(false)"
+    );
+    expect(source).toContain("if (!timeRangeEdited)");
+    expect(source).toContain("startAt: next.start");
+    expect(source).toContain("endAt: next.end");
+    expect(source).toContain("form.startAt > currentMinuteLocal");
+    expect(source).toContain("onFocus={() => setStartFocused(true)}");
+    expect(source).toContain("updateForm(\"startAt\", currentMinuteLocal)");
+    expect(source).toContain('error={timeRangeError}');
+    expect(
+      source.match(
+        /useState\(\(\) => initialReservationTime\(currentTime\)\)/g
+      )
+    ).toHaveLength(1);
+    expect(source).toContain(
+      "useState(() => initialReservationTime(openingTime))"
+    );
+    expect(source).not.toContain("function initialMaintenanceTime");
+  });
+
+  it("新增和编辑占用使用一致的放弃按钮", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const buttonStart = source.indexOf('className="drawer-clear-button"');
+    const buttonEnd = source.indexOf("</button>", buttonStart);
+    const button = source.slice(buttonStart, buttonEnd);
+    expect(button).toContain("<X size={14} />");
+    expect(button).toContain("放弃");
+    expect(button).not.toContain("editingReservation ?");
+    expect(button).not.toContain("<Trash2");
+  });
+
   it("当天时间轴将跨日区间裁切为零点和二十四点", () => {
     const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("function formatTimelineDayPeriod");
@@ -263,7 +356,7 @@ describe("角色化界面文案", () => {
     expect(machineInfoCard).not.toContain("setDisableMode");
     expect(machineInfoCard).not.toContain("handleDelete");
     expect(unavailabilityCard).toContain('title="维护管理"');
-    expect(unavailabilityCard).toContain("setMaintenanceOpen(true)");
+    expect(unavailabilityCard).toContain("onClick={openMaintenance}");
     expect(unavailabilityCard).toContain("<span>范围</span>");
     expect(unavailabilityCard).toContain("<span>维护时间</span>");
     expect(unavailabilityCard).toContain("<span>原因</span>");

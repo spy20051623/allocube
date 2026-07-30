@@ -2332,16 +2332,6 @@ textarea::placeholder {
   font-style: normal;
 }
 
-.allocation-badge {
-  padding: 3px 6px;
-  border: 1px solid #d9dee7;
-  border-radius: 4px;
-  color: #697386;
-  background: #fafbfc;
-  font-size: 9px;
-  white-space: nowrap;
-}
-
 .time-track {
   position: relative;
   overflow: hidden;
@@ -2709,6 +2699,13 @@ textarea::placeholder {
   line-height: 1.2;
 }
 
+.drawer-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.drawer-manual-add-button,
 .drawer-clear-button {
   height: 30px;
   padding: 0 9px;
@@ -2723,6 +2720,17 @@ textarea::placeholder {
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.drawer-manual-add-button {
+  border-color: #cfd9ec;
+  color: #315da8;
+  background: #f7f9fe;
+}
+
+.drawer-manual-add-button:hover {
+  border-color: #9eb4dc;
+  background: #eef3fd;
 }
 
 .drawer-clear-button:hover {
@@ -2755,6 +2763,13 @@ textarea::placeholder {
 
 .booking-drawer .drawer-empty strong {
   color: #667184;
+}
+
+.booking-drawer .drawer-empty p {
+  margin: -4px 0 0;
+  color: #8a95a7;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .booking-drawer .drawer-add-button {

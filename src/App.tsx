@@ -342,6 +342,116 @@ function useAppDialog() {
   return value;
 }
 
+type ServerClockContextValue = {
+  currentTime: number;
+  ready: boolean;
+  synchronize: (
+    serverNow: string,
+    requestStartedAt: number,
+    responseReceivedAt?: number
+  ) => void;
+};
+
+const ServerClockContext = createContext<ServerClockContextValue | null>(null);
+
+function useServerClock() {
+  const value = useContext(ServerClockContext);
+  if (!value) throw new Error("ServerClockProvider is missing");
+  return value;
+}
+
+function ServerClockProvider({
+  initialServerNow,
+  children
+}: {
+  initialServerNow: string;
+  children: React.ReactNode;
+}) {
+  const anchorRef = useRef<ReturnType<typeof createServerClockAnchor>>(null);
+  const initialMonotonicTime = performance.now();
+  if (!anchorRef.current) {
+    anchorRef.current = createServerClockAnchor(
+      initialServerNow,
+      initialMonotonicTime,
+      initialMonotonicTime
+    );
+  }
+  const [currentTime, setCurrentTime] = useState(
+    () =>
+      anchorRef.current
+        ? serverTimeFromAnchor(anchorRef.current, performance.now())
+        : 0
+  );
+  const [ready, setReady] = useState(Boolean(anchorRef.current));
+
+  const synchronize = useCallback(
+    (
+      serverNow: string,
+      requestStartedAt: number,
+      responseReceivedAt = performance.now()
+    ) => {
+      const anchor = createServerClockAnchor(
+        serverNow,
+        requestStartedAt,
+        responseReceivedAt
+      );
+      if (!anchor) return;
+      anchorRef.current = anchor;
+      setCurrentTime(serverTimeFromAnchor(anchor, responseReceivedAt));
+      setReady(true);
+    },
+    []
+  );
+
+  useEffect(() => {
+    const receivedAt = performance.now();
+    synchronize(initialServerNow, receivedAt, receivedAt);
+  }, [initialServerNow, synchronize]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const anchor = anchorRef.current;
+      if (anchor) {
+        setCurrentTime(serverTimeFromAnchor(anchor, performance.now()));
+      }
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const requestStartedAt = performance.now();
+    try {
+      const result = await api<{ serverNow: string }>("/server-time");
+      synchronize(result.serverNow, requestStartedAt);
+    } catch {
+      // 保留现有服务器时间基准继续计时，等待下一次校准。
+    }
+  }, [synchronize]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => void refresh(), 5 * 60_000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [refresh]);
+
+  const value = useMemo(
+    () => ({ currentTime, ready, synchronize }),
+    [currentTime, ready, synchronize]
+  );
+
+  return (
+    <ServerClockContext.Provider value={value}>
+      {children}
+    </ServerClockContext.Provider>
+  );
+}
+
 export function App() {
   const routeLocation = useLocation();
   const routeNavigate = useNavigate();
@@ -367,6 +477,15 @@ export function App() {
       setLoading(false);
     }
   }, []);
+
+  const acceptAuthenticatedSession = useCallback(
+    async (value: DashboardBootstrap) => {
+      setCsrfToken(value.csrfToken);
+      setBootstrap(value);
+      setLoading(false);
+    },
+    []
+  );
 
   const loadUnreadNotificationCount = useCallback(async () => {
     try {
@@ -504,7 +623,7 @@ export function App() {
           location={authLocation}
           historyState={routeLocation.state}
           navigate={navigateAuth}
-          onAuthenticated={loadSession}
+          onAuthenticated={acceptAuthenticatedSession}
           notify={notify}
           consumeAuthFlash={() => {
             void routeNavigate({
@@ -554,8 +673,9 @@ export function App() {
     bootstrap.user.passwordChangeRecommended && !passwordReminderDismissed;
 
   return (
-    <DialogProvider>
-      <div className={`app-frame${showPasswordReminder ? " has-password-banner" : ""}`}>
+    <ServerClockProvider initialServerNow={bootstrap.serverNow}>
+      <DialogProvider>
+        <div className={`app-frame${showPasswordReminder ? " has-password-banner" : ""}`}>
         <AutoLogoutGuard
           userId={bootstrap.user.id}
           minutes={bootstrap.user.autoLogoutMinutes}
@@ -639,8 +759,9 @@ export function App() {
           )}
         </main>
         {toast && <Toast {...toast} />}
-      </div>
-    </DialogProvider>
+        </div>
+      </DialogProvider>
+    </ServerClockProvider>
   );
 }
 
@@ -767,7 +888,7 @@ function AuthRouter({
   location: ReturnType<typeof resolveAuthLocation>;
   historyState: AuthHistoryState;
   navigate: AuthNavigate;
-  onAuthenticated: () => Promise<void>;
+  onAuthenticated: (bootstrap: DashboardBootstrap) => Promise<void>;
   notify: (kind: "success" | "error", message: string) => void;
   consumeAuthFlash: () => void;
 }) {
@@ -1031,7 +1152,7 @@ function LoginPage({
   initialIdentifier,
   initialMessage
 }: {
-  onAuthenticated: () => Promise<void>;
+  onAuthenticated: (bootstrap: DashboardBootstrap) => Promise<void>;
   navigate: AuthNavigate;
   initialIdentifier: string;
   initialMessage: string;
@@ -1071,7 +1192,7 @@ function LoginPage({
     setError("");
     setBusy(true);
     try {
-      const result = await api<{ csrfToken: string; user: AuthUser }>("/auth/login", {
+      const result = await api<DashboardBootstrap>("/auth/login", {
         method: "POST",
         body: jsonBody({ identifierType, identifier, password })
       });
@@ -1081,7 +1202,7 @@ function LoginPage({
         result.user.username
       );
       setCsrfToken(result.csrfToken);
-      await onAuthenticated();
+      await onAuthenticated(result);
     } catch (error) {
       setError(error instanceof Error ? error.message : "登录失败");
     } finally {
@@ -4507,10 +4628,20 @@ function CalendarPage({
   navigate: (page: Page) => void;
 }) {
   const dialog = useAppDialog();
+  const {
+    currentTime,
+    ready: serverClockReady,
+    synchronize: synchronizeServerClock
+  } = useServerClock();
   const routeLocation = useLocation();
   const calendarRouteNavigate = useNavigate();
+  const initialServerDate = useMemo(
+    () =>
+      isoToChinaLocal(new Date(currentTime).toISOString()).slice(0, 10),
+    []
+  );
   const initialQuery = useMemo(
-    () => parseCalendarQuery(routeLocation.searchStr, todayChina()),
+    () => parseCalendarQuery(routeLocation.searchStr, initialServerDate),
     []
   );
   const calendarEditRoute = useMemo(
@@ -4548,16 +4679,14 @@ function CalendarPage({
     >
   >([]);
   const [timeline, setTimeline] = useState<TimelinePayload | null>(null);
-  const [currentTime, setCurrentTime] = useState(() => Date.now());
-  const [serverClockReady, setServerClockReady] = useState(false);
   const [visibleHours, setVisibleHours] = useState(
     initialCalendarPreference.visibleHours
   );
   const [timelineWindowStartMinutes, setTimelineWindowStartMinutes] = useState(
-    () => defaultDayWindowStartMinutes(Date.now())
+    () => defaultDayWindowStartMinutes(currentTime)
   );
   const [timelineScrollTarget, setTimelineScrollTarget] = useState(() => ({
-    startMinutes: defaultDayWindowStartMinutes(Date.now()),
+    startMinutes: defaultDayWindowStartMinutes(currentTime),
     revision: 0
   }));
   const [initialLoading, setInitialLoading] = useState(true);
@@ -4630,48 +4759,9 @@ function CalendarPage({
   const bookingDrawerRef = useRef<HTMLElement | null>(null);
   const lastAltZoomAtRef = useRef(0);
   const timelineStartMinutesRef = useRef(
-    defaultDayWindowStartMinutes(Date.now())
+    defaultDayWindowStartMinutes(currentTime)
   );
   const loadTimelineRef = useRef<(background?: boolean) => void>(() => undefined);
-  const serverClockAnchorRef = useRef<ReturnType<
-    typeof createServerClockAnchor
-  >>(null);
-  const initialServerClockAppliedRef = useRef(false);
-
-  const synchronizeServerClock = useCallback(
-    (
-      serverNow: string,
-      requestStartedAt: number,
-      responseReceivedAt = performance.now()
-    ) => {
-      const anchor = createServerClockAnchor(
-        serverNow,
-        requestStartedAt,
-        responseReceivedAt
-      );
-      if (!anchor) return;
-      serverClockAnchorRef.current = anchor;
-      const synchronizedTime = serverTimeFromAnchor(anchor, responseReceivedAt);
-      setCurrentTime(synchronizedTime);
-      setServerClockReady(true);
-      if (!initialServerClockAppliedRef.current) {
-        initialServerClockAppliedRef.current = true;
-        const preferredHours = readCalendarPreference().visibleHours;
-        const startMinutes = defaultDayWindowStartMinutes(
-          synchronizedTime,
-          preferredHours
-        );
-        timelineStartMinutesRef.current = startMinutes;
-        setTimelineWindowStartMinutes(startMinutes);
-        setVisibleHours(preferredHours);
-        setTimelineScrollTarget((current) => ({
-          startMinutes,
-          revision: current.revision + 1
-        }));
-      }
-    },
-    []
-  );
 
   const range = useMemo(() => {
     const startDate = view === "week" ? mondayOf(date) : date;
@@ -4729,12 +4819,8 @@ function CalendarPage({
       return;
     }
     const preferredHours = readCalendarPreference().visibleHours;
-    const anchor = serverClockAnchorRef.current;
-    const positionedNow = anchor
-      ? serverTimeFromAnchor(anchor, performance.now())
-      : Date.now();
     const startMinutes = defaultDayWindowStartMinutes(
-      positionedNow,
+      currentTime,
       preferredHours
     );
     timelineStartMinutesRef.current = startMinutes;
@@ -4953,43 +5039,6 @@ function CalendarPage({
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [search]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const anchor = serverClockAnchorRef.current;
-      setCurrentTime(
-        anchor
-          ? serverTimeFromAnchor(anchor, performance.now())
-          : Date.now()
-      );
-    }, 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const refreshServerClock = useCallback(async () => {
-    const requestStartedAt = performance.now();
-    try {
-      const result = await api<{ serverNow: string }>("/server-time");
-      synchronizeServerClock(result.serverNow, requestStartedAt);
-    } catch {
-      // 时间轴请求和下一次定时校时仍会继续尝试，不打断日历操作。
-    }
-  }, [synchronizeServerClock]);
-
-  useEffect(() => {
-    void refreshServerClock();
-    const timer = window.setInterval(() => {
-      void refreshServerClock();
-    }, 5 * 60_000);
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") void refreshServerClock();
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [refreshServerClock]);
 
   const loadMachineOptions = useCallback(async () => {
     try {
@@ -6375,7 +6424,6 @@ function CalendarPage({
                               ? "维护"
                               : "启用"}
                         </span>
-                        <span className="allocation-badge">{group.allocations.length} 项</span>
                       </div>
                       <div
                         className={`time-track${!selectable ? " not-selectable" : ""}${longTermDisabled ? " long-term-disabled" : ""}`}
@@ -6730,19 +6778,31 @@ function CalendarPage({
         <div className="drawer-head">
           <h2>占用详情</h2>
           {(drafts.length > 0 || editingReservation) && (
-            <button
-              className="drawer-clear-button"
-              onClick={() => void clearReservationDetailsWithConfirmation()}
-            >
-              {editingReservation ? <X size={14} /> : <Trash2 size={14} />}
-              {editingReservation ? "放弃" : "清空"}
-            </button>
+            <div className="drawer-head-actions">
+              <button
+                type="button"
+                className="drawer-manual-add-button"
+                onClick={() => setManualBookingOpen(true)}
+              >
+                <Plus size={14} />
+                新增
+              </button>
+              <button
+                type="button"
+                className="drawer-clear-button"
+                onClick={() => void clearReservationDetailsWithConfirmation()}
+              >
+                <X size={14} />
+                放弃
+              </button>
+            </div>
           )}
         </div>
         {!drafts.length && (
           <div className="drawer-empty">
             <Clock3 className="drawer-empty-icon" size={28} />
             <strong>暂无占用时段</strong>
+            <p>在日历时间轴上拖动，以添加一段占用。</p>
             <button
               type="button"
               className="secondary-button drawer-add-button"
@@ -6920,12 +6980,13 @@ function CalendarPage({
         )}
       {manualBookingOpen && timeline && (
         <CalendarManualBookingModal
-          date={date}
           mode={reservationMode}
           machines={timeline.machines}
           groups={timeline.groups}
           settings={settings}
           currentTime={currentTime}
+          lockMode={drafts.length > 0}
+          initialMachineId={drafts[0]?.machineId}
           onClose={() => setManualBookingOpen(false)}
           onAdd={(target, startAt, endAt) => {
             setReservationMode(target.scope);
@@ -7061,21 +7122,23 @@ function CalendarWeekOverview({
 }
 
 function CalendarManualBookingModal({
-  date,
   mode: initialMode,
   machines,
   groups,
   settings,
   currentTime,
+  lockMode = false,
+  initialMachineId,
   onClose,
   onAdd
 }: {
-  date: string;
   mode: "RESOURCE_GROUP" | "MACHINE";
   machines: Machine[];
   groups: Array<Omit<ResourceGroup, "version">>;
   settings: DashboardBootstrap["settings"];
   currentTime: number;
+  lockMode?: boolean;
+  initialMachineId?: string;
   onClose: () => void;
   onAdd: (
     target: CalendarReservationTarget,
@@ -7083,8 +7146,9 @@ function CalendarManualBookingModal({
     endAt: string
   ) => boolean;
 }) {
-  const initialTime = initialBookingTime(date, currentTime);
+  const [initialTime] = useState(() => initialReservationTime(currentTime));
   const [mode, setMode] = useState(initialMode);
+  const [machineId, setMachineId] = useState(initialMachineId ?? "");
   const [targetId, setTargetId] = useState("");
   const [startAt, setStartAt] = useState(initialTime.start);
   const [endAt, setEndAt] = useState(initialTime.end);
@@ -7095,7 +7159,7 @@ function CalendarManualBookingModal({
     list.push(group);
     machineGroups.set(group.machineId, list);
   }
-  const groupOptions = groups.filter(
+  const activeGroups = groups.filter(
     (group) =>
       group.status === "ACTIVE" &&
       machines.some(
@@ -7103,7 +7167,12 @@ function CalendarManualBookingModal({
           machine.id === group.machineId && machine.status === "ACTIVE"
       )
   );
-  const machineOptions = machines.filter(
+  const groupMachineOptions = machines.filter(
+    (machine) =>
+      machine.status === "ACTIVE" &&
+      activeGroups.some((group) => group.machineId === machine.id)
+  );
+  const wholeMachineOptions = machines.filter(
     (machine) =>
       machine.status === "ACTIVE" &&
       (machineGroups.get(machine.id)?.length ?? 0) > 0 &&
@@ -7111,31 +7180,39 @@ function CalendarManualBookingModal({
         .get(machine.id)!
         .every((group) => group.status === "ACTIVE")
   );
-  const options =
+  const availableMachines =
     mode === "RESOURCE_GROUP"
-      ? groupOptions.map((group) => ({
-          id: group.id,
-          label: `${machines.find((machine) => machine.id === group.machineId)?.name ?? "机器"} · ${group.name}`
-        }))
-      : machineOptions.map((machine) => ({
-          id: machine.id,
-          label: `${machine.name} · 整机`
-        }));
-  const selectedId =
-    targetId && options.some((option) => option.id === targetId)
+      ? groupMachineOptions
+      : wholeMachineOptions;
+  const selectedMachineId =
+    machineId &&
+    availableMachines.some((machine) => machine.id === machineId)
+      ? machineId
+      : availableMachines[0]?.id ?? "";
+  const groupOptions = activeGroups.filter(
+    (group) => group.machineId === selectedMachineId
+  );
+  const selectedResourceGroupId =
+    targetId && groupOptions.some((group) => group.id === targetId)
       ? targetId
-      : options[0]?.id ?? "";
+      : groupOptions[0]?.id ?? "";
+  const selectedResourceOptionId =
+    mode === "MACHINE" ? "MACHINE" : selectedResourceGroupId;
+  const resourceOptions =
+    mode === "MACHINE"
+      ? [{ id: "MACHINE", label: "整机" }]
+      : groupOptions.map((group) => ({ id: group.id, label: group.name }));
+  const selectedTargetId =
+    mode === "MACHINE" ? selectedMachineId : selectedResourceGroupId;
   const draft: CalendarDraft = {
     id: "manual",
     scope: mode,
-    machineId:
-      mode === "MACHINE"
-        ? selectedId
-        : groups.find((group) => group.id === selectedId)?.machineId ?? "",
+    machineId: selectedMachineId,
     resourceGroupId:
       mode === "MACHINE"
-        ? machineGroups.get(selectedId)?.[0]?.id ?? ""
-        : selectedId,
+        ? activeGroups.find((group) => group.machineId === selectedMachineId)
+            ?.id ?? ""
+        : selectedResourceGroupId,
     startMode:
       startAt &&
       new Date(chinaLocalToIso(startAt)).getTime() <=
@@ -7155,7 +7232,7 @@ function CalendarManualBookingModal({
         onSubmit={(event) => {
           event.preventDefault();
           setSubmitted(true);
-          if (!selectedId || issues.startAt || issues.endAt) return;
+          if (!selectedTargetId || issues.startAt || issues.endAt) return;
           onAdd(
             {
               scope: mode,
@@ -7171,8 +7248,10 @@ function CalendarManualBookingModal({
           <button
             type="button"
             className={mode === "RESOURCE_GROUP" ? "active" : ""}
+            disabled={lockMode}
             onClick={() => {
               setMode("RESOURCE_GROUP");
+              setMachineId("");
               setTargetId("");
               setSubmitted(false);
             }}
@@ -7182,8 +7261,10 @@ function CalendarManualBookingModal({
           <button
             type="button"
             className={mode === "MACHINE" ? "active" : ""}
+            disabled={lockMode}
             onClick={() => {
               setMode("MACHINE");
+              setMachineId("");
               setTargetId("");
               setSubmitted(false);
             }}
@@ -7191,21 +7272,24 @@ function CalendarManualBookingModal({
             整机
           </button>
         </div>
-        <Field label={mode === "MACHINE" ? "机器" : "资源组"}>
-          <select
-            value={selectedId}
-            onChange={(event) => setTargetId(event.target.value)}
-          >
-            {options.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {!options.length && (
+        <CalendarTargetFields
+          machines={availableMachines}
+          machineId={selectedMachineId}
+          resourceOptions={resourceOptions}
+          resourceId={selectedResourceOptionId}
+          onMachineChange={(nextMachineId) => {
+            setMachineId(nextMachineId);
+            setTargetId("");
+            setSubmitted(false);
+          }}
+          onResourceChange={(nextResourceId) => {
+            if (mode === "RESOURCE_GROUP") setTargetId(nextResourceId);
+            setSubmitted(false);
+          }}
+        />
+        {!availableMachines.length && (
           <div className="auth-form-feedback error" role="alert">
-            当前没有可占用的{mode === "MACHINE" ? "机器" : "资源组"}
+            当前没有可占用的机器
           </div>
         )}
         <Field
@@ -7239,13 +7323,59 @@ function CalendarManualBookingModal({
         <button
           className="primary-button"
           type="submit"
-          disabled={!options.length}
+          disabled={!selectedTargetId}
         >
           <Plus size={15} />
           加入占用详情
         </button>
       </form>
     </Modal>
+  );
+}
+
+function CalendarTargetFields({
+  machines,
+  machineId,
+  resourceOptions,
+  resourceId,
+  onMachineChange,
+  onResourceChange
+}: {
+  machines: Machine[];
+  machineId: string;
+  resourceOptions: Array<{ id: string; label: string }>;
+  resourceId: string;
+  onMachineChange: (machineId: string) => void;
+  onResourceChange: (resourceId: string) => void;
+}) {
+  return (
+    <>
+      <Field label="机器">
+        <select
+          value={machineId}
+          onChange={(event) => onMachineChange(event.target.value)}
+        >
+          {machines.map((machine) => (
+            <option key={machine.id} value={machine.id}>
+              {machine.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="资源组">
+        <select
+          value={resourceId}
+          disabled={!machineId}
+          onChange={(event) => onResourceChange(event.target.value)}
+        >
+          {resourceOptions.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+    </>
   );
 }
 
@@ -8412,19 +8542,15 @@ function CalendarUnavailabilityPopover({
   );
 }
 
-function initialBookingTime(date: string, nowTime = Date.now()) {
-  const today = isoToChinaLocal(new Date(nowTime).toISOString()).slice(0, 10);
-  if (date !== today) return { start: `${date}T09:00`, end: `${date}T11:00` };
-  const now = new Date(nowTime + 8 * 60 * 60 * 1000);
-  const total = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const rounded = Math.ceil((total + 10) / 15) * 15;
-  const startHour = Math.floor(rounded / 60);
-  if (startHour >= 22) {
-    const tomorrow = addDays(date, 1);
-    return { start: `${tomorrow}T09:00`, end: `${tomorrow}T11:00` };
-  }
-  const toTime = (minutes: number) => `${date}T${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-  return { start: toTime(rounded), end: toTime(Math.min(1439, rounded + 120)) };
+function initialReservationTime(nowTime: number) {
+  const startAt = currentMinuteStart(nowTime);
+  const endAt = new Date(
+    new Date(startAt).getTime() + 2 * 60 * 60 * 1000
+  ).toISOString();
+  return {
+    start: isoToChinaLocal(startAt),
+    end: isoToChinaLocal(endAt)
+  };
 }
 
 function MyReservationsPage({
@@ -8439,10 +8565,10 @@ function MyReservationsPage({
   }) => void;
 }) {
   const dialog = useAppDialog();
+  const { currentTime } = useServerClock();
   const [category, setCategory] = useState<"CURRENT" | "HISTORY">("CURRENT");
   const [reservations, setReservations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [now, setNow] = useState(Date.now());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -8462,16 +8588,11 @@ function MyReservationsPage({
     void load();
   }, [load]);
 
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
   const categorizedReservations = useMemo(() => {
     const current: any[] = [];
     const history: any[] = [];
     for (const reservation of reservations) {
-      const state = bookingState(reservation, now);
+      const state = bookingState(reservation, currentTime);
       if (state === "进行中" || state === "未开始") {
         current.push(reservation);
       } else {
@@ -8479,8 +8600,8 @@ function MyReservationsPage({
       }
     }
     current.sort((left, right) => {
-      const leftState = bookingState(left, now);
-      const rightState = bookingState(right, now);
+      const leftState = bookingState(left, currentTime);
+      const rightState = bookingState(right, currentTime);
       if (leftState !== rightState) return leftState === "进行中" ? -1 : 1;
       return new Date(left.startAt).getTime() - new Date(right.startAt).getTime();
     });
@@ -8489,7 +8610,7 @@ function MyReservationsPage({
         new Date(right.endAt).getTime() - new Date(left.endAt).getTime()
     );
     return { current, history };
-  }, [now, reservations]);
+  }, [currentTime, reservations]);
 
   const visibleReservations =
     category === "CURRENT"
@@ -8562,14 +8683,14 @@ function MyReservationsPage({
               <span />
             </div>
             {visibleReservations.map((item) => {
-              const state = bookingState(item, now);
+              const state = bookingState(item, currentTime);
               const endDayOffset = chinaDateDayOffset(
                 item.startAt,
                 item.endAt
               );
               const withinFirstMinute =
                 state === "进行中" &&
-                now - new Date(item.startAt).getTime() < 60_000;
+                currentTime - new Date(item.startAt).getTime() < 60_000;
               return (
                 <div className="table-row" key={item.id}>
                   <div className="resource-title">
@@ -8705,7 +8826,7 @@ function MyReservationsPage({
   );
 }
 
-function bookingState(item: any, now = Date.now()) {
+function bookingState(item: any, now: number) {
   return reservationStatusLabel(item.status, item.startAt, item.endAt, now);
 }
 
@@ -9301,11 +9422,15 @@ function MachineInfoSection({
   reloadMachines: () => Promise<any[]>;
 }) {
   const dialog = useAppDialog();
+  const { currentTime } = useServerClock();
   const [detail, setDetail] = useState<any | null>(null);
   const [unavailabilityWindows, setUnavailabilityWindows] = useState<any[]>([]);
   const [maintenanceGroups, setMaintenanceGroups] = useState<ResourceGroup[]>([]);
   const [editMachine, setEditMachine] = useState(false);
   const [maintenanceOpen, setMaintenanceOpen] = useState(false);
+  const [maintenanceInitialTime, setMaintenanceInitialTime] = useState<
+    number | null
+  >(null);
   const [stopOpen, setStopOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -9334,17 +9459,29 @@ function MachineInfoSection({
     return () => events.close();
   }, [load]);
 
+  const openMaintenance = () => {
+    setMaintenanceInitialTime(currentTime);
+    setMaintenanceOpen(true);
+  };
+
+  const closeMaintenance = () => {
+    setMaintenanceOpen(false);
+    setMaintenanceInitialTime(null);
+  };
+
   if (!detail) {
     return <div className="content-loading"><RefreshCw className="spin" />正在载入</div>;
   }
 
   const currentMaintenance = unavailabilityWindows.filter(
-    (item) => item.status === "ACTIVE" && new Date(item.endAt).getTime() > Date.now()
+    (item) =>
+      item.status === "ACTIVE" &&
+      new Date(item.endAt).getTime() > currentTime
   ).sort((left, right) => left.startAt.localeCompare(right.startAt));
   const machineMaintenanceNow = currentMaintenance.some(
     (item) =>
       item.resourceGroupId === null &&
-      new Date(item.startAt).getTime() <= Date.now()
+      new Date(item.startAt).getTime() <= currentTime
   );
   const machineStatus = detail.status === "DISABLED"
     ? { label: "停用", className: "disabled" }
@@ -9463,7 +9600,7 @@ function MachineInfoSection({
               <button
                 type="button"
                 className="secondary-button compact"
-                onClick={() => setMaintenanceOpen(true)}
+                onClick={openMaintenance}
               >
                 <Plus size={14} />安排维护
               </button>
@@ -9577,13 +9714,14 @@ function MachineInfoSection({
           )}
         </div>
       </section>
-      {maintenanceOpen && canManage && (
+      {maintenanceOpen && maintenanceInitialTime !== null && canManage && (
         <MaintenanceModal
           machine={detail}
           groups={maintenanceGroups}
-          onClose={() => setMaintenanceOpen(false)}
+          openingTime={maintenanceInitialTime}
+          onClose={closeMaintenance}
           onCompleted={async () => {
-            setMaintenanceOpen(false);
+            closeMaintenance();
             await Promise.all([load(), reloadMachines()]);
           }}
           notify={notify}
@@ -9618,6 +9756,8 @@ function MachineInfoSection({
 
 type MaintenancePreview = {
   affectedReservations: any[];
+  startAt: string;
+  endAt: string;
   revision: number;
   summary: {
     total: number;
@@ -9630,17 +9770,20 @@ type MaintenancePreview = {
 function MaintenanceModal({
   machine,
   groups,
+  openingTime,
   onClose,
   onCompleted,
   notify
 }: {
   machine: any;
   groups: ResourceGroup[];
+  openingTime: number;
   onClose: () => void;
   onCompleted: () => Promise<void>;
   notify: (kind: "success" | "error", message: string) => void;
 }) {
-  const initial = initialBookingTime(todayChina());
+  const { currentTime } = useServerClock();
+  const [initial] = useState(() => initialReservationTime(openingTime));
   const [targetId, setTargetId] = useState("MACHINE");
   const [form, setForm] = useState({
     startAt: initial.start,
@@ -9650,6 +9793,39 @@ function MaintenanceModal({
   const [preview, setPreview] = useState<MaintenancePreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [startFocused, setStartFocused] = useState(false);
+  const [timeRangeEdited, setTimeRangeEdited] = useState(false);
+  const currentMinuteLocal = isoToChinaLocal(currentMinuteStart(currentTime));
+  const timeRangeError =
+    form.startAt && form.endAt && form.endAt <= form.startAt
+      ? "结束时间必须晚于开始时间"
+      : "";
+
+  useEffect(() => {
+    if (startFocused) return;
+    if (!timeRangeEdited) {
+      const next = initialReservationTime(currentTime);
+      if (form.startAt === next.start && form.endAt === next.end) return;
+      setForm((current) => ({
+        ...current,
+        startAt: next.start,
+        endAt: next.end
+      }));
+      setPreview(null);
+      return;
+    }
+    if (!form.startAt || form.startAt > currentMinuteLocal) return;
+    if (form.startAt === currentMinuteLocal) return;
+    setForm((current) => ({ ...current, startAt: currentMinuteLocal }));
+    setPreview(null);
+  }, [
+    currentMinuteLocal,
+    currentTime,
+    form.endAt,
+    form.startAt,
+    startFocused,
+    timeRangeEdited
+  ]);
 
   const updateForm = (
     field: "startAt" | "endAt" | "reason",
@@ -9659,7 +9835,16 @@ function MaintenanceModal({
     setPreview(null);
   };
 
+  const updateTimeField = (
+    field: "startAt" | "endAt",
+    value: string
+  ) => {
+    setTimeRangeEdited(true);
+    updateForm(field, value);
+  };
+
   const runPreview = async () => {
+    if (timeRangeError) return;
     setPreviewing(true);
     try {
       const result = await api<MaintenancePreview>(
@@ -9672,6 +9857,11 @@ function MaintenanceModal({
             endAt: chinaLocalToIso(form.endAt)
           })
         });
+      setForm((current) => ({
+        ...current,
+        startAt: isoToChinaLocal(result.startAt),
+        endAt: isoToChinaLocal(result.endAt)
+      }));
       setPreview(result);
     } catch (error) {
       setPreview(null);
@@ -9740,14 +9930,27 @@ function MaintenanceModal({
             <input
               type="datetime-local"
               value={form.startAt}
-              onChange={(event) => updateForm("startAt", event.target.value)}
+              onFocus={() => setStartFocused(true)}
+              onChange={(event) =>
+                updateTimeField("startAt", event.target.value)
+              }
+              onBlur={(event) => {
+                setStartFocused(false);
+                const value = event.currentTarget.value;
+                if (value && value <= currentMinuteLocal) {
+                  updateForm("startAt", currentMinuteLocal);
+                }
+              }}
             />
           </Field>
-          <Field label="结束时间">
+          <Field label="结束时间" error={timeRangeError}>
             <input
               type="datetime-local"
               value={form.endAt}
-              onChange={(event) => updateForm("endAt", event.target.value)}
+              aria-invalid={Boolean(timeRangeError)}
+              onChange={(event) =>
+                updateTimeField("endAt", event.target.value)
+              }
             />
           </Field>
         </div>
@@ -9801,7 +10004,7 @@ function MaintenanceModal({
             type="button"
             className="secondary-button machine-disable-modal-action"
             onClick={() => void runPreview()}
-            disabled={previewing || submitting}
+            disabled={Boolean(timeRangeError) || previewing || submitting}
           >
             <Eye size={15} />查看影响
           </button>
@@ -9809,7 +10012,9 @@ function MaintenanceModal({
             type="button"
             className="primary-button machine-disable-modal-action"
             onClick={() => void submit()}
-            disabled={!preview || previewing || submitting}
+            disabled={
+              Boolean(timeRangeError) || !preview || previewing || submitting
+            }
           >
             创建维护
           </button>

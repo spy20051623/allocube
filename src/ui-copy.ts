@@ -24,7 +24,7 @@ export function reservationStatusLabel(
   status: string,
   startAt: string,
   endAt: string,
-  now = Date.now()
+  now: number
 ) {
   if (status === "CANCELLED") return "已取消";
   if (status === "CANCELLED_UNAVAILABILITY") return "因维护取消";
@@ -71,7 +71,12 @@ export function auditActionLabel(action: string) {
       MACHINE_DELETE: "永久删除机器",
       UNAVAILABILITY_CREATE: "创建维护安排",
       UNAVAILABILITY_CANCEL: "取消维护安排",
+      UNAVAILABILITY_INTERRUPT_DISABLE: "因停用中止维护",
+      UNAVAILABILITY_CANCEL_DISABLE: "因停用取消维护",
+      RESOURCE_DISABLE_WINDOW_CREATE: "创建停用记录",
+      RESOURCE_DISABLE_WINDOW_END: "结束停用记录",
       RESERVATION_ADJUST_UNAVAILABILITY: "因维护调整占用",
+      RESERVATION_SPLIT_UNAVAILABILITY: "因维护拆分占用",
       RESERVATION_CREATE: "登记资源占用",
       RESERVATION_UPDATE: "修改占用时间",
       RESERVATION_CANCEL: "取消资源占用",

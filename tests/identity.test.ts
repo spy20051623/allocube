@@ -137,6 +137,33 @@ describe("用户身份与审批生命周期", () => {
     expect(response.json()).toEqual({ allowedEmailDomains: [] });
   });
 
+  it("登录和会话恢复均返回服务器时间", async () => {
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: {
+        identifierType: "USERNAME",
+        identifier: "Administrator",
+        password: "Admin12#$"
+      }
+    });
+    expect(login.statusCode).toBe(200);
+    expect(Number.isFinite(new Date(login.json().serverNow).getTime())).toBe(true);
+    expect(login.json()).toHaveProperty("settings");
+    expect(login.json()).toHaveProperty("managedMachineIds");
+
+    const cookieHeader = login.cookies
+      .map((item) => `${item.name}=${item.value}`)
+      .join("; ");
+    const session = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { cookie: cookieHeader }
+    });
+    expect(session.statusCode).toBe(200);
+    expect(Number.isFinite(new Date(session.json().serverNow).getTime())).toBe(true);
+  });
+
   it("系统管理员可以在线修改注册邮箱白名单并立即生效", async () => {
     const existingChallenge = await requestCode("before-policy@blocked.test");
     const adminCookie = await loginCookie("Administrator", "Admin12#$");

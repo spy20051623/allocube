@@ -226,6 +226,27 @@ describe("统一停用时段", () => {
     expect(splitRows.every((row) => row.initial_start_at === futureIso(60))).toBe(true);
     expect(splitRows.every((row) => row.initial_end_at === futureIso(300))).toBe(true);
     expect(splitRows[1].parent_reservation_id).toBe(split.id);
+    const splitAudit = dbModule.db
+      .prepare(
+        `SELECT action, before_json AS beforeJson, after_json AS afterJson
+         FROM audit_logs WHERE entity_id = ? AND action = ?
+         ORDER BY created_at DESC LIMIT 1`
+      )
+      .get(
+        splitRows[1].id,
+        "RESERVATION_SPLIT_UNAVAILABILITY"
+      ) as {
+      action: string;
+      beforeJson: string | null;
+      afterJson: string;
+    };
+    expect(splitAudit.action).toBe("RESERVATION_SPLIT_UNAVAILABILITY");
+    expect(splitAudit.beforeJson).toBeNull();
+    expect(JSON.parse(splitAudit.afterJson)).toMatchObject({
+      parentReservationId: split.id,
+      startAt: blockedEnd,
+      endAt: futureIso(300)
+    });
   });
 
   it("取消计划停用不会恢复已经调整的占用", () => {
@@ -326,9 +347,67 @@ describe("统一停用时段", () => {
     ).toThrow("重叠");
   });
 
+  it("维护开始时间已经过去时按服务器当前分钟立即开始", () => {
+    const groupId = insertGroup("立即维护组");
+    const requestedStart = futureIso(-10);
+    const endAt = futureIso(30);
+    const beforePreview = Math.floor(Date.now() / 60_000) * 60_000;
+    const preview = unavailability.previewUnavailability(
+      "RESOURCE_GROUP",
+      groupId,
+      requestedStart,
+      endAt
+    );
+    expect(new Date(preview.startAt).getTime()).toBeGreaterThanOrEqual(
+      beforePreview
+    );
+    expect(preview.endAt).toBe(endAt);
+
+    const created = unavailability.createPlannedUnavailability({
+      type: "RESOURCE_GROUP",
+      id: groupId,
+      startAt: requestedStart,
+      endAt,
+      expectedRevision: preview.revision,
+      actorUserId: adminId
+    });
+    const stored = dbModule.db
+      .prepare(
+        `SELECT start_at AS startAt, end_at AS endAt
+         FROM resource_unavailability WHERE id = ?`
+      )
+      .get(created.id) as { startAt: string; endAt: string };
+    expect(stored).toEqual({
+      startAt: created.startAt,
+      endAt
+    });
+    expect(new Date(stored.startAt).getTime()).toBeGreaterThanOrEqual(
+      new Date(preview.startAt).getTime()
+    );
+  });
+
   it("资源组长期停用只处理本组，重新启用不恢复占用", () => {
     const disabledGroup = insertGroup("长期停用组");
     const unaffectedGroup = insertGroup("不受影响组");
+    const ongoingMaintenanceId = randomUUID();
+    const ongoingMaintenanceStart = futureIso(-30);
+    const ongoingMaintenanceOriginalEnd = futureIso(30);
+    dbModule.db
+      .prepare(
+        `INSERT INTO resource_unavailability(
+          id, machine_id, resource_group_id, kind, start_at, end_at,
+          reason, created_by, created_at
+        ) VALUES(?, ?, ?, 'PLANNED', ?, ?, '正在进行的维护', ?, ?)`
+      )
+      .run(
+        ongoingMaintenanceId,
+        machineId,
+        disabledGroup,
+        ongoingMaintenanceStart,
+        ongoingMaintenanceOriginalEnd,
+        adminId,
+        dbModule.nowIso()
+      );
     const disabledReservation = insertReservation(
       disabledGroup,
       futureIso(600),
@@ -351,6 +430,50 @@ describe("统一停用时段", () => {
       actorUserId: adminId
     });
     expect(result.status).toBe("DISABLED");
+    const interruptedMaintenance = dbModule.db
+      .prepare(
+        `SELECT end_at AS endAt, status, cancelled_at AS cancelledAt
+         FROM resource_unavailability WHERE id = ?`
+      )
+      .get(ongoingMaintenanceId) as {
+        endAt: string;
+        status: string;
+        cancelledAt: string | null;
+      };
+    expect(interruptedMaintenance.status).toBe("ACTIVE");
+    expect(interruptedMaintenance.cancelledAt).toBeNull();
+    expect(new Date(interruptedMaintenance.endAt).getTime()).toBeLessThan(
+      new Date(ongoingMaintenanceOriginalEnd).getTime()
+    );
+    expect(
+      Math.abs(
+        new Date(interruptedMaintenance.endAt).getTime() -
+          Math.floor(Date.now() / 60_000) * 60_000
+      )
+    ).toBeLessThan(60_000);
+    const interruptedAudit = dbModule.db
+      .prepare(
+        `SELECT action, before_json AS beforeJson, after_json AS afterJson
+         FROM audit_logs WHERE entity_id = ? AND action = ?`
+      )
+      .get(
+        ongoingMaintenanceId,
+        "UNAVAILABILITY_INTERRUPT_DISABLE"
+      ) as {
+      action: string;
+      beforeJson: string;
+      afterJson: string;
+    };
+    expect(interruptedAudit.action).toBe("UNAVAILABILITY_INTERRUPT_DISABLE");
+    expect(JSON.parse(interruptedAudit.beforeJson)).toMatchObject({
+      startAt: ongoingMaintenanceStart,
+      endAt: ongoingMaintenanceOriginalEnd
+    });
+    expect(JSON.parse(interruptedAudit.afterJson)).toMatchObject({
+      endAt: interruptedMaintenance.endAt,
+      disabledTargetType: "RESOURCE_GROUP",
+      disabledTargetId: disabledGroup
+    });
     expect(
       dbModule.db
         .prepare("SELECT status FROM reservations WHERE id = ?")
@@ -361,6 +484,22 @@ describe("统一停用时段", () => {
         .prepare("SELECT status FROM reservations WHERE id = ?")
         .get(unaffectedReservation.id)
     ).toEqual({ status: "CONFIRMED" });
+
+    const disableWindow = dbModule.db
+      .prepare(
+        `SELECT id FROM resource_unavailability
+         WHERE resource_group_id = ? AND kind = 'LONG_TERM'
+         ORDER BY created_at DESC LIMIT 1`
+      )
+      .get(disabledGroup) as { id: string };
+    expect(
+      dbModule.db
+        .prepare(
+          `SELECT action FROM audit_logs
+           WHERE entity_id = ? AND action = 'RESOURCE_DISABLE_WINDOW_CREATE'`
+        )
+        .get(disableWindow.id)
+    ).toEqual({ action: "RESOURCE_DISABLE_WINDOW_CREATE" });
 
     unavailability.enableTarget({
       type: "RESOURCE_GROUP",
@@ -387,9 +526,19 @@ describe("统一停用时段", () => {
         )
         .get(disabledGroup)
     ).toEqual({ status: "CANCELLED" });
+    const disableWindowAudits = dbModule.db
+      .prepare(
+        `SELECT action FROM audit_logs WHERE entity_id = ?
+         ORDER BY rowid`
+      )
+      .all(disableWindow.id) as Array<{ action: string }>;
+    expect(disableWindowAudits.map((item) => item.action)).toEqual([
+      "RESOURCE_DISABLE_WINDOW_CREATE",
+      "RESOURCE_DISABLE_WINDOW_END"
+    ]);
   });
 
-  it("整机长期停用清除全部计划停用，但保留资源组长期停用记录", () => {
+  it("整机长期停用结束或取消全部未完成维护，但保留资源组停用记录", () => {
     const plannedGroup = insertGroup("整机停用前的计划组");
     const retainedDisabledGroup = insertGroup("保留长期停用记录组");
 
@@ -464,13 +613,24 @@ describe("统一停用时段", () => {
         .sort()
         .map((id) => ({ id, status: "CANCELLED" }))
     );
+    for (const id of [machinePlanned.id, groupPlanned.id]) {
+      expect(
+        dbModule.db
+          .prepare(
+            `SELECT action FROM audit_logs
+             WHERE entity_id = ? AND action = 'UNAVAILABILITY_CANCEL_DISABLE'`
+          )
+          .get(id)
+      ).toEqual({ action: "UNAVAILABILITY_CANCEL_DISABLE" });
+    }
     expect(
       dbModule.db
         .prepare(
           `SELECT COUNT(*) AS count FROM resource_unavailability
-           WHERE machine_id = ? AND kind = 'PLANNED' AND status = 'ACTIVE'`
+           WHERE machine_id = ? AND kind = 'PLANNED'
+             AND status = 'ACTIVE' AND end_at > ?`
         )
-        .get(machineId)
+        .get(machineId, dbModule.nowIso())
     ).toEqual({ count: 0 });
     expect(
       dbModule.db

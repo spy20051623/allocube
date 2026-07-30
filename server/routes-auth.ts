@@ -630,7 +630,17 @@ export function registerAuthRoutes(app: FastifyInstance) {
       destroySession(request, reply);
       const csrfToken = createSession(row.id, reply);
       addAudit(row.id, "USER_LOGIN", "session", row.id, undefined, undefined);
-      return { user: publicUser(row), csrfToken };
+      const user = publicUser(row);
+      return {
+        user,
+        csrfToken,
+        serverNow: nowIso(),
+        settings: getSettings(),
+        managedMachineIds:
+          user.status === "ACTIVE"
+            ? getManagedMachineIds(user.id, user.role)
+            : []
+      };
     }
   );
 
@@ -645,6 +655,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
     return {
       user: auth.user,
       csrfToken: auth.csrfToken,
+      serverNow: nowIso(),
       settings: getSettings(),
       managedMachineIds:
         auth.user.status === "ACTIVE"

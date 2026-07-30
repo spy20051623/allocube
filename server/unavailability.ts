@@ -240,13 +240,17 @@ export function previewUnavailability(
   startAt: string,
   endAt: string
 ): UnavailabilityPreview {
-  validatePlannedTimes(startAt, endAt);
+  const normalized = normalizePlannedTimes(startAt, endAt);
   const target = resolveUnavailabilityTarget(type, id);
-  const impacts = reservationImpacts(target, startAt, endAt);
+  const impacts = reservationImpacts(
+    target,
+    normalized.startAt,
+    normalized.endAt
+  );
   return {
     target,
-    startAt,
-    endAt,
+    startAt: normalized.startAt,
+    endAt: normalized.endAt,
     revision: getScheduleRevision(),
     affectedReservations: impacts,
     summary: previewSummary(impacts)
@@ -345,6 +349,20 @@ function applyReservationImpacts(
           now,
           now
         );
+        addAudit(
+          actorUserId,
+          "RESERVATION_SPLIT_UNAVAILABILITY",
+          "reservation",
+          childId,
+          undefined,
+          {
+            parentReservationId: impact.id,
+            adjustedByUnavailabilityId: sourceId,
+            startAt: second.startAt,
+            endAt: second.endAt,
+            reason: reasonText
+          }
+        );
       }
     }
     const user = users.get(impact.userId) ?? {
@@ -388,19 +406,24 @@ function applyReservationImpacts(
   }
 }
 
-function validatePlannedTimes(startAt: string, endAt: string) {
+function normalizePlannedTimes(startAt: string, endAt: string) {
   const start = Date.parse(startAt);
   const end = Date.parse(endAt);
   const currentMinute = Math.floor(Date.now() / 60_000) * 60_000;
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
-    throw new BusinessError("维护结束时间必须晚于开始时间");
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    throw new BusinessError("维护时间格式不正确");
   }
   if (start % 60_000 !== 0 || end % 60_000 !== 0) {
     throw new BusinessError("维护时间只能精确到分钟");
   }
-  if (start < currentMinute) {
-    throw new BusinessError("维护不能早于当前时间");
+  const normalizedStart = Math.max(start, currentMinute);
+  if (normalizedStart >= end) {
+    throw new BusinessError("维护结束时间必须晚于开始时间");
   }
+  return {
+    startAt: new Date(normalizedStart).toISOString(),
+    endAt: new Date(end).toISOString()
+  };
 }
 
 export function createPlannedUnavailability(input: {
@@ -412,9 +435,9 @@ export function createPlannedUnavailability(input: {
   expectedRevision: number;
   actorUserId: string;
 }) {
-  validatePlannedTimes(input.startAt, input.endAt);
   const recordId = randomUUID();
   const result = withImmediateTransaction(() => {
+    const normalized = normalizePlannedTimes(input.startAt, input.endAt);
     if (getScheduleRevision() !== input.expectedRevision) {
       throw new BusinessError(
         "占用情况已变化，请重新查看影响",
@@ -442,8 +465,8 @@ export function createPlannedUnavailability(input: {
         target.machineId,
         target.resourceGroupId,
         target.resourceGroupId,
-        input.endAt,
-        input.startAt
+        normalized.endAt,
+        normalized.startAt
       );
     if (overlap) {
       throw new BusinessError("该对象已有重叠的维护时段", 409);
@@ -457,13 +480,17 @@ export function createPlannedUnavailability(input: {
       recordId,
       target.machineId,
       target.resourceGroupId,
-      input.startAt,
-      input.endAt,
+      normalized.startAt,
+      normalized.endAt,
       input.reason?.trim() ?? "",
       input.actorUserId,
       nowIso()
     );
-    const impacts = reservationImpacts(target, input.startAt, input.endAt);
+    const impacts = reservationImpacts(
+      target,
+      normalized.startAt,
+      normalized.endAt
+    );
     applyReservationImpacts(
       impacts,
       input.actorUserId,
@@ -481,8 +508,8 @@ export function createPlannedUnavailability(input: {
       {
         targetType: target.type,
         targetId: target.id,
-        startAt: input.startAt,
-        endAt: input.endAt,
+        startAt: normalized.startAt,
+        endAt: normalized.endAt,
         reasonProvided: Boolean(input.reason?.trim()),
         impact: previewSummary(impacts)
       }
@@ -490,6 +517,8 @@ export function createPlannedUnavailability(input: {
     const revision = bumpScheduleRevision();
     return {
       id: recordId,
+      startAt: normalized.startAt,
+      endAt: normalized.endAt,
       revision,
       impact: previewSummary(impacts)
     };
@@ -575,6 +604,137 @@ export function previewLongTermDisable(
   return previewUnavailability(type, id, currentMinuteIso(), DISTANT_FUTURE);
 }
 
+function stopPlannedMaintenanceForDisable(
+  target: UnavailabilityTarget,
+  stoppedAt: string,
+  actorUserId: string
+) {
+  const selectAffected = db.prepare(
+    `SELECT id, start_at, end_at, status
+     FROM resource_unavailability
+     WHERE machine_id = ?
+       AND (? IS NULL OR resource_group_id = ?)
+       AND kind = 'PLANNED' AND status = 'ACTIVE'
+       AND start_at < ? AND end_at > ?`
+  );
+  const interruptedRows = selectAffected.all(
+    target.machineId,
+    target.resourceGroupId,
+    target.resourceGroupId,
+    stoppedAt,
+    stoppedAt
+  ) as Array<{
+    id: string;
+    start_at: string;
+    end_at: string;
+    status: string;
+  }>;
+  const futureRows = db
+    .prepare(
+      `SELECT id, start_at, end_at, status
+       FROM resource_unavailability
+       WHERE machine_id = ?
+         AND (? IS NULL OR resource_group_id = ?)
+         AND kind = 'PLANNED' AND status = 'ACTIVE'
+         AND start_at >= ? AND end_at > ?`
+    )
+    .all(
+      target.machineId,
+      target.resourceGroupId,
+      target.resourceGroupId,
+      stoppedAt,
+      stoppedAt
+    ) as Array<{
+    id: string;
+    start_at: string;
+    end_at: string;
+    status: string;
+  }>;
+  const interrupted = db
+    .prepare(
+      `UPDATE resource_unavailability
+       SET end_at = ?
+       WHERE machine_id = ?
+         AND (? IS NULL OR resource_group_id = ?)
+         AND kind = 'PLANNED' AND status = 'ACTIVE'
+         AND start_at < ? AND end_at > ?`
+    )
+    .run(
+      stoppedAt,
+      target.machineId,
+      target.resourceGroupId,
+      target.resourceGroupId,
+      stoppedAt,
+      stoppedAt
+    ).changes;
+  if (interrupted !== interruptedRows.length) {
+    throw new BusinessError("维护安排已经更新，请刷新后重试", 409);
+  }
+  for (const row of interruptedRows) {
+    addAudit(
+      actorUserId,
+      "UNAVAILABILITY_INTERRUPT_DISABLE",
+      "resource_unavailability",
+      row.id,
+      {
+        status: row.status,
+        startAt: row.start_at,
+        endAt: row.end_at
+      },
+      {
+        status: "ACTIVE",
+        startAt: row.start_at,
+        endAt: stoppedAt,
+        disabledTargetType: target.type,
+        disabledTargetId: target.id
+      }
+    );
+  }
+  const cancelled = db
+    .prepare(
+      `UPDATE resource_unavailability
+       SET status = 'CANCELLED', cancelled_by = ?, cancelled_at = ?
+       WHERE machine_id = ?
+         AND (? IS NULL OR resource_group_id = ?)
+         AND kind = 'PLANNED' AND status = 'ACTIVE'
+         AND start_at >= ? AND end_at > ?`
+    )
+    .run(
+      actorUserId,
+      stoppedAt,
+      target.machineId,
+      target.resourceGroupId,
+      target.resourceGroupId,
+      stoppedAt,
+      stoppedAt
+    ).changes;
+  if (cancelled !== futureRows.length) {
+    throw new BusinessError("维护安排已经更新，请刷新后重试", 409);
+  }
+  for (const row of futureRows) {
+    addAudit(
+      actorUserId,
+      "UNAVAILABILITY_CANCEL_DISABLE",
+      "resource_unavailability",
+      row.id,
+      {
+        status: row.status,
+        startAt: row.start_at,
+        endAt: row.end_at
+      },
+      {
+        status: "CANCELLED",
+        startAt: row.start_at,
+        endAt: row.end_at,
+        cancelledAt: stoppedAt,
+        disabledTargetType: target.type,
+        disabledTargetId: target.id
+      }
+    );
+  }
+  return { interrupted, cancelled };
+}
+
 export function disableLongTerm(input: {
   type: UnavailabilityTargetType;
   id: string;
@@ -618,20 +778,10 @@ export function disableLongTerm(input: {
     if (!changed.changes) {
       throw new BusinessError("资源状态已经更新，请刷新后重试", 409);
     }
-    db.prepare(
-      `UPDATE resource_unavailability
-       SET status = 'CANCELLED', cancelled_by = ?, cancelled_at = ?
-       WHERE machine_id = ?
-         AND (? IS NULL OR resource_group_id = ?)
-         AND kind = 'PLANNED'
-         AND status = 'ACTIVE' AND end_at > ?`
-    ).run(
-      input.actorUserId,
+    const maintenance = stopPlannedMaintenanceForDisable(
+      target,
       startAt,
-      target.machineId,
-      target.resourceGroupId,
-      target.resourceGroupId,
-      startAt
+      input.actorUserId
     );
     db.prepare(
       `INSERT INTO resource_unavailability(
@@ -647,6 +797,21 @@ export function disableLongTerm(input: {
       input.reason?.trim() ?? "",
       input.actorUserId,
       startAt
+    );
+    addAudit(
+      input.actorUserId,
+      "RESOURCE_DISABLE_WINDOW_CREATE",
+      "resource_unavailability",
+      sourceId,
+      undefined,
+      {
+        targetType: target.type,
+        targetId: target.id,
+        machineId: target.machineId,
+        resourceGroupId: target.resourceGroupId,
+        startAt,
+        endAt: DISTANT_FUTURE
+      }
     );
     const impacts = reservationImpacts(target, startAt, DISTANT_FUTURE);
     applyReservationImpacts(
@@ -668,12 +833,14 @@ export function disableLongTerm(input: {
       {
         status: "DISABLED",
         reasonProvided: Boolean(input.reason?.trim()),
+        maintenance,
         impact: previewSummary(impacts)
       }
     );
     return {
       status: "DISABLED" as const,
       revision: bumpScheduleRevision(),
+      maintenance,
       impact: previewSummary(impacts)
     };
   });
@@ -703,56 +870,72 @@ export function enableTarget(input: {
     if (!changed.changes) {
       throw new BusinessError("资源状态已经更新，请刷新后重试", 409);
     }
-    const openWindow = db
+    const openWindows = db
       .prepare(
-        `SELECT start_at FROM resource_unavailability
+        `SELECT id, start_at, end_at, status
+         FROM resource_unavailability
          WHERE machine_id = ?
            AND (
              (? IS NULL AND resource_group_id IS NULL)
              OR resource_group_id = ?
            )
            AND kind = 'LONG_TERM' AND status = 'ACTIVE'
-         ORDER BY start_at DESC LIMIT 1`
+         ORDER BY start_at`
       )
-      .get(
+      .all(
         target.machineId,
         target.resourceGroupId,
         target.resourceGroupId
-      ) as { start_at: string } | undefined;
+      ) as Array<{
+      id: string;
+      start_at: string;
+      end_at: string;
+      status: string;
+    }>;
     const currentMinute = currentMinuteIso();
-    if (openWindow && openWindow.start_at >= currentMinute) {
-      db.prepare(
-        `UPDATE resource_unavailability
-         SET status = 'CANCELLED', cancelled_by = ?, cancelled_at = ?
-         WHERE machine_id = ?
-           AND (
-             (? IS NULL AND resource_group_id IS NULL)
-             OR resource_group_id = ?
-           )
-           AND kind = 'LONG_TERM' AND status = 'ACTIVE'`
-      ).run(
+    const cancelledAt = nowIso();
+    for (const window of openWindows) {
+      const cancelled = window.start_at >= currentMinute;
+      const changed = cancelled
+        ? db
+            .prepare(
+              `UPDATE resource_unavailability
+               SET status = 'CANCELLED', cancelled_by = ?, cancelled_at = ?
+               WHERE id = ? AND status = 'ACTIVE'`
+            )
+            .run(input.actorUserId, cancelledAt, window.id)
+        : db
+            .prepare(
+              `UPDATE resource_unavailability
+               SET end_at = ?
+               WHERE id = ? AND status = 'ACTIVE' AND end_at > ?`
+            )
+            .run(currentMinute, window.id, currentMinute);
+      if (!changed.changes) {
+        throw new BusinessError("停用记录已经更新，请刷新后重试", 409);
+      }
+      addAudit(
         input.actorUserId,
-        nowIso(),
-        target.machineId,
-        target.resourceGroupId,
-        target.resourceGroupId
-      );
-    } else {
-      db.prepare(
-        `UPDATE resource_unavailability
-         SET end_at = ?
-         WHERE machine_id = ?
-           AND (
-             (? IS NULL AND resource_group_id IS NULL)
-             OR resource_group_id = ?
-           )
-           AND kind = 'LONG_TERM' AND status = 'ACTIVE' AND end_at > ?`
-      ).run(
-        currentMinute,
-        target.machineId,
-        target.resourceGroupId,
-        target.resourceGroupId,
-        currentMinute
+        "RESOURCE_DISABLE_WINDOW_END",
+        "resource_unavailability",
+        window.id,
+        {
+          status: window.status,
+          startAt: window.start_at,
+          endAt: window.end_at
+        },
+        cancelled
+          ? {
+              status: "CANCELLED",
+              startAt: window.start_at,
+              endAt: window.end_at,
+              cancelledAt
+            }
+          : {
+              status: "ACTIVE",
+              startAt: window.start_at,
+              endAt: currentMinute
+            }
       );
     }
     addAudit(
@@ -763,7 +946,7 @@ export function enableTarget(input: {
       input.type === "MACHINE" ? "machine" : "resource_group",
       input.id,
       { status: "DISABLED" },
-      { status: "ACTIVE" }
+      { status: "ACTIVE", endedDisableWindows: openWindows.length }
     );
     return { status: "ACTIVE" as const, revision: bumpScheduleRevision() };
   });

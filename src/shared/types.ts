@@ -221,6 +221,7 @@ export interface NotificationItem {
 export interface DashboardBootstrap {
   user: AuthUser;
   csrfToken: string;
+  serverNow: string;
   settings: {
     minBookingMinutes: number;
     maxBookingMinutes: number;

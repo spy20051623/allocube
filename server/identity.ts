@@ -218,7 +218,12 @@ export function insertRegistrationRevision(userId: string, revision: number) {
        WHERE u.id = ?`
     )
     .get(userId) as
-    | { username: string; display_name: string; email: string; employee_number: string }
+    | {
+        username: string;
+        display_name: string;
+        email: string | null;
+        employee_number: string;
+      }
     | undefined;
   if (!row) throw new IdentityError("注册资料不完整", 409);
   db.prepare(

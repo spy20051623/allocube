@@ -188,7 +188,7 @@ describe("系统管理员 SMTP 配置", () => {
     ).toBe(false);
   });
 
-  it("停用期间验证码接口返回503且不创建挑战", async () => {
+  it("邮件关闭时拒绝验证码并允许无邮箱注册", async () => {
     const before = database.db
       .prepare("SELECT COUNT(*) AS count FROM email_verification_challenges")
       .get() as { count: number };
@@ -197,15 +197,44 @@ describe("系统管理员 SMTP 配置", () => {
       url: "/api/v1/auth/registration-email-code",
       payload: { email: "disabled@example.com" }
     });
-    expect(response.statusCode).toBe(503);
+    expect(response.statusCode).toBe(409);
     expect(response.json()).toEqual({
-      error: "邮件服务暂不可用，请联系管理员",
-      code: "MAIL_SERVICE_UNAVAILABLE"
+      error: "邮件功能当前未启用",
+      code: "EMAIL_FEATURE_DISABLED"
     });
     const after = database.db
       .prepare("SELECT COUNT(*) AS count FROM email_verification_challenges")
       .get() as { count: number };
     expect(after.count).toBe(before.count);
+
+    const config = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/registration-config"
+    });
+    expect(config.json()).toMatchObject({
+      emailEnabled: false,
+      allowedEmailDomains: []
+    });
+    const registration = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      payload: {
+        username: "无邮箱用户",
+        realName: "无邮箱成员",
+        employeeNumber: "10002001",
+        email: null,
+        challengeId: null,
+        code: null,
+        password: "NoEmailUser123!",
+        expectedConfigRevision: config.json().revision
+      }
+    });
+    expect(registration.statusCode).toBe(201);
+    expect(
+      database.db
+        .prepare("SELECT email FROM users WHERE id = ?")
+        .get(registration.json().userId)
+    ).toEqual({ email: null });
   });
 
   it("普通用户不能读取或修改 SMTP 配置", async () => {
@@ -233,6 +262,39 @@ describe("系统管理员 SMTP 配置", () => {
     const cookieValue = login.cookies
       .map((item) => `${item.name}=${item.value}`)
       .join("; ");
+    const registrationConfig = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/registration-config"
+    });
+    const clearWithoutConfirmation = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/change-email",
+      headers: { cookie: cookieValue },
+      payload: {
+        email: null,
+        currentPassword: "NormalUser123!",
+        expectedConfigRevision: registrationConfig.json().revision
+      }
+    });
+    expect(clearWithoutConfirmation.statusCode).toBe(400);
+    expect(clearWithoutConfirmation.json().code).toBe(
+      "EMAIL_CLEAR_CONFIRMATION_REQUIRED"
+    );
+    const cleared = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/change-email",
+      headers: { cookie: cookieValue },
+      payload: {
+        email: null,
+        currentPassword: "NormalUser123!",
+        clearEmailConfirmed: true,
+        expectedConfigRevision: registrationConfig.json().revision
+      }
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(
+      database.db.prepare("SELECT email FROM users WHERE id = ?").get(userId)
+    ).toEqual({ email: null });
     const getResponse = await app.inject({
       method: "GET",
       url: "/api/v1/admin/smtp-settings",

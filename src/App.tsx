@@ -18,6 +18,7 @@ import {
   Globe2,
   GripVertical,
   Info,
+  KeyRound,
   LogOut,
   Mail,
   Plus,
@@ -257,6 +258,12 @@ type SmtpSettingsPayload = {
     failed: number;
     lastError: string;
   };
+};
+
+type RegistrationConfigPayload = {
+  emailEnabled: boolean;
+  allowedEmailDomains: string[];
+  revision: number;
 };
 
 type AdminSettingsPayload = {
@@ -618,7 +625,7 @@ export function App() {
       routeLocation.hash
     );
     return (
-      <>
+      <DialogProvider>
         <AuthRouter
           location={authLocation}
           historyState={routeLocation.state}
@@ -638,7 +645,7 @@ export function App() {
           }}
         />
         {toast && <Toast {...toast} />}
-      </>
+      </DialogProvider>
     );
   }
 
@@ -1886,6 +1893,7 @@ function RegisterPage({
   navigate: AuthNavigate;
   successUsername: string;
 }) {
+  const dialog = useAppDialog();
   const [submitting, setSubmitting] = useState(false);
   const [codeSending, setCodeSending] = useState(false);
   const [focusedField, setFocusedField] = useState<RegistrationField | null>(
@@ -1897,9 +1905,8 @@ function RegisterPage({
   const [focusCodeAfterSend, setFocusCodeAfterSend] = useState(false);
   const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
   const [resendSeconds, setResendSeconds] = useState(0);
-  const [allowedEmailDomains, setAllowedEmailDomains] = useState<string[] | null>(
-    null
-  );
+  const [registrationConfig, setRegistrationConfig] =
+    useState<RegistrationConfigPayload | null>(null);
   const [configError, setConfigError] = useState(false);
   const codeInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState<RegistrationFormValues>({
@@ -1914,38 +1921,58 @@ function RegisterPage({
     confirmPassword: ""
   });
 
+  const loadRegistrationConfig = useCallback(async () => {
+    const result = await api<RegistrationConfigPayload>(
+      "/auth/registration-config"
+    );
+    if (
+      typeof result.emailEnabled !== "boolean" ||
+      !Number.isInteger(result.revision) ||
+      !Array.isArray(result.allowedEmailDomains) ||
+      !result.allowedEmailDomains.every(
+        (domain) => typeof domain === "string"
+      )
+    ) {
+      throw new Error("注册配置格式不正确");
+    }
+    setRegistrationConfig({
+      ...result,
+      allowedEmailDomains: result.allowedEmailDomains.map((domain) =>
+        domain.toLowerCase()
+      )
+    });
+    if (!result.emailEnabled) {
+      setErrors((current) => {
+        if (!current.email && !current.code) return current;
+        const next = { ...current };
+        delete next.email;
+        delete next.code;
+        return next;
+      });
+    }
+    setConfigError(false);
+  }, []);
+
   useEffect(() => {
     let active = true;
-    void api<{ allowedEmailDomains: unknown }>("/auth/registration-config")
-      .then((result) => {
-        if (!active) return;
-        if (
-          !Array.isArray(result.allowedEmailDomains) ||
-          !result.allowedEmailDomains.every(
-            (domain) => typeof domain === "string"
-          )
-        ) {
-          throw new Error("注册配置格式不正确");
-        }
-        setAllowedEmailDomains(
-          result.allowedEmailDomains.map((domain) => domain.toLowerCase())
-        );
-        setConfigError(false);
-      })
-      .catch(() => {
-        if (!active) return;
-        setConfigError(true);
-      });
+    void loadRegistrationConfig().catch(() => {
+      if (active) setConfigError(true);
+    });
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadRegistrationConfig]);
+
+  const allowedEmailDomains =
+    registrationConfig?.allowedEmailDomains ?? null;
+  const emailEnabled = registrationConfig?.emailEnabled ?? false;
 
   const passwordChecks = getPasswordChecks(form.password, {
     username: form.username,
     employeeNumbers: [form.employeeNumber]
   });
   const codeEnabled =
+    emailEnabled &&
     Boolean(form.challengeId) &&
     form.challengeEmail === normalizeRegistrationEmail(form.email);
 
@@ -1993,11 +2020,12 @@ function RegisterPage({
 
   const validateOnBlur = (field: RegistrationField) => {
     setFocusedField((current) => (current === field ? null : current));
-    if (!allowedEmailDomains) return;
+    if (!allowedEmailDomains || !registrationConfig) return;
     const messages = validateRegistrationField(
       field,
       form,
-      allowedEmailDomains
+      allowedEmailDomains,
+      emailEnabled
     );
     const value = registrationFieldValue(field, form);
     setErrors((current) => {
@@ -2077,12 +2105,16 @@ function RegisterPage({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!allowedEmailDomains || configError) return;
+    if (!allowedEmailDomains || !registrationConfig || configError) return;
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
     setFocusedField(null);
-    const staticErrors = validateRegistrationForm(form, allowedEmailDomains);
+    const staticErrors = validateRegistrationForm(
+      form,
+      allowedEmailDomains,
+      emailEnabled
+    );
     if (Object.keys(staticErrors).length) {
       setErrors((current) => {
         const next: RegistrationErrorMap = {};
@@ -2110,6 +2142,18 @@ function RegisterPage({
       return;
     }
 
+    const normalizedEmail = normalizeRegistrationEmail(form.email);
+    let withoutEmailConfirmed = false;
+    if (emailEnabled && !normalizedEmail) {
+      withoutEmailConfirmed = await dialog.confirm({
+        title: "不填写邮箱？",
+        message:
+          "不填写邮箱将无法接收系统邮件提醒，也无法自行通过邮件找回密码。",
+        confirmLabel: "仍然提交"
+      });
+      if (!withoutEmailConfirmed) return;
+    }
+
     setSubmitting(true);
     try {
       await api<{ message: string }>("/auth/register", {
@@ -2118,10 +2162,13 @@ function RegisterPage({
           username: form.username,
           realName: form.realName,
           employeeNumber: form.employeeNumber,
-          email: form.email,
-          challengeId: form.challengeId,
-          code: form.code,
-          password: form.password
+          email: emailEnabled ? normalizedEmail || null : null,
+          challengeId:
+            emailEnabled && normalizedEmail ? form.challengeId : null,
+          code: emailEnabled && normalizedEmail ? form.code : null,
+          password: form.password,
+          expectedConfigRevision: registrationConfig.revision,
+          withoutEmailConfirmed
         })
       });
       const username = form.username.trim().normalize("NFKC");
@@ -2146,6 +2193,19 @@ function RegisterPage({
     } catch (error) {
       if (
         error instanceof ApiError &&
+        (error.code === "REGISTRATION_CONFIG_CHANGED" ||
+          error.code === "EMAIL_FEATURE_DISABLED")
+      ) {
+        try {
+          await loadRegistrationConfig();
+          notify("error", "邮件设置已更新，请按当前页面重新确认后提交");
+        } catch {
+          setConfigError(true);
+        }
+        return;
+      }
+      if (
+        error instanceof ApiError &&
         (error.status === 400 || error.status === 409) &&
         error.code === "REGISTRATION_VALIDATION_FAILED"
       ) {
@@ -2162,7 +2222,14 @@ function RegisterPage({
   };
 
   const requestCode = async () => {
-    if (!allowedEmailDomains || codeSending || resendSeconds > 0) return;
+    if (
+      !emailEnabled ||
+      !allowedEmailDomains ||
+      codeSending ||
+      resendSeconds > 0
+    ) {
+      return;
+    }
     const emailErrors = validateEmail(form.email, allowedEmailDomains);
     if (emailErrors.length) {
       setErrors((current) => ({
@@ -2201,6 +2268,17 @@ function RegisterPage({
         return next;
       });
     } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.code === "EMAIL_FEATURE_DISABLED"
+      ) {
+        try {
+          await loadRegistrationConfig();
+        } catch {
+          setConfigError(true);
+        }
+        return;
+      }
       if (error instanceof ApiError && (error.status === 400 || error.status === 409)) {
         const fieldErrors = parseServerRegistrationErrors(error.fieldErrors);
         if (fieldErrors?.email) {
@@ -2244,7 +2322,9 @@ function RegisterPage({
     ? `仅允许以下邮箱域名：${allowedEmailDomains!.join("、")}`
     : undefined;
   const emailIsValid =
+    emailEnabled &&
     allowedEmailDomains !== null &&
+    Boolean(form.email.trim()) &&
     validateEmail(form.email, allowedEmailDomains).length === 0;
   const emailHasCurrentServerError =
     errors.email?.source === "SERVER" &&
@@ -2313,67 +2393,73 @@ function RegisterPage({
             />
           </RegistrationFieldShell>
         </div>
-        <RegistrationFieldShell
-          field="email"
-          label="邮箱"
-          focused={focusedField === "email"}
-          error={errors.email}
-          hint={emailHint}
-        >
-          <input
-            {...inputAccessibility("email", emailHasHint)}
-            name="email"
-            type="email"
-            disabled={codeSending}
-            autoComplete="email"
-            value={form.email}
-            onFocus={() => setFocusedField("email")}
-            onBlur={() => validateOnBlur("email")}
-            onChange={(event) => updateFormField("email", event.target.value)}
-          />
-        </RegistrationFieldShell>
-        <div className="verification-row">
-          <RegistrationFieldShell
-            field="code"
-            label="邮箱验证码"
-            focused={focusedField === "code"}
-            error={errors.code}
-          >
-            <input
-              {...inputAccessibility("code")}
-              name="code"
-              ref={codeInputRef}
-              disabled={!codeEnabled}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              value={form.code}
-              onFocus={() => setFocusedField("code")}
-              onBlur={() => validateOnBlur("code")}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  code: event.target.value.replace(/\D/g, "")
-                }))
-              }
-            />
-          </RegistrationFieldShell>
-          <button
-            type="button"
-            className="secondary-button verification-button"
-            disabled={
-              submitting ||
-              codeSending ||
-              resendSeconds > 0 ||
-              configError ||
-              !emailIsValid ||
-              emailHasCurrentServerError
-            }
-            onClick={() => void requestCode()}
-          >
-            {codeButtonLabel}
-          </button>
-        </div>
+        {emailEnabled && (
+          <>
+            <RegistrationFieldShell
+              field="email"
+              label="邮箱（选填）"
+              focused={focusedField === "email"}
+              error={errors.email}
+              hint={emailHint}
+            >
+              <input
+                {...inputAccessibility("email", emailHasHint)}
+                name="email"
+                type="email"
+                disabled={codeSending}
+                autoComplete="email"
+                value={form.email}
+                onFocus={() => setFocusedField("email")}
+                onBlur={() => validateOnBlur("email")}
+                onChange={(event) => updateFormField("email", event.target.value)}
+              />
+            </RegistrationFieldShell>
+            {form.email.trim() && (
+              <div className="verification-row">
+                <RegistrationFieldShell
+                  field="code"
+                  label="邮箱验证码"
+                  focused={focusedField === "code"}
+                  error={errors.code}
+                >
+                  <input
+                    {...inputAccessibility("code")}
+                    name="code"
+                    ref={codeInputRef}
+                    disabled={!codeEnabled}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={form.code}
+                    onFocus={() => setFocusedField("code")}
+                    onBlur={() => validateOnBlur("code")}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        code: event.target.value.replace(/\D/g, "")
+                      }))
+                    }
+                  />
+                </RegistrationFieldShell>
+                <button
+                  type="button"
+                  className="secondary-button verification-button"
+                  disabled={
+                    submitting ||
+                    codeSending ||
+                    resendSeconds > 0 ||
+                    configError ||
+                    !emailIsValid ||
+                    emailHasCurrentServerError
+                  }
+                  onClick={() => void requestCode()}
+                >
+                  {codeButtonLabel}
+                </button>
+              </div>
+            )}
+          </>
+        )}
         <RegistrationFieldShell
           field="password"
           label="密码"
@@ -2427,7 +2513,7 @@ function RegisterPage({
             submitting ||
             codeSending ||
             configError ||
-            allowedEmailDomains === null
+            registrationConfig === null
           }
         >
           <BusyButtonContent busy={submitting} iconSize={16}>
@@ -2451,6 +2537,9 @@ function ForgotPasswordPage({
 }: {
   navigate: AuthNavigate;
 }) {
+  const [registrationConfig, setRegistrationConfig] =
+    useState<RegistrationConfigPayload | null>(null);
+  const [configError, setConfigError] = useState("");
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -2458,8 +2547,25 @@ function ForgotPasswordPage({
   const [formError, setFormError] = useState("");
   const [sent, setSent] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+    void api<RegistrationConfigPayload>("/auth/registration-config")
+      .then((result) => {
+        if (active) setRegistrationConfig(result);
+      })
+      .catch(() => {
+        if (active) {
+          setConfigError("暂时无法加载邮件设置，请刷新页面重试。");
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!registrationConfig?.emailEnabled) return;
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -2485,6 +2591,24 @@ function ForgotPasswordPage({
     }
   };
 
+  if (registrationConfig && !registrationConfig.emailEnabled) {
+    return (
+      <AuthLayout title="找回密码">
+        <div className="registration-success">
+          <div className="success-mark"><ShieldCheck size={24} /></div>
+          <p>邮件功能未启用，请联系系统管理员获取密码重置链接。</p>
+          <button
+            type="button"
+            className="primary-button wide auth-submit"
+            onClick={() => navigate("/login")}
+          >
+            返回登录
+          </button>
+        </div>
+      </AuthLayout>
+    );
+  }
+
   if (sent) {
     return (
       <AuthLayout title="重置邮件已发送">
@@ -2506,6 +2630,11 @@ function ForgotPasswordPage({
   return (
     <AuthLayout title="找回密码">
       <form onSubmit={submit} className="stack-form" noValidate>
+        {configError && (
+          <AuthFeedback tone="error" anchored={false}>
+            {configError}
+          </AuthFeedback>
+        )}
         <AuthFieldShell
           id="forgot-password-email"
           label="邮箱"
@@ -2538,7 +2667,10 @@ function ForgotPasswordPage({
             {formError}
           </AuthFeedback>
         )}
-        <button className="primary-button auth-submit" disabled={busy}>
+        <button
+          className="primary-button auth-submit"
+          disabled={busy || !registrationConfig || Boolean(configError)}
+        >
           <BusyButtonContent busy={busy} iconSize={16}>
             发送重置邮件
           </BusyButtonContent>
@@ -2818,6 +2950,8 @@ function AccountProfilePage({
   const [identityOpen, setIdentityOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [registrationConfig, setRegistrationConfig] =
+    useState<RegistrationConfigPayload | null>(null);
   const [autoLogoutSaving, setAutoLogoutSaving] = useState(false);
   const [emailPreferences, setEmailPreferences] = useState(
     bootstrap.user.emailPreferences
@@ -2845,6 +2979,19 @@ function AccountProfilePage({
   useEffect(() => {
     setEmailPreferences(bootstrap.user.emailPreferences);
   }, [bootstrap.user.emailPreferences]);
+  useEffect(() => {
+    let active = true;
+    void api<RegistrationConfigPayload>("/auth/registration-config")
+      .then((result) => {
+        if (active) setRegistrationConfig(result);
+      })
+      .catch(() => {
+        if (active) setRegistrationConfig(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const updateEmailPreference = async (
     key: keyof AuthUser["emailPreferences"],
@@ -3054,7 +3201,8 @@ function AccountProfilePage({
               <div className="profile-field profile-field-half">
                 <div className="profile-field-head">
                   <span>邮箱</span>
-                  {editable && user.email && (
+                  {editable &&
+                    (registrationConfig?.emailEnabled || user.email) && (
                     <button
                       type="button"
                       className="icon-button profile-edit"
@@ -3066,7 +3214,7 @@ function AccountProfilePage({
                     </button>
                   )}
                 </div>
-                <strong title={user.email ?? undefined}>{user.email ?? "不适用"}</strong>
+                <strong title={user.email ?? undefined}>{user.email ?? "未设置"}</strong>
               </div>
               <div className="profile-field profile-field-half profile-id-cell">
                 <div className="profile-field-head">
@@ -3169,6 +3317,7 @@ function AccountProfilePage({
             </div>
           </div>
 
+          {registrationConfig?.emailEnabled && user.email && (
           <div className="profile-section profile-email-preferences">
             <div className="profile-section-head">
               <div className="profile-section-title">
@@ -3197,8 +3346,7 @@ function AccountProfilePage({
                 </span>
               </span>
             </div>
-            {user.email ? (
-              <div className="profile-email-preferences-grid">
+            <div className="profile-email-preferences-grid">
                 {emailPreferenceOptions.map(({ key, label, details }) => (
                   <label className="profile-email-preference" key={key}>
                     <span className="profile-email-preference-label">
@@ -3231,10 +3379,8 @@ function AccountProfilePage({
                   </label>
                 ))}
               </div>
-            ) : (
-              <span className="profile-email-unavailable">当前账号未设置邮箱</span>
-            )}
           </div>
+          )}
         </section>
       </div>
       {usernameOpen && (
@@ -3267,10 +3413,9 @@ function AccountProfilePage({
           }}
         />
       )}
-      {emailOpen && user.email && (
+      {emailOpen && (
         <EmailEditModal
           currentEmail={user.email}
-          requireCurrentPassword
           notify={notify}
           onClose={() => setEmailOpen(false)}
           onSaved={async () => {
@@ -3487,31 +3632,23 @@ function IdentityEditModal({
 }
 
 function EmailEditModal({
-  title = "修改邮箱",
   currentEmail,
-  codeEndpoint = "/auth/email-change-code",
-  changeEndpoint = "/auth/change-email",
-  submitLabel = "确认修改",
-  requireCurrentPassword = false,
   notify,
   onClose,
   onSaved
 }: {
-  title?: string;
-  currentEmail: string;
-  codeEndpoint?: string;
-  changeEndpoint?: string;
-  submitLabel?: string;
-  requireCurrentPassword?: boolean;
+  currentEmail: string | null;
   notify: (kind: "success" | "error", message: string) => void;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const dialog = useAppDialog();
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [code, setCode] = useState("");
   const [challengeId, setChallengeId] = useState("");
-  const [allowedDomains, setAllowedDomains] = useState<string[] | null>(null);
+  const [registrationConfig, setRegistrationConfig] =
+    useState<RegistrationConfigPayload | null>(null);
   const [configError, setConfigError] = useState("");
   const [emailError, setEmailError] = useState("");
   const [currentPasswordError, setCurrentPasswordError] = useState("");
@@ -3523,11 +3660,28 @@ function EmailEditModal({
   const [focusCodeAfterSend, setFocusCodeAfterSend] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    void api<{ allowedEmailDomains: string[] }>("/auth/registration-config")
-      .then((result) => setAllowedDomains(result.allowedEmailDomains.map((item) => item.toLowerCase())))
-      .catch(() => setConfigError("暂时无法加载邮箱规则，请稍后重试。"));
+  const loadConfig = useCallback(async () => {
+    const result = await api<RegistrationConfigPayload>(
+      "/auth/registration-config"
+    );
+    setRegistrationConfig({
+      ...result,
+      allowedEmailDomains: result.allowedEmailDomains.map((item) =>
+        item.toLowerCase()
+      )
+    });
+    if (!result.emailEnabled) {
+      setEmail("");
+      setCode("");
+      setChallengeId("");
+    }
+    setConfigError("");
   }, []);
+  useEffect(() => {
+    void loadConfig().catch(() =>
+      setConfigError("暂时无法加载邮箱规则，请稍后重试。")
+    );
+  }, [loadConfig]);
   useEffect(() => {
     if (!resendAvailableAt) {
       setResendSeconds(0);
@@ -3544,21 +3698,32 @@ function EmailEditModal({
     setFocusCodeAfterSend(false);
   }, [challengeId, focusCodeAfterSend]);
 
+  const emailEnabled = registrationConfig?.emailEnabled ?? false;
+  const allowedDomains = registrationConfig?.allowedEmailDomains ?? null;
   const validateCurrentEmail = () => {
-    if (!email.trim()) return "请输入邮箱";
+    if (!email.trim()) {
+      return currentEmail ? "" : "当前账号尚未设置邮箱";
+    }
+    if (!emailEnabled) return "邮件功能未启用，暂时不能绑定邮箱";
     const normalized = normalizeRegistrationEmail(email);
     const errors = validateEmail(normalized, allowedDomains ?? []);
     if (errors.length) return errors[0];
-    if (normalized === normalizeRegistrationEmail(currentEmail)) return "新邮箱与当前邮箱相同";
+    if (
+      currentEmail &&
+      normalized === normalizeRegistrationEmail(currentEmail)
+    ) {
+      return "新邮箱与当前邮箱相同";
+    }
     return "";
   };
   const sendCode = async () => {
+    if (!emailEnabled) return;
     const nextError = validateCurrentEmail();
     setEmailError(nextError);
     if (nextError || sending || resendSeconds > 0 || allowedDomains === null) return;
     setSending(true);
     try {
-      const result = await api<{ challengeId: string; expiresAt: string }>(codeEndpoint, {
+      const result = await api<{ challengeId: string; expiresAt: string }>("/auth/email-change-code", {
         method: "POST",
         body: jsonBody({ email: normalizeRegistrationEmail(email) })
       });
@@ -3568,6 +3733,15 @@ function EmailEditModal({
       setResendAvailableAt(Date.now() + 60_000);
       setFocusCodeAfterSend(true);
     } catch (caught) {
+      if (
+        caught instanceof ApiError &&
+        caught.code === "EMAIL_FEATURE_DISABLED"
+      ) {
+        await loadConfig().catch(() =>
+          setConfigError("暂时无法加载邮箱规则，请稍后重试。")
+        );
+        return;
+      }
       const message = caught instanceof Error ? caught.message : "发送失败";
       if (/邮箱|域名|占用/.test(message)) setEmailError(message);
       else notify("error", message);
@@ -3577,32 +3751,67 @@ function EmailEditModal({
   };
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!registrationConfig) return;
+    const normalizedEmail = normalizeRegistrationEmail(email);
+    const clearing = !normalizedEmail;
     const nextEmailError = validateCurrentEmail();
-    const nextCodeError = /^\d{6}$/.test(code)
-      ? challengeId ? "" : "验证码无效，请重新输入"
-      : "请输入6位验证码";
+    const nextCodeError = clearing
+      ? ""
+      : /^\d{6}$/.test(code)
+        ? challengeId
+          ? ""
+          : "验证码无效，请重新输入"
+        : "请输入6位验证码";
     const nextCurrentPasswordError =
-      requireCurrentPassword && !currentPassword ? "请输入当前密码" : "";
+      !currentPassword ? "请输入当前密码" : "";
     setEmailError(nextEmailError);
     setCodeError(nextCodeError);
     setCurrentPasswordError(nextCurrentPasswordError);
     if (nextEmailError || nextCodeError || nextCurrentPasswordError) return;
+    let clearEmailConfirmed = false;
+    if (clearing) {
+      clearEmailConfirmed = await dialog.confirm({
+        title: "清空邮箱？",
+        message:
+          "清空邮箱后将无法接收系统邮件提醒，也无法自行通过邮件找回密码。",
+        confirmLabel: "确认清空",
+        tone: "danger"
+      });
+      if (!clearEmailConfirmed) return;
+    }
     setBusy(true);
     try {
-      await api(changeEndpoint, {
+      await api("/auth/change-email", {
         method: "POST",
         body: jsonBody({
-          email: normalizeRegistrationEmail(email),
-          challengeId,
-          code,
-          ...(requireCurrentPassword ? { currentPassword } : {})
+          email: clearing ? null : normalizedEmail,
+          challengeId: clearing ? null : challengeId,
+          code: clearing ? null : code,
+          clearEmailConfirmed,
+          expectedConfigRevision: registrationConfig.revision,
+          currentPassword
         })
       });
       await onSaved();
     } catch (caught) {
+      if (
+        caught instanceof ApiError &&
+        (caught.code === "REGISTRATION_CONFIG_CHANGED" ||
+          caught.code === "EMAIL_FEATURE_DISABLED")
+      ) {
+        await loadConfig().catch(() =>
+          setConfigError("暂时无法加载邮箱规则，请稍后重试。")
+        );
+        notify("error", "邮件设置已更新，请按当前规则重新确认");
+        return;
+      }
       const message = caught instanceof Error ? caught.message : "更换失败";
       const passwordMessage = fieldErrorFromApi(caught, "currentPassword");
+      const codeMessage = fieldErrorFromApi(caught, "code");
+      const emailMessage = fieldErrorFromApi(caught, "email");
       if (passwordMessage) setCurrentPasswordError(passwordMessage);
+      else if (codeMessage) setCodeError(codeMessage);
+      else if (emailMessage) setEmailError(emailMessage);
       else if (/验证码/.test(message)) setCodeError(message);
       else if (/邮箱|域名|占用/.test(message)) setEmailError(message);
       else notify("error", message);
@@ -3615,87 +3824,114 @@ function EmailEditModal({
     remainingSeconds: resendSeconds
   });
   return (
-    <Modal title={title} onClose={onClose}>
+    <Modal title="修改邮箱" onClose={onClose}>
       <form className="stack-form profile-edit-form" noValidate onSubmit={submit}>
         {configError && <AuthFeedback tone="error" anchored={false}>{configError}</AuthFeedback>}
-        {requireCurrentPassword && (
-          <label className={`field${currentPasswordError ? " has-error" : ""}`}>
-            <span>当前密码</span>
-            <PasswordInput
-              autoFocus
-              name="currentPassword"
-              autoComplete="current-password"
-              value={currentPassword}
-              aria-invalid={Boolean(currentPasswordError)}
-              onChange={(event) => {
-                setCurrentPassword(event.target.value);
-                setCurrentPasswordError("");
-              }}
-            />
-            {currentPasswordError && (
-              <AuthFeedback tone="error">{currentPasswordError}</AuthFeedback>
-            )}
+        {currentEmail && (
+          <label className="field">
+            <span>当前邮箱</span>
+            <input readOnly value={currentEmail} />
           </label>
         )}
-        <label className={`field${emailError ? " has-error" : ""}`}>
-          <span>新邮箱</span>
-          <input
-            autoFocus={!requireCurrentPassword}
-            type="email"
-            name="email"
-            autoComplete="email"
-            value={email}
-            aria-invalid={Boolean(emailError)}
+        <label className={`field${currentPasswordError ? " has-error" : ""}`}>
+          <span>当前密码</span>
+          <PasswordInput
+            autoFocus
+            name="currentPassword"
+            autoComplete="current-password"
+            value={currentPassword}
+            aria-invalid={Boolean(currentPasswordError)}
             onChange={(event) => {
-              setEmail(event.target.value);
-              setEmailError("");
-              setCode("");
-              setCodeError("");
-              setChallengeId("");
+              setCurrentPassword(event.target.value);
+              setCurrentPasswordError("");
             }}
           />
-          {allowedDomains?.length ? (
-            <small>仅允许以下邮箱域名：{allowedDomains.join("、")}。</small>
-          ) : null}
-          {emailError && <AuthFeedback tone="error">{emailError}</AuthFeedback>}
+          {currentPasswordError && (
+            <AuthFeedback tone="error">{currentPasswordError}</AuthFeedback>
+          )}
         </label>
-        <div className="verification-row">
-          <label className={`field${codeError ? " has-error" : ""}`}>
-            <span>验证码</span>
-            <input
-              ref={codeRef}
-              name="code"
-              inputMode="numeric"
-              maxLength={6}
-              disabled={!challengeId}
-              value={code}
-              aria-invalid={Boolean(codeError)}
-              onChange={(event) => {
-                setCode(event.target.value.replace(/\D/g, ""));
-                setCodeError("");
-              }}
-            />
-            {codeError && <AuthFeedback tone="error">{codeError}</AuthFeedback>}
-          </label>
-          <button
-            type="button"
-            className="secondary-button verification-button"
-            disabled={
-              sending ||
-              resendSeconds > 0 ||
-              allowedDomains === null ||
-              Boolean(configError) ||
-              Boolean(validateCurrentEmail())
-            }
-            onClick={() => void sendCode()}
-          >
-            {buttonLabel}
-          </button>
-        </div>
+        {registrationConfig && !emailEnabled ? (
+          currentEmail ? (
+            <AuthFeedback tone="warning" anchored={false}>
+              邮件功能未启用，只能清空当前邮箱。
+            </AuthFeedback>
+          ) : (
+            <AuthFeedback tone="warning" anchored={false}>
+              邮件功能未启用，当前账号没有可修改的邮箱。
+            </AuthFeedback>
+          )
+        ) : (
+          <>
+            <label className={`field${emailError ? " has-error" : ""}`}>
+              <span>新邮箱（留空表示清空）</span>
+              <input
+                type="email"
+                name="email"
+                autoComplete="email"
+                value={email}
+                aria-invalid={Boolean(emailError)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setEmailError("");
+                  setCode("");
+                  setCodeError("");
+                  setChallengeId("");
+                }}
+              />
+              {allowedDomains?.length ? (
+                <small>仅允许以下邮箱域名：{allowedDomains.join("、")}。</small>
+              ) : null}
+              {emailError && <AuthFeedback tone="error">{emailError}</AuthFeedback>}
+            </label>
+            {email.trim() && (
+              <div className="verification-row">
+                <label className={`field${codeError ? " has-error" : ""}`}>
+                  <span>验证码</span>
+                  <input
+                    ref={codeRef}
+                    name="code"
+                    inputMode="numeric"
+                    maxLength={6}
+                    disabled={!challengeId}
+                    value={code}
+                    aria-invalid={Boolean(codeError)}
+                    onChange={(event) => {
+                      setCode(event.target.value.replace(/\D/g, ""));
+                      setCodeError("");
+                    }}
+                  />
+                  {codeError && <AuthFeedback tone="error">{codeError}</AuthFeedback>}
+                </label>
+                <button
+                  type="button"
+                  className="secondary-button verification-button"
+                  disabled={
+                    sending ||
+                    resendSeconds > 0 ||
+                    allowedDomains === null ||
+                    Boolean(configError) ||
+                    Boolean(validateCurrentEmail())
+                  }
+                  onClick={() => void sendCode()}
+                >
+                  {buttonLabel}
+                </button>
+              </div>
+            )}
+          </>
+        )}
         <div className="modal-actions">
           <button type="button" className="secondary-button" onClick={onClose}>取消</button>
-          <button className="primary-button" disabled={busy || Boolean(configError)}>
-            <BusyButtonContent busy={busy}>{submitLabel}</BusyButtonContent>
+          <button
+            className="primary-button"
+            disabled={
+              busy ||
+              Boolean(configError) ||
+              !registrationConfig ||
+              (!emailEnabled && !currentEmail)
+            }
+          >
+            <BusyButtonContent busy={busy}>确认修改</BusyButtonContent>
           </button>
         </div>
       </form>
@@ -12150,7 +12386,11 @@ function UserAdminPanel({
   reload: () => Promise<void>;
 }) {
   const dialog = useAppDialog();
-  const [emailChangeUser, setEmailChangeUser] = useState<any | null>(null);
+  const [passwordResetLink, setPasswordResetLink] = useState<{
+    displayName: string;
+    resetUrl: string;
+    expiresAt: string;
+  } | null>(null);
   const processRegistration = async (
     action: () => Promise<unknown>,
     successMessage: string
@@ -12427,26 +12667,15 @@ function UserAdminPanel({
                     </span>
                     <div className="row-actions">
                       {user.status === "ACTIVE" && user.role !== "SYSTEM_ADMIN" && (
-                        <>
-                          <button
-                            type="button"
-                            className="icon-button tiny list-icon-action danger"
-                            title="停用账号"
-                            aria-label={`停用 ${user.displayName} 并释放相关占用`}
-                            onClick={() => void disableUser(user)}
-                          >
-                            <UserX size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-button tiny list-icon-action"
-                            title="协助换绑邮箱"
-                            aria-label={`协助 ${user.displayName} 换绑邮箱`}
-                            onClick={() => setEmailChangeUser(user)}
-                          >
-                            <Pencil size={14} />
-                          </button>
-                        </>
+                        <button
+                          type="button"
+                          className="icon-button tiny list-icon-action danger"
+                          title="停用账号"
+                          aria-label={`停用 ${user.displayName} 并释放相关占用`}
+                          onClick={() => void disableUser(user)}
+                        >
+                          <UserX size={14} />
+                        </button>
                       )}
                       {user.status === "DISABLED" && (
                         <>
@@ -12472,21 +12701,40 @@ function UserAdminPanel({
                           )}
                         </>
                       )}
-                      {user.status === "ACTIVE" && user.email && (
+                      {user.status === "ACTIVE" &&
+                        user.role !== "SYSTEM_ADMIN" && (
                         <button
                           type="button"
                           className="icon-button tiny list-icon-action"
-                          title="发送密码重置"
-                          aria-label={`向 ${user.displayName} 发送密码重置邮件`}
+                          title="生成重置链接"
+                          aria-label={`为 ${user.displayName} 生成密码重置链接`}
                           onClick={async () => {
-                            await api(`/admin/users/${user.id}/reset-password`, {
-                              method: "POST",
-                              body: "{}"
-                            });
-                            notify("success", "密码重置邮件已发送");
+                            try {
+                              const result = await api<{
+                                resetUrl: string;
+                                expiresAt: string;
+                              }>(
+                                `/admin/users/${user.id}/password-reset-link`,
+                                {
+                                  method: "POST",
+                                  body: "{}"
+                                }
+                              );
+                              setPasswordResetLink({
+                                displayName: user.displayName,
+                                ...result
+                              });
+                            } catch (error) {
+                              notify(
+                                "error",
+                                error instanceof Error
+                                  ? error.message
+                                  : "重置链接生成失败"
+                              );
+                            }
                           }}
                         >
-                          <Mail size={14} />
+                          <KeyRound size={14} />
                         </button>
                       )}
                     </div>
@@ -12680,21 +12928,54 @@ function UserAdminPanel({
         </section>
         )}
       </div>
-      {canManage && emailChangeUser && (
-        <EmailEditModal
-          title="协助换绑邮箱"
-          currentEmail={emailChangeUser.email}
-          codeEndpoint={`/admin/users/${emailChangeUser.id}/email-change-code`}
-          changeEndpoint={`/admin/users/${emailChangeUser.id}/change-email`}
-          submitLabel="确认换绑"
-          notify={notify}
-          onClose={() => setEmailChangeUser(null)}
-          onSaved={async () => {
-            setEmailChangeUser(null);
-            notify("success", "邮箱已换绑，用户的全部会话已撤销");
-            await reload();
-          }}
-        />
+      {canManage && passwordResetLink && (
+        <Modal
+          title="密码重置链接"
+          onClose={() => setPasswordResetLink(null)}
+        >
+          <div className="stack-form profile-edit-form">
+            <AuthFeedback tone="warning" anchored={false}>
+              请通过可信渠道将链接转交给
+              {passwordResetLink.displayName}。关闭后无法再次查看。
+            </AuthFeedback>
+            <label className="field">
+              <span>重置链接</span>
+              <div className="copy-value-row">
+                <input
+                  readOnly
+                  value={passwordResetLink.resetUrl}
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(
+                        passwordResetLink.resetUrl
+                      );
+                      notify("success", "重置链接已复制");
+                    } catch {
+                      notify("error", "复制失败，请手动复制链接");
+                    }
+                  }}
+                >
+                  <Copy size={14} />
+                  复制
+                </button>
+              </div>
+            </label>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => setPasswordResetLink(null)}
+              >
+                完成
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

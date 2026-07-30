@@ -7491,6 +7491,18 @@ textarea::placeholder {
   margin-top: 4px;
 }
 
+.copy-value-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.copy-value-row .secondary-button {
+  min-width: 82px;
+  justify-content: center;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;

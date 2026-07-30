@@ -94,6 +94,7 @@ export function queueEmail(
   userId: string | null = null,
   expiresAt: string | null = null
 ) {
+  if (!toEmail.trim()) return false;
   if (!getRuntimeSmtpSettings()) return false;
   db.prepare(
     `INSERT INTO email_outbox(

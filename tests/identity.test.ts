@@ -65,6 +65,19 @@ async function requestCode(email: string) {
   };
 }
 
+async function registrationConfig() {
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/v1/auth/registration-config"
+  });
+  expect(response.statusCode).toBe(200);
+  return response.json() as {
+    emailEnabled: boolean;
+    allowedEmailDomains: string[];
+    revision: number;
+  };
+}
+
 async function registerPending(input: {
   username: string;
   realName: string;
@@ -72,6 +85,7 @@ async function registerPending(input: {
   email: string;
 }) {
   const challenge = await requestCode(input.email);
+  const config = await registrationConfig();
   const response = await app.inject({
     method: "POST",
     url: "/api/v1/auth/register",
@@ -79,7 +93,8 @@ async function registerPending(input: {
       ...input,
       password: "Registration123!",
       challengeId: challenge.challengeId,
-      code: challenge.code
+      code: challenge.code,
+      expectedConfigRevision: config.revision
     }
   });
   expect(response.statusCode).toBe(201);
@@ -128,13 +143,52 @@ describe("用户身份与审批生命周期", () => {
     expect(normalizeUsername("Ａlice").normalized).toBe("alice");
   });
 
-  it("公开注册配置只返回邮箱域名白名单", async () => {
+  it("公开注册配置返回邮件开关、邮箱域名白名单和版本", async () => {
     const response = await app.inject({
       method: "GET",
       url: "/api/v1/auth/registration-config"
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ allowedEmailDomains: [] });
+    expect(response.json()).toEqual({
+      emailEnabled: true,
+      allowedEmailDomains: [],
+      revision: 1
+    });
+  });
+
+  it("邮件开启时允许确认后不填写邮箱注册", async () => {
+    const config = await registrationConfig();
+    const payload = {
+      username: "可选邮箱用户",
+      realName: "可选邮箱成员",
+      employeeNumber: "10001999",
+      email: null,
+      challengeId: null,
+      code: null,
+      password: "OptionalEmail123!",
+      expectedConfigRevision: config.revision
+    };
+    const unconfirmed = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      payload
+    });
+    expect(unconfirmed.statusCode).toBe(400);
+    expect(unconfirmed.json().code).toBe(
+      "EMAIL_OMISSION_CONFIRMATION_REQUIRED"
+    );
+
+    const confirmed = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      payload: { ...payload, withoutEmailConfirmed: true }
+    });
+    expect(confirmed.statusCode).toBe(201);
+    expect(
+      dbModule.db
+        .prepare("SELECT email FROM registration_revisions WHERE user_id = ?")
+        .get(confirmed.json().userId)
+    ).toEqual({ email: null });
   });
 
   it("登录和会话恢复均返回服务器时间", async () => {
@@ -166,6 +220,7 @@ describe("用户身份与审批生命周期", () => {
 
   it("系统管理员可以在线修改注册邮箱白名单并立即生效", async () => {
     const existingChallenge = await requestCode("before-policy@blocked.test");
+    const initialRegistrationConfig = await registrationConfig();
     const adminCookie = await loginCookie("Administrator", "Admin12#$");
     const before = await app.inject({
       method: "GET",
@@ -194,7 +249,29 @@ describe("用户身份与审批生命周期", () => {
       url: "/api/v1/auth/registration-config"
     });
     expect(publicConfig.json()).toEqual({
-      allowedEmailDomains: ["example.com"]
+      emailEnabled: true,
+      allowedEmailDomains: ["example.com"],
+      revision: 2
+    });
+
+    const staleRegistration = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      payload: {
+        username: "过期配置用户",
+        realName: "过期配置",
+        employeeNumber: "10009997",
+        email: "before-policy@blocked.test",
+        password: "Registration123!",
+        challengeId: existingChallenge.challengeId,
+        code: existingChallenge.code,
+        expectedConfigRevision: initialRegistrationConfig.revision
+      }
+    });
+    expect(staleRegistration.statusCode).toBe(409);
+    expect(staleRegistration.json()).toMatchObject({
+      code: "REGISTRATION_CONFIG_CHANGED",
+      registrationConfig: publicConfig.json()
     });
 
     const blockedRegistration = await app.inject({
@@ -207,7 +284,8 @@ describe("用户身份与审批生命周期", () => {
         email: "before-policy@blocked.test",
         password: "Registration123!",
         challengeId: existingChallenge.challengeId,
-        code: existingChallenge.code
+        code: existingChallenge.code,
+        expectedConfigRevision: publicConfig.json().revision
       }
     });
     expect(blockedRegistration.statusCode).toBe(400);
@@ -337,6 +415,7 @@ describe("用户身份与审批生命周期", () => {
   });
 
   it("注册接口一次返回全部可判断的字段错误且不创建账号", async () => {
+    const config = await registrationConfig();
     const before = (
       dbModule.db
         .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'USER'")
@@ -352,7 +431,8 @@ describe("用户身份与审批生命周期", () => {
         email: "bad-email",
         password: "中文 password 1",
         challengeId: "not-a-challenge",
-        code: "12"
+        code: "12",
+        expectedConfigRevision: config.revision
       }
     });
     expect(response.statusCode).toBe(400);
@@ -383,6 +463,12 @@ describe("用户身份与审批生命周期", () => {
 
   it("验证码错误时不创建账号，正确后预占全部标识", async () => {
     const challenge = await requestCode("pending@example.com");
+    const config = await registrationConfig();
+    const usersBefore = (
+      dbModule.db
+        .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'USER'")
+        .get() as { count: number }
+    ).count;
     const payload = {
       username: "待审用户",
       realName: "测试成员",
@@ -390,7 +476,8 @@ describe("用户身份与审批生命周期", () => {
       email: "pending@example.com",
       password: "Registration123!",
       challengeId: challenge.challengeId,
-      code: challenge.code === "000000" ? "000001" : "000000"
+      code: challenge.code === "000000" ? "000001" : "000000",
+      expectedConfigRevision: config.revision
     };
     const bad = await app.inject({
       method: "POST",
@@ -407,7 +494,7 @@ describe("用户身份与审批生命周期", () => {
       (dbModule.db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'USER'").get() as {
         count: number;
       }).count
-    ).toBe(0);
+    ).toBe(usersBefore);
 
     const created = await app.inject({
       method: "POST",
@@ -417,8 +504,14 @@ describe("用户身份与审批生命周期", () => {
     expect(created.statusCode).toBe(201);
     expect(created.json().message).toBe("注册申请已提交，请等待管理员审核。");
     const user = dbModule.db
-      .prepare("SELECT status, username_normalized, email FROM users WHERE role = 'USER'")
-      .get() as { status: string; username_normalized: string; email: string };
+      .prepare(
+        "SELECT status, username_normalized, email FROM users WHERE id = ?"
+      )
+      .get(created.json().userId) as {
+        status: string;
+        username_normalized: string;
+        email: string;
+      };
     expect(user).toEqual({
       status: "PENDING_APPROVAL",
       username_normalized: "待审用户",
@@ -427,14 +520,16 @@ describe("用户身份与审批生命周期", () => {
     expect(
       dbModule.db
         .prepare(
-          `SELECT employee_number FROM pending_registration_employee_numbers`
+          `SELECT employee_number FROM pending_registration_employee_numbers
+           WHERE user_id = ?`
         )
-        .get()
+        .get(created.json().userId)
     ).toEqual({ employee_number: "10001001" });
   });
 
   it("注册标识冲突以 409 同时映射到对应字段", async () => {
     const challenge = await requestCode("conflict@example.com");
+    const config = await registrationConfig();
     const response = await app.inject({
       method: "POST",
       url: "/api/v1/auth/register",
@@ -445,7 +540,8 @@ describe("用户身份与审批生命周期", () => {
         email: "conflict@example.com",
         password: "ConflictPass123!",
         challengeId: challenge.challengeId,
-        code: challenge.code
+        code: challenge.code,
+        expectedConfigRevision: config.revision
       }
     });
     expect(response.statusCode).toBe(409);
@@ -510,7 +606,11 @@ describe("用户身份与审批生命周期", () => {
           url: "/api/v1/auth/registration-config"
         })
       ).json()
-    ).toEqual({ allowedEmailDomains: [] });
+    ).toMatchObject({
+      emailEnabled: true,
+      allowedEmailDomains: [],
+      revision: expect.any(Number)
+    });
   });
 
   it("审批通过后工号成为永久登录标识", async () => {
@@ -1259,8 +1359,103 @@ describe("用户身份与审批生命周期", () => {
     expect(reused.statusCode).toBe(400);
   });
 
+  it("系统管理员可为无邮箱用户生成一次性重置链接", async () => {
+    const { hashPassword, findAuthTokenUserId } = await import(
+      "../server/auth.js"
+    );
+    const userId = randomUUID();
+    const now = dbModule.nowIso();
+    dbModule.db
+      .prepare(
+        `INSERT INTO users(
+          id, username, username_normalized, email, display_name, password_hash,
+          role, status, approved_at, created_at, updated_at
+        ) VALUES(?, '无邮箱重置用户', '无邮箱重置用户', NULL, '无邮箱重置用户', ?,
+          'USER', 'ACTIVE', ?, ?, ?)`
+      )
+      .run(userId, await hashPassword("ResetLinkOld123!"), now, now, now);
+    const userCookie = await loginCookie(
+      "无邮箱重置用户",
+      "ResetLinkOld123!"
+    );
+    const forbidden = await app.inject({
+      method: "POST",
+      url: `/api/v1/admin/users/${userId}/password-reset-link`,
+      headers: { cookie: userCookie },
+      payload: {}
+    });
+    expect(forbidden.statusCode).toBe(403);
+    const adminCookie = await loginCookie("Administrator", "Admin12#$");
+
+    const first = await app.inject({
+      method: "POST",
+      url: `/api/v1/admin/users/${userId}/password-reset-link`,
+      headers: { cookie: adminCookie },
+      payload: {}
+    });
+    expect(first.statusCode).toBe(200);
+    const firstUrl = new URL(first.json().resetUrl);
+    const firstToken = new URLSearchParams(firstUrl.hash.slice(1)).get("token")!;
+    expect(firstUrl.pathname).toBe("/reset-password");
+    expect(findAuthTokenUserId(firstToken, "PASSWORD_RESET")).toBe(userId);
+
+    const second = await app.inject({
+      method: "POST",
+      url: `/api/v1/admin/users/${userId}/password-reset-link`,
+      headers: { cookie: adminCookie },
+      payload: {}
+    });
+    expect(second.statusCode).toBe(200);
+    const secondUrl = new URL(second.json().resetUrl);
+    const secondToken = new URLSearchParams(secondUrl.hash.slice(1)).get("token")!;
+    expect(findAuthTokenUserId(firstToken, "PASSWORD_RESET")).toBeNull();
+    expect(findAuthTokenUserId(secondToken, "PASSWORD_RESET")).toBe(userId);
+
+    const reset = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/reset-password",
+      payload: { token: secondToken, password: "ResetLinkFresh456!" }
+    });
+    expect(reset.statusCode).toBe(200);
+    expect(findAuthTokenUserId(secondToken, "PASSWORD_RESET")).toBeNull();
+    const audit = dbModule.db
+      .prepare(
+        `SELECT before_json, after_json FROM audit_logs
+         WHERE action = 'PASSWORD_RESET_LINK_CREATE'
+           AND entity_id = ?
+         ORDER BY created_at DESC LIMIT 1`
+      )
+      .get(userId) as { before_json: string | null; after_json: string | null };
+    expect(JSON.stringify(audit)).not.toContain(secondToken);
+    expect(JSON.stringify(audit)).not.toContain("/reset-password");
+  });
+
+  it("系统管理员不能代用户修改邮箱", async () => {
+    const adminCookie = await loginCookie("Administrator", "Admin12#$");
+    const userId = randomUUID();
+    const codeResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/admin/users/${userId}/email-change-code`,
+      headers: { cookie: adminCookie },
+      payload: { email: "assisted@example.com" }
+    });
+    const changeResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/admin/users/${userId}/change-email`,
+      headers: { cookie: adminCookie },
+      payload: {
+        email: null,
+        clearEmailConfirmed: true,
+        expectedConfigRevision: 1
+      }
+    });
+    expect(codeResponse.statusCode).toBe(404);
+    expect(changeResponse.statusCode).toBe(404);
+  });
+
   it("邮箱换绑只接受实际邮件中的动态验证码", async () => {
     const userCookie = await loginCookie("更新用户名");
+    const config = await registrationConfig();
     const response = await app.inject({
       method: "POST",
       url: "/api/v1/auth/email-change-code",
@@ -1287,7 +1482,8 @@ describe("用户身份与审批生命周期", () => {
         email: "changed@example.com",
         challengeId: response.json().challengeId,
         code,
-        currentPassword: "WrongPassword123!"
+        currentPassword: "WrongPassword123!",
+        expectedConfigRevision: config.revision
       }
     });
     expect(wrongPassword.statusCode).toBe(400);
@@ -1302,7 +1498,8 @@ describe("用户身份与审批生命周期", () => {
         email: "changed@example.com",
         challengeId: response.json().challengeId,
         code,
-        currentPassword: "Registration123!"
+        currentPassword: "Registration123!",
+        expectedConfigRevision: config.revision
       }
     });
     expect(changed.statusCode).toBe(200);
@@ -1460,6 +1657,7 @@ describe("用户身份与审批生命周期", () => {
       )
       .get() as { html: string };
     const code = email.html.match(/letter-spacing:6px">(\d{6})</)?.[1];
+    const config = await registrationConfig();
     const changedEmail = await app.inject({
       method: "POST",
       url: "/api/v1/auth/change-email",
@@ -1468,7 +1666,8 @@ describe("用户身份与审批生命周期", () => {
         email: "latest-revision@example.com",
         challengeId: emailCode.json().challengeId,
         code,
-        currentPassword: "Registration123!"
+        currentPassword: "Registration123!",
+        expectedConfigRevision: config.revision
       }
     });
     expect(changedEmail.statusCode).toBe(200);
@@ -1705,7 +1904,7 @@ describe("用户身份与审批生命周期", () => {
     expect(cannotEnableDeleted.statusCode).toBe(404);
     const cannotResetDeleted = await app.inject({
       method: "POST",
-      url: `/api/v1/admin/users/${created.userId}/reset-password`,
+      url: `/api/v1/admin/users/${created.userId}/password-reset-link`,
       headers: { cookie: adminCookie },
       payload: {}
     });

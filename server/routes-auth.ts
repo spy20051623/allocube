@@ -25,6 +25,7 @@ import {
   db,
   getAllowedEmailDomains,
   getPublicSiteOrigin,
+  getRegistrationConfigRevision,
   getSettings,
   nowIso,
   withImmediateTransaction
@@ -44,7 +45,10 @@ import {
   verifyEmailChallenge
 } from "./identity.js";
 import { createNotification, escapeHtml, queueEmail } from "./mailer.js";
-import { isMailServiceAvailable } from "./smtp-settings.js";
+import {
+  getSmtpSettingsRow,
+  isMailServiceAvailable
+} from "./smtp-settings.js";
 import { buildPasswordResetUrl } from "./security-urls.js";
 
 const passwordSchema = z.string().max(256).superRefine((value, context) => {
@@ -52,7 +56,6 @@ const passwordSchema = z.string().max(256).superRefine((value, context) => {
   if (message) context.addIssue({ code: "custom", message });
 });
 const emailSchema = z.string().trim().email().max(254).transform(normalizeEmail);
-const codeSchema = z.string().regex(/^\d{6}$/, "请输入6位验证码");
 const autoLogoutMinutesSchema = z.union([
   z.literal(0),
   z.literal(15),
@@ -82,10 +85,12 @@ type RegistrationPayload = {
   username: string;
   realName: string;
   employeeNumber: string;
-  email: string;
+  email: string | null;
   password: string;
-  challengeId: string;
-  code: string;
+  challengeId: string | null;
+  code: string | null;
+  withoutEmailConfirmed: boolean;
+  expectedConfigRevision: number | null;
 };
 
 function addRegistrationError(
@@ -127,25 +132,52 @@ function readRegistrationPayload(input: unknown) {
       : {};
   const errors: RegistrationFieldErrors = {};
   const read = (
-    field: keyof RegistrationPayload,
-    uiField: RegistrationField,
-    missingMessage = "请填写此项"
+    field: "username" | "realName" | "employeeNumber" | "password",
+    uiField: RegistrationField
   ) => {
     const value = record[field];
     if (typeof value === "string") return value;
-    addRegistrationError(errors, uiField, missingMessage);
+    addRegistrationError(errors, uiField, "请填写此项");
     return "";
   };
   const payload: RegistrationPayload = {
     username: read("username", "username"),
     realName: read("realName", "realName"),
     employeeNumber: read("employeeNumber", "employeeNumber"),
-    email: read("email", "email"),
+    email:
+      typeof record.email === "string" && record.email.trim()
+        ? record.email
+        : null,
     password: read("password", "password"),
-    challengeId: read("challengeId", "code", "验证码无效，请重新输入"),
-    code: read("code", "code", "请输入6位验证码")
+    challengeId:
+      typeof record.challengeId === "string" ? record.challengeId : null,
+    code: typeof record.code === "string" ? record.code : null,
+    withoutEmailConfirmed: record.withoutEmailConfirmed === true,
+    expectedConfigRevision:
+      typeof record.expectedConfigRevision === "number" &&
+      Number.isInteger(record.expectedConfigRevision)
+        ? record.expectedConfigRevision
+        : null
   };
   return { payload, errors };
+}
+
+function registrationConfigPayload() {
+  return {
+    emailEnabled: Boolean(getSmtpSettingsRow().enabled),
+    allowedEmailDomains: getAllowedEmailDomains(),
+    revision: getRegistrationConfigRevision()
+  };
+}
+
+class RegistrationConfigChangedError extends Error {}
+
+function sendRegistrationConfigChanged(reply: FastifyReply) {
+  return reply.code(409).send({
+    error: "邮件设置已更新，请按最新规则确认后重试",
+    code: "REGISTRATION_CONFIG_CHANGED",
+    registrationConfig: registrationConfigPayload()
+  });
 }
 
 function collectRegistrationAvailabilityErrors(
@@ -343,14 +375,20 @@ function notifyUpdatedRegistration(name: string) {
 }
 
 export function registerAuthRoutes(app: FastifyInstance) {
-  app.get("/api/v1/auth/registration-config", async () => ({
-    allowedEmailDomains: getAllowedEmailDomains()
-  }));
+  app.get("/api/v1/auth/registration-config", async () =>
+    registrationConfigPayload()
+  );
 
   app.post(
     "/api/v1/auth/registration-email-code",
     { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } },
     async (request, reply) => {
+      if (!getSmtpSettingsRow().enabled) {
+        return reply.code(409).send({
+          error: "邮件功能当前未启用",
+          code: "EMAIL_FEATURE_DISABLED"
+        });
+      }
       if (!isMailServiceAvailable()) {
         return reply.code(503).send({
           error: "邮件服务暂不可用，请联系管理员",
@@ -400,6 +438,43 @@ export function registerAuthRoutes(app: FastifyInstance) {
     { config: { rateLimit: { max: 8, timeWindow: "15 minutes" } } },
     async (request, reply) => {
       const { payload: body, errors } = readRegistrationPayload(request.body);
+      const registrationConfig = registrationConfigPayload();
+      if (
+        body.expectedConfigRevision === null ||
+        body.expectedConfigRevision !== registrationConfig.revision
+      ) {
+        return sendRegistrationConfigChanged(reply);
+      }
+      if (
+        !registrationConfig.emailEnabled &&
+        (body.email !== null ||
+          body.challengeId !== null ||
+          body.code !== null)
+      ) {
+        return reply.code(409).send({
+          error: "邮件功能当前未启用，请按最新注册规则重试",
+          code: "EMAIL_FEATURE_DISABLED"
+        });
+      }
+      if (
+        registrationConfig.emailEnabled &&
+        body.email === null &&
+        !body.withoutEmailConfirmed
+      ) {
+        return reply.code(400).send({
+          error: "请确认不填写邮箱的影响",
+          code: "EMAIL_OMISSION_CONFIRMATION_REQUIRED"
+        });
+      }
+      if (
+        registrationConfig.emailEnabled &&
+        body.email === null &&
+        (body.challengeId !== null || body.code !== null)
+      ) {
+        return sendRegistrationErrors(reply, {
+          code: ["未填写邮箱时不需要验证码"]
+        });
+      }
       let username: ReturnType<typeof normalizeUsername> | null = null;
       let employeeNumber: string | null = null;
       let email: string | null = null;
@@ -428,19 +503,21 @@ export function registerAuthRoutes(app: FastifyInstance) {
         hasFormatError = true;
       }
 
-      const parsedEmail = emailSchema.safeParse(body.email);
-      if (parsedEmail.success) {
-        email = parsedEmail.data;
-        try {
-          validateEmailDomain(email);
-        } catch (error) {
-          if (!(error instanceof IdentityError)) throw error;
-          addRegistrationError(errors, "email", error.message);
+      if (registrationConfig.emailEnabled && body.email !== null) {
+        const parsedEmail = emailSchema.safeParse(body.email);
+        if (parsedEmail.success) {
+          email = parsedEmail.data;
+          try {
+            validateEmailDomain(email);
+          } catch (error) {
+            if (!(error instanceof IdentityError)) throw error;
+            addRegistrationError(errors, "email", error.message);
+            hasFormatError = true;
+          }
+        } else {
+          addRegistrationError(errors, "email", "请输入有效的邮箱地址");
           hasFormatError = true;
         }
-      } else {
-        addRegistrationError(errors, "email", "请输入有效的邮箱地址");
-        hasFormatError = true;
       }
 
       const passwordChecks = getPasswordChecks(body.password, {
@@ -452,26 +529,33 @@ export function registerAuthRoutes(app: FastifyInstance) {
         hasFormatError = true;
       }
 
-      const challengeIdValid = z.string().uuid().safeParse(body.challengeId).success;
-      if (!challengeIdValid) {
-        addRegistrationError(errors, "code", "验证码无效，请重新输入");
-        hasFormatError = true;
-      }
-      if (!/^\d{6}$/.test(body.code)) {
-        addRegistrationError(errors, "code", "请输入6位验证码");
-        hasFormatError = true;
+      const emailWasProvided =
+        registrationConfig.emailEnabled && body.email !== null;
+      const challengeIdValid =
+        emailWasProvided &&
+        z.string().uuid().safeParse(body.challengeId).success;
+      if (emailWasProvided) {
+        if (!challengeIdValid) {
+          addRegistrationError(errors, "code", "验证码无效，请重新输入");
+          hasFormatError = true;
+        }
+        if (!body.code || !/^\d{6}$/.test(body.code)) {
+          addRegistrationError(errors, "code", "请输入6位验证码");
+          hasFormatError = true;
+        }
       }
 
       let challengeVerified = false;
       if (
         challengeIdValid &&
+        body.code !== null &&
         /^\d{6}$/.test(body.code) &&
         email &&
         !errors.email
       ) {
         try {
           verifyEmailChallenge(
-            body.challengeId,
+            body.challengeId!,
             email,
             body.code,
             "REGISTER",
@@ -485,7 +569,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
         }
       }
 
-      const hasConflict = challengeVerified
+      const hasConflict = email === null || challengeVerified
         ? collectRegistrationAvailabilityErrors(
             username,
             email,
@@ -504,22 +588,30 @@ export function registerAuthRoutes(app: FastifyInstance) {
 
       const validUsername = username!;
       const validEmployeeNumber = employeeNumber!;
-      const validEmail = email!;
       const passwordHash = await hashPassword(body.password);
       const userId = randomUUID();
       const now = nowIso();
 
       try {
         withImmediateTransaction(() => {
-          verifyEmailChallenge(
-            body.challengeId,
-            validEmail,
-            body.code,
-            "REGISTER",
-            null
-          );
+          const latestConfig = registrationConfigPayload();
+          if (
+            latestConfig.revision !== body.expectedConfigRevision ||
+            latestConfig.emailEnabled !== registrationConfig.emailEnabled
+          ) {
+            throw new RegistrationConfigChangedError();
+          }
+          if (email) {
+            verifyEmailChallenge(
+              body.challengeId!,
+              email,
+              body.code!,
+              "REGISTER",
+              null
+            );
+          }
           ensureUsernameAvailable(validUsername.normalized);
-          ensureEmailAvailable(validEmail);
+          if (email) ensureEmailAvailable(email);
           ensureEmployeeNumberAvailable(validEmployeeNumber);
           db.prepare(
             `INSERT INTO users(
@@ -530,7 +622,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
             userId,
             validUsername.display,
             validUsername.normalized,
-            validEmail,
+            email,
             realName,
             passwordHash,
             now,
@@ -542,9 +634,12 @@ export function registerAuthRoutes(app: FastifyInstance) {
             ) VALUES(?, ?, ?, ?)`
           ).run(userId, validEmployeeNumber, now, now);
           insertRegistrationRevision(userId, 1);
-          consumeEmailChallenge(body.challengeId);
+          if (email) consumeEmailChallenge(body.challengeId!);
         });
       } catch (error) {
+        if (error instanceof RegistrationConfigChangedError) {
+          return sendRegistrationConfigChanged(reply);
+        }
         if (error instanceof IdentityError) {
           const field = registrationFieldForIdentityError(error);
           if (field) {
@@ -558,7 +653,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
         throw error;
       }
 
-      addAudit(null, "USER_REGISTER", "user", userId, undefined, undefined);
+      addAudit(null, "USER_REGISTER", "user", userId, undefined, {
+        emailOmitted: email === null
+      });
       notifyApprovalQueue(userId, realName);
       return reply.code(201).send({
         message: "注册申请已提交，请等待管理员审核。",
@@ -1156,6 +1253,12 @@ export function registerAuthRoutes(app: FastifyInstance) {
     async (request, reply) => {
     const auth = requireSession(request, reply);
     if (!auth) return;
+    if (!getSmtpSettingsRow().enabled) {
+      return reply.code(409).send({
+        error: "邮件功能当前未启用",
+        code: "EMAIL_FEATURE_DISABLED"
+      });
+    }
     if (!isMailServiceAvailable()) {
       return reply.code(503).send({
         error: "邮件服务暂不可用，请联系管理员",
@@ -1194,87 +1297,220 @@ export function registerAuthRoutes(app: FastifyInstance) {
     "/api/v1/auth/change-email",
     { config: { rateLimit: { max: 6, timeWindow: "15 minutes" } } },
     async (request, reply) => {
-    const auth = requireSession(request, reply);
-    if (!auth) return;
-    if (!auth.user.email) return reply.code(400).send({ error: "当前账号没有邮箱" });
-    const body = z
-      .object({
-        email: emailSchema,
-        challengeId: z.string().uuid(),
-        code: codeSchema,
-        currentPassword: z.string().min(1).max(256)
-      })
-      .parse(request.body);
-    const passwordRow = db
-      .prepare("SELECT password_hash FROM users WHERE id = ?")
-      .get(auth.user.id) as { password_hash: string };
-    if (!(await checkPassword(passwordRow.password_hash, body.currentPassword))) {
-      return reply.code(400).send({
-        error: "当前密码不正确",
-        code: "CURRENT_PASSWORD_INVALID",
-        fieldErrors: { currentPassword: ["当前密码不正确"] }
-      });
-    }
-    if (auth.user.status !== "ACTIVE") {
+      const auth = requireSession(request, reply);
+      if (!auth) return;
       if (
-        !["PENDING_APPROVAL", "CHANGES_REQUESTED"].includes(
+        !["ACTIVE", "PENDING_APPROVAL", "CHANGES_REQUESTED"].includes(
           auth.user.status
         )
       ) {
-        return reply.code(403).send({ error: "当前账号不能更换邮箱" });
+        return reply.code(403).send({ error: "当前账号不能修改邮箱" });
       }
-      verifyEmailChallenge(
-        body.challengeId,
-        body.email,
-        body.code,
-        "EMAIL_CHANGE",
-        auth.user.id
-      );
-      const oldEmail = auth.user.email;
+      const rawBody = z
+        .object({
+          email: z.union([z.string().trim().max(254), z.null()]),
+          challengeId: z.string().uuid().nullable().optional(),
+          code: z.string().nullable().optional(),
+          currentPassword: z.string().min(1).max(256),
+          clearEmailConfirmed: z.boolean().optional().default(false),
+          expectedConfigRevision: z.number().int().min(1)
+        })
+        .parse(request.body);
+      const configAtSubmit = registrationConfigPayload();
+      if (rawBody.expectedConfigRevision !== configAtSubmit.revision) {
+        return sendRegistrationConfigChanged(reply);
+      }
+      let targetEmail: string | null = null;
+      if (typeof rawBody.email === "string" && rawBody.email) {
+        const parsedEmail = emailSchema.safeParse(rawBody.email);
+        if (!parsedEmail.success) {
+          return reply.code(400).send({
+            error: "邮箱未通过检查",
+            code: "EMAIL_CHANGE_VALIDATION_FAILED",
+            fieldErrors: { email: ["请输入有效的邮箱地址"] }
+          });
+        }
+        targetEmail = parsedEmail.data;
+      }
+      if (!configAtSubmit.emailEnabled && targetEmail) {
+        return reply.code(409).send({
+          error: "邮件功能当前未启用，只能清空已有邮箱",
+          code: "EMAIL_FEATURE_DISABLED"
+        });
+      }
+      if (targetEmail === null && !rawBody.clearEmailConfirmed) {
+        return reply.code(400).send({
+          error: "请确认清空邮箱的影响",
+          code: "EMAIL_CLEAR_CONFIRMATION_REQUIRED"
+        });
+      }
+      if (
+        targetEmail === null &&
+        (rawBody.challengeId != null || rawBody.code != null)
+      ) {
+        return reply.code(400).send({
+          error: "邮箱未通过检查",
+          code: "EMAIL_CHANGE_VALIDATION_FAILED",
+          fieldErrors: { code: ["清空邮箱时不需要验证码"] }
+        });
+      }
+      if (
+        targetEmail &&
+        (!rawBody.challengeId ||
+          !rawBody.code ||
+          !/^\d{6}$/.test(rawBody.code))
+      ) {
+        return reply.code(400).send({
+          error: "邮箱未通过检查",
+          code: "EMAIL_CHANGE_VALIDATION_FAILED",
+          fieldErrors: { code: ["验证码无效，请重新输入"] }
+        });
+      }
+      const passwordRow = db
+        .prepare("SELECT password_hash FROM users WHERE id = ?")
+        .get(auth.user.id) as { password_hash: string };
+      if (!(await checkPassword(passwordRow.password_hash, rawBody.currentPassword))) {
+        return reply.code(400).send({
+          error: "当前密码不正确",
+          code: "CURRENT_PASSWORD_INVALID",
+          fieldErrors: { currentPassword: ["当前密码不正确"] }
+        });
+      }
+      const current = db
+        .prepare(
+          `SELECT email,
+            COALESCE(
+              (SELECT MAX(ended_at) FROM email_history
+               WHERE user_id = users.id),
+              created_at
+            ) AS email_started_at
+           FROM users WHERE id = ?`
+        )
+        .get(auth.user.id) as {
+          email: string | null;
+          email_started_at: string;
+        };
+      if (targetEmail === current.email) {
+        return reply.code(400).send({
+          error: targetEmail ? "新邮箱与当前邮箱相同" : "当前账号没有邮箱"
+        });
+      }
       try {
-        const result = updatePendingRegistration(auth.user.id, () => {
-          ensureEmailAvailable(body.email, auth.user.id);
+        if (targetEmail) {
+          validateEmailDomain(targetEmail);
+          ensureEmailAvailable(targetEmail, auth.user.id);
           verifyEmailChallenge(
-            body.challengeId,
-            body.email,
-            body.code,
+            rawBody.challengeId!,
+            targetEmail,
+            rawBody.code!,
             "EMAIL_CHANGE",
             auth.user.id
           );
+        }
+        const updateEmail = () => {
+          const latestConfig = registrationConfigPayload();
+          if (
+            latestConfig.revision !== rawBody.expectedConfigRevision ||
+            latestConfig.emailEnabled !== configAtSubmit.emailEnabled
+          ) {
+            throw new RegistrationConfigChangedError();
+          }
+          if (!latestConfig.emailEnabled && targetEmail) {
+            throw new RegistrationConfigChangedError();
+          }
+          const latestUser = db
+            .prepare("SELECT email FROM users WHERE id = ?")
+            .get(auth.user.id) as { email: string | null } | undefined;
+          if (!latestUser || latestUser.email !== current.email) {
+            throw new IdentityError("邮箱已被更新，请刷新后重试", 409);
+          }
+          if (targetEmail) {
+            ensureEmailAvailable(targetEmail, auth.user.id);
+            verifyEmailChallenge(
+              rawBody.challengeId!,
+              targetEmail,
+              rawBody.code!,
+              "EMAIL_CHANGE",
+              auth.user.id
+            );
+          }
+          const now = nowIso();
+          if (current.email) {
+            db.prepare(
+              `INSERT INTO email_history(
+                id, user_id, email, started_at, ended_at, created_at
+               ) VALUES(?, ?, ?, ?, ?, ?)`
+            ).run(
+              randomUUID(),
+              auth.user.id,
+              current.email,
+              current.email_started_at,
+              now,
+              now
+            );
+          }
           db.prepare(
             `UPDATE users SET email = ?,
               version = version + 1, updated_at = ? WHERE id = ?`
-          ).run(body.email, nowIso(), auth.user.id);
-          consumeEmailChallenge(body.challengeId);
+          ).run(targetEmail, now, auth.user.id);
+          if (targetEmail) consumeEmailChallenge(rawBody.challengeId!);
           db.prepare("DELETE FROM auth_tokens WHERE user_id = ?").run(
             auth.user.id
           );
           db.prepare(
             "DELETE FROM sessions WHERE user_id = ? AND id != ?"
           ).run(auth.user.id, auth.sessionId);
-        });
-        queueEmail(
-          oldEmail,
-          "Allocube 邮箱已变更",
-          "你的账号已绑定新的通知邮箱。"
-        );
-        queueEmail(
-          body.email,
-          "Allocube 邮箱已变更",
-          "此邮箱现已成为账号的通知和密码找回邮箱。",
-          auth.user.id
-        );
-        notifyUpdatedRegistration(result.displayName);
+        };
+
+        const pending = auth.user.status !== "ACTIVE";
+        const result = pending
+          ? updatePendingRegistration(auth.user.id, updateEmail)
+          : withImmediateTransaction(() => {
+              updateEmail();
+              return null;
+            });
+
+        if (current.email && configAtSubmit.emailEnabled) {
+          queueEmail(
+            current.email,
+            "Allocube 邮箱已移除",
+            targetEmail
+              ? "你的账号已绑定新的通知邮箱。"
+              : "此邮箱已从你的 Allocube 账号中移除。"
+          );
+        }
+        if (targetEmail) {
+          queueEmail(
+            targetEmail,
+            "Allocube 邮箱已变更",
+            "此邮箱现已成为账号的通知和密码找回邮箱。",
+            auth.user.id
+          );
+        }
+        if (result) notifyUpdatedRegistration(result.displayName);
         addAudit(
           auth.user.id,
-          "REGISTRATION_PROFILE_EDIT",
+          pending ? "REGISTRATION_PROFILE_EDIT" : "EMAIL_CHANGE",
           "user",
           auth.user.id,
           undefined,
-          { applicationRevision: result.revision, emailChanged: true }
+          {
+            emailChanged: true,
+            emailCleared: targetEmail === null,
+            ...(result ? { applicationRevision: result.revision } : {})
+          }
         );
-        return { message: "邮箱已更新，注册信息已重新提交" };
+        return {
+          message: result
+            ? "邮箱已更新，注册信息已重新提交"
+            : targetEmail
+              ? "邮箱已更新"
+              : "邮箱已清空"
+        };
       } catch (error) {
+        if (error instanceof RegistrationConfigChangedError) {
+          return sendRegistrationConfigChanged(reply);
+        }
         if (error instanceof IdentityError) {
           return reply.code(error.statusCode === 409 ? 409 : 400).send({
             error: "邮箱未通过检查",
@@ -1285,63 +1521,18 @@ export function registerAuthRoutes(app: FastifyInstance) {
         throw error;
       }
     }
-    const emailRow = db
-      .prepare(
-        `SELECT COALESCE(
-            (SELECT MAX(ended_at) FROM email_history WHERE user_id = users.id),
-            created_at
-          ) AS email_started_at
-         FROM users WHERE id = ?`
-      )
-      .get(auth.user.id) as { email_started_at: string };
-    verifyEmailChallenge(
-      body.challengeId,
-      body.email,
-      body.code,
-      "EMAIL_CHANGE",
-      auth.user.id
-    );
-    const oldEmail = auth.user.email;
-    withImmediateTransaction(() => {
-      ensureEmailAvailable(body.email, auth.user.id);
-      verifyEmailChallenge(
-        body.challengeId,
-        body.email,
-        body.code,
-        "EMAIL_CHANGE",
-        auth.user.id
-      );
-      const now = nowIso();
-      db.prepare(
-        `INSERT INTO email_history(id, user_id, email, started_at, ended_at, created_at)
-         VALUES(?, ?, ?, ?, ?, ?)`
-      ).run(randomUUID(), auth.user.id, oldEmail, emailRow.email_started_at, now, now);
-      db.prepare(
-        `UPDATE users SET email = ?,
-          version = version + 1, updated_at = ? WHERE id = ?`
-      ).run(
-        body.email,
-        now,
-        auth.user.id
-      );
-      consumeEmailChallenge(body.challengeId);
-      db.prepare("DELETE FROM auth_tokens WHERE user_id = ?").run(auth.user.id);
-      db.prepare("DELETE FROM sessions WHERE user_id = ? AND id != ?").run(
-        auth.user.id,
-        auth.sessionId
-      );
-    });
-    queueEmail(oldEmail, "Allocube 邮箱已变更", "你的账号已绑定新的通知邮箱。");
-    queueEmail(body.email, "Allocube 邮箱已变更", "此邮箱现已成为账号的通知和密码找回邮箱。", auth.user.id);
-    addAudit(auth.user.id, "EMAIL_CHANGE", "user", auth.user.id, undefined, undefined);
-    return { message: "邮箱已更新" };
-    }
   );
 
   app.post(
     "/api/v1/auth/forgot-password",
     { config: { rateLimit: { max: 5, timeWindow: "30 minutes" } } },
     async (request, reply) => {
+      if (!getSmtpSettingsRow().enabled) {
+        return reply.code(503).send({
+          error: "邮件功能当前未启用，请联系管理员获取密码重置链接",
+          code: "EMAIL_FEATURE_DISABLED"
+        });
+      }
       if (!isMailServiceAvailable()) {
         return reply.code(503).send({
           error: "邮件服务暂不可用，请联系管理员",

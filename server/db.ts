@@ -261,6 +261,47 @@ export async function initializeDatabase() {
       throw error;
     }
   }
+  if (schemaVersion.version === 12 && FINAL_SCHEMA_VERSION >= 13) {
+    db.exec("BEGIN EXCLUSIVE");
+    try {
+      db.exec(`
+        ALTER TABLE registration_revisions
+          RENAME TO registration_revisions_v12;
+        CREATE TABLE registration_revisions (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          revision INTEGER NOT NULL,
+          username TEXT NOT NULL,
+          display_name TEXT NOT NULL,
+          email TEXT,
+          employee_number TEXT NOT NULL,
+          submitted_at TEXT NOT NULL,
+          UNIQUE(user_id, revision)
+        );
+        INSERT INTO registration_revisions(
+          id, user_id, revision, username, display_name, email,
+          employee_number, submitted_at
+        )
+        SELECT
+          id, user_id, revision, username, display_name, email,
+          employee_number, submitted_at
+        FROM registration_revisions_v12;
+        DROP TABLE registration_revisions_v12;
+      `);
+      db.prepare(
+        `INSERT OR IGNORE INTO settings(key, value, updated_at)
+         VALUES('registration_config_revision', '1', ?)`
+      ).run(nowIso());
+      db.prepare(
+        "INSERT INTO schema_migrations(version, applied_at) VALUES(13, ?)"
+      ).run(nowIso());
+      db.exec("COMMIT");
+      schemaVersion = { version: 13 };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
   if (schemaVersion.version !== FINAL_SCHEMA_VERSION) {
     throw new Error(
       `数据库结构版本不匹配：当前 ${schemaVersion.version ?? 0}，需要 ${FINAL_SCHEMA_VERSION}。开发阶段请先重置数据库。`
@@ -312,6 +353,10 @@ export async function initializeDatabase() {
       adoptExistingPersistentConfiguration();
     }
   }
+  db.prepare(
+    `INSERT OR IGNORE INTO settings(key, value, updated_at)
+     VALUES('registration_config_revision', '1', ?)`
+  ).run(nowIso());
   assertPersistentConfiguration();
   migrateDevelopmentSmtpKey();
   cleanupExpiredSecurityRecords();
@@ -372,6 +417,7 @@ async function initializePersistentConfiguration() {
       timezone: "Asia/Shanghai",
       public_site_origin: siteOrigin,
       allowed_email_domains: JSON.stringify(allowedEmailDomains),
+      registration_config_revision: "1",
       settings_version: "1"
     })) {
       insertSetting.run(key, value, initializedAt);
@@ -433,6 +479,7 @@ function adoptExistingPersistentConfiguration() {
         ? ""
         : "http://localhost:5173",
       allowed_email_domains: "[]",
+      registration_config_revision: "1",
       settings_version: "1"
     };
     for (const [key, value] of Object.entries(compatibilityDefaults)) {
@@ -471,6 +518,7 @@ function assertPersistentConfiguration() {
     "timezone",
     "public_site_origin",
     "allowed_email_domains",
+    "registration_config_revision",
     "settings_version"
   ];
   const rows = db
@@ -560,6 +608,19 @@ export function getAllowedEmailDomains() {
     throw new Error("邮箱域名白名单配置已损坏");
   }
   return normalizeAllowedEmailDomains(parsed);
+}
+
+export function getRegistrationConfigRevision() {
+  return getSettingNumber("registration_config_revision", 1);
+}
+
+export function incrementRegistrationConfigRevision(at = nowIso()) {
+  db.prepare(
+    `UPDATE settings
+     SET value = CAST(value AS INTEGER) + 1, updated_at = ?
+     WHERE key = 'registration_config_revision'`
+  ).run(at);
+  return getRegistrationConfigRevision();
 }
 
 export function getSettings() {

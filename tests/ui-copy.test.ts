@@ -156,7 +156,7 @@ describe("角色化界面文案", () => {
     expect(source).toContain('<Trash2 size={15} />');
     const applicationList = source.slice(
       source.indexOf('className="user-application-list"'),
-      source.indexOf("{emailChangeUser &&")
+      source.indexOf("{canManage && passwordResetLink && (")
     );
     expect(applicationList).not.toContain("<span>类型</span>");
     expect(applicationList).toContain("<span>状态</span>");
@@ -585,16 +585,10 @@ describe("角色化界面文案", () => {
     expect(source).toContain('aria-modal="true"');
   });
 
-  it("管理员协助换绑邮箱复用单个邮箱验证浮窗", () => {
+  it("用户管理不提供管理员代改邮箱入口", () => {
     const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    expect(source).toContain('title="协助换绑邮箱"');
-    expect(source).toContain(
-      "codeEndpoint={`/admin/users/${emailChangeUser.id}/email-change-code`}"
-    );
-    expect(source).toContain(
-      "changeEndpoint={`/admin/users/${emailChangeUser.id}/change-email`}"
-    );
-    expect(source).toContain('submitLabel="确认换绑"');
-    expect(source).not.toContain('title: "验证新邮箱"');
+    expect(source).not.toContain('title="修改用户邮箱"');
+    expect(source).not.toContain("/admin/users/${emailChangeUser.id}/email-change-code");
+    expect(source).not.toContain("/admin/users/${emailChangeUser.id}/change-email");
   });
 });

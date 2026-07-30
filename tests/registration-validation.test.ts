@@ -67,6 +67,25 @@ describe("注册静态校验", () => {
     expect(validateEmail("user@example.com", ["example.com"])).toEqual([]);
   });
 
+  it("邮件可选或关闭时不要求邮箱和验证码", () => {
+    const blankEmail = validForm({
+      email: "",
+      challengeId: "",
+      challengeEmail: "",
+      code: ""
+    });
+    expect(validateRegistrationForm(blankEmail, ["example.com"], true)).toEqual(
+      {}
+    );
+    expect(
+      validateRegistrationForm(
+        { ...blankEmail, email: "不会提交@example.com" },
+        ["example.com"],
+        false
+      )
+    ).toEqual({});
+  });
+
   it("只接受两种工号格式", () => {
     expect(isEmployeeNumberValid("12345678")).toBe(true);
     expect(isEmployeeNumberValid("wx123456")).toBe(true);

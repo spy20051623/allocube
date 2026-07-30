@@ -92,7 +92,8 @@ export function validateEmail(value: string, allowedDomains: string[]) {
 export function validateRegistrationField(
   field: RegistrationField,
   values: RegistrationFormValues,
-  allowedDomains: string[]
+  allowedDomains: string[],
+  emailEnabled = true
 ): string[] {
   switch (field) {
     case "username":
@@ -102,8 +103,10 @@ export function validateRegistrationField(
     case "employeeNumber":
       return validateEmployeeNumber(values.employeeNumber);
     case "email":
+      if (!emailEnabled || !values.email.trim()) return [];
       return validateEmail(values.email, allowedDomains);
     case "code":
+      if (!emailEnabled || !values.email.trim()) return [];
       return values.code.length === 6 ? [] : ["请输入6位验证码"];
     case "password": {
       const failed = getPasswordChecks(values.password, {
@@ -122,11 +125,17 @@ export function validateRegistrationField(
 
 export function validateRegistrationForm(
   values: RegistrationFormValues,
-  allowedDomains: string[]
+  allowedDomains: string[],
+  emailEnabled = true
 ) {
   const errors: RegistrationFieldErrors = {};
   for (const field of registrationFields) {
-    const fieldErrors = validateRegistrationField(field, values, allowedDomains);
+    const fieldErrors = validateRegistrationField(
+      field,
+      values,
+      allowedDomains,
+      emailEnabled
+    );
     if (fieldErrors.length) errors[field] = fieldErrors;
   }
   return errors;

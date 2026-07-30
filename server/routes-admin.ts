@@ -17,10 +17,10 @@ import {
   currentMinuteIso,
   db,
   getAdminSettings,
-  getAllowedEmailDomains,
   getMachineAccessRevision,
   getPublicSiteOrigin,
   getScheduleRevision,
+  incrementRegistrationConfigRevision,
   nowIso,
   parseTags,
   withImmediateTransaction
@@ -34,15 +34,10 @@ import {
 } from "./mailer.js";
 import {
   IdentityError,
-  assertEmailChallengeCanBeSent,
-  consumeEmailChallenge,
-  createEmailChallenge,
   deleteUnapprovedUser,
   ensureEmployeeNumberAvailable,
   ensureEmailAvailable,
-  ensureUsernameAvailable,
-  normalizeEmail,
-  verifyEmailChallenge
+  ensureUsernameAvailable
 } from "./identity.js";
 import { BusinessError } from "./business-error.js";
 import {
@@ -944,160 +939,68 @@ export function registerAdminRoutes(
     return { deleted: true };
   });
 
-  app.post("/api/v1/admin/users/:id/reset-password", async (request, reply) => {
-    const auth = requireSystemAdmin(request, reply);
-    if (!auth) return;
-    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    const user = db
-      .prepare(
-        `SELECT u.email FROM users u
-         WHERE u.id = ?
-           AND NOT EXISTS (
-             SELECT 1 FROM deleted_user_tombstones dut WHERE dut.user_id = u.id
-           )`
-      )
-      .get(id) as
-      | { email: string | null }
-      | undefined;
-    if (!user) return reply.code(404).send({ error: "用户不存在" });
-    if (!user.email) return reply.code(400).send({ error: "该账号没有邮箱，请使用服务器恢复命令" });
-    if (!isMailServiceAvailable()) {
-      return reply.code(503).send({
-        error: "邮件服务暂不可用，请先在系统设置中配置",
-        code: "MAIL_SERVICE_UNAVAILABLE"
-      });
-    }
-    const siteOrigin = getPublicSiteOrigin();
-    if (!siteOrigin) {
-      return reply.code(503).send({
-        error: "请先在系统设置中配置站点地址",
-        code: "SITE_ORIGIN_NOT_CONFIGURED"
-      });
-    }
-    const token = createAuthToken(id, "PASSWORD_RESET", 30);
-    queueEmail(
-      user.email,
-      "管理员已为你发起密码重置",
-      `<h2>重置密码</h2><p>请在 30 分钟内打开：</p>
-       <p><a href="${escapeHtml(buildPasswordResetUrl(siteOrigin, token))}">设置新密码</a></p>`,
-      id,
-      new Date(Date.now() + 30 * 60 * 1000).toISOString()
-    );
-    addAudit(auth.user.id, "PASSWORD_RESET_REQUEST", "user", id, undefined, undefined);
-    return { message: "密码重置邮件已发送" };
-  });
-
   app.post(
-    "/api/v1/admin/users/:id/email-change-code",
-    { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } },
+    "/api/v1/admin/users/:id/password-reset-link",
+    { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } },
     async (request, reply) => {
     const auth = requireSystemAdmin(request, reply);
     if (!auth) return;
-    if (!isMailServiceAvailable()) {
-      return reply.code(503).send({
-        error: "邮件服务暂不可用，请先在系统设置中配置",
-        code: "MAIL_SERVICE_UNAVAILABLE"
-      });
-    }
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    const { email: rawEmail } = z
-      .object({ email: z.string().trim().email().max(254) })
-      .parse(request.body);
-    const email = normalizeEmail(rawEmail);
     const user = db
       .prepare(
         `SELECT u.id FROM users u
-         WHERE u.id = ? AND u.role = 'USER'
+         WHERE u.id = ? AND u.role = 'USER' AND u.status = 'ACTIVE'
            AND NOT EXISTS (
              SELECT 1 FROM deleted_user_tombstones dut WHERE dut.user_id = u.id
            )`
       )
       .get(id);
-    if (!user) return reply.code(404).send({ error: "普通用户不存在" });
-    const allowedEmailDomains = getAllowedEmailDomains();
-    if (allowedEmailDomains.length) {
-      const domain = email.split("@")[1];
-      if (!allowedEmailDomains.includes(domain)) {
-        return reply.code(400).send({ error: "该邮箱域名不在允许范围内" });
-      }
+    if (!user) {
+      return reply.code(404).send({ error: "已启用的普通用户不存在" });
     }
-    ensureEmailAvailable(email, id);
-    assertEmailChallengeCanBeSent(email, "EMAIL_CHANGE", id);
-    const challenge = createEmailChallenge(email, "EMAIL_CHANGE", id);
-    queueEmail(
-      email,
-      "Allocube 邮箱验证码",
-      `<h2>管理员协助换绑邮箱</h2><p>验证码：</p>
-       <p style="font-size:28px;font-weight:700;letter-spacing:6px">${challenge.code}</p>
-       <p>请将验证码提供给正在协助你的管理员，10 分钟内有效。</p>`,
+    const siteOrigin = getPublicSiteOrigin();
+    if (!siteOrigin) {
+      return reply.code(409).send({
+        error: "请先在系统设置中配置站点地址",
+        code: "PUBLIC_SITE_ORIGIN_REQUIRED"
+      });
+    }
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const token = withImmediateTransaction(() => {
+      const latestUser = db
+        .prepare(
+          `SELECT 1 FROM users u
+           WHERE u.id = ? AND u.role = 'USER' AND u.status = 'ACTIVE'
+             AND NOT EXISTS (
+               SELECT 1 FROM deleted_user_tombstones dut
+               WHERE dut.user_id = u.id
+             )`
+        )
+        .get(id);
+      if (!latestUser) {
+        throw new BusinessError("已启用的普通用户不存在", 404);
+      }
+      db.prepare(
+        `DELETE FROM auth_tokens
+         WHERE user_id = ? AND kind = 'PASSWORD_RESET' AND used_at IS NULL`
+      ).run(id);
+      return createAuthToken(id, "PASSWORD_RESET", 30);
+    });
+    addAudit(
+      auth.user.id,
+      "PASSWORD_RESET_LINK_CREATE",
+      "user",
       id,
-      challenge.expiresAt
+      undefined,
+      { expiresInMinutes: 30 }
     );
+    reply.header("Cache-Control", "no-store");
     return {
-      challengeId: challenge.id,
-      expiresAt: challenge.expiresAt
+      resetUrl: buildPasswordResetUrl(siteOrigin, token),
+      expiresAt
     };
     }
   );
-
-  app.post("/api/v1/admin/users/:id/change-email", async (request, reply) => {
-    const auth = requireSystemAdmin(request, reply);
-    if (!auth) return;
-    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    const body = z
-      .object({
-        email: z.string().trim().email().max(254).transform(normalizeEmail),
-        challengeId: z.string().uuid(),
-        code: z.string().regex(/^\d{6}$/)
-      })
-      .parse(request.body);
-    const user = db
-      .prepare(
-        `SELECT email,
-          COALESCE(
-            (SELECT MAX(ended_at) FROM email_history WHERE user_id = users.id),
-            created_at
-          ) AS email_started_at
-         FROM users
-         WHERE id = ? AND role = 'USER'
-           AND NOT EXISTS (
-             SELECT 1 FROM deleted_user_tombstones dut
-             WHERE dut.user_id = users.id
-           )`
-      )
-      .get(id) as { email: string; email_started_at: string } | undefined;
-    if (!user) return reply.code(404).send({ error: "普通用户不存在" });
-    verifyEmailChallenge(body.challengeId, body.email, body.code, "EMAIL_CHANGE", id);
-    withImmediateTransaction(() => {
-      ensureEmailAvailable(body.email, id);
-      verifyEmailChallenge(body.challengeId, body.email, body.code, "EMAIL_CHANGE", id);
-      const now = nowIso();
-      db.prepare(
-        `INSERT INTO email_history(id, user_id, email, started_at, ended_at, created_at)
-         VALUES(?, ?, ?, ?, ?, ?)`
-      ).run(randomUUID(), id, user.email, user.email_started_at, now, now);
-      db.prepare(
-        `UPDATE users SET email = ?,
-          version = version + 1, updated_at = ?
-          WHERE id = ?
-            AND NOT EXISTS (
-              SELECT 1 FROM deleted_user_tombstones dut
-              WHERE dut.user_id = users.id
-            )`
-      ).run(
-        body.email,
-        now,
-        id
-      );
-      consumeEmailChallenge(body.challengeId);
-      db.prepare("DELETE FROM auth_tokens WHERE user_id = ?").run(id);
-      db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
-    });
-    queueEmail(user.email, "Allocube 邮箱已变更", "系统管理员已协助完成邮箱换绑。");
-    queueEmail(body.email, "Allocube 邮箱已变更", "此邮箱现已用于通知和密码找回。", id);
-    addAudit(auth.user.id, "EMAIL_CHANGE_ASSISTED", "user", id, undefined, undefined);
-    return { message: "邮箱已换绑，用户需要重新登录" };
-  });
 
   app.get("/api/v1/admin/machines", async (request, reply) => {
     const auth = requireAuth(request, reply);
@@ -3141,6 +3044,9 @@ export function registerAdminRoutes(
         now,
         auth.user.id
       );
+      if (Boolean(latest.enabled) !== body.enabled) {
+        incrementRegistrationConfigRevision(now);
+      }
       if (!body.enabled) {
         db.prepare(
           `UPDATE email_outbox SET
@@ -3354,6 +3260,7 @@ export function registerAdminRoutes(
           `UPDATE settings SET value = ?, updated_at = ?
            WHERE key = 'allowed_email_domains'`
         ).run(JSON.stringify(allowedEmailDomains), updatedAt);
+        incrementRegistrationConfigRevision(updatedAt);
         db.prepare(
           `UPDATE settings SET value = ?, updated_at = ?
            WHERE key = 'settings_version'`

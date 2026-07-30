@@ -1,4 +1,4 @@
-export const FINAL_SCHEMA_VERSION = 12;
+export const FINAL_SCHEMA_VERSION = 13;
 
 export const FINAL_SCHEMA_SQL = `
   CREATE TABLE schema_migrations (
@@ -116,7 +116,7 @@ export const FINAL_SCHEMA_SQL = `
     revision INTEGER NOT NULL,
     username TEXT NOT NULL,
     display_name TEXT NOT NULL,
-    email TEXT NOT NULL,
+    email TEXT,
     employee_number TEXT NOT NULL,
     submitted_at TEXT NOT NULL,
     UNIQUE(user_id, revision)

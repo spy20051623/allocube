@@ -1453,7 +1453,7 @@ describe("用户身份与审批生命周期", () => {
     expect(changeResponse.statusCode).toBe(404);
   });
 
-  it("邮箱换绑只接受实际邮件中的动态验证码", async () => {
+  it("邮箱换绑需要动态验证码，清空邮箱需要当前密码", async () => {
     const userCookie = await loginCookie("更新用户名");
     const config = await registrationConfig();
     const response = await app.inject({
@@ -1474,22 +1474,6 @@ describe("用户身份与审批生命周期", () => {
       .get() as { html: string };
     const code = email.html.match(/letter-spacing:6px">(\d{6})</)?.[1];
     expect(code).toMatch(/^\d{6}$/);
-    const wrongPassword = await app.inject({
-      method: "POST",
-      url: "/api/v1/auth/change-email",
-      headers: { cookie: userCookie },
-      payload: {
-        email: "changed@example.com",
-        challengeId: response.json().challengeId,
-        code,
-        currentPassword: "WrongPassword123!",
-        expectedConfigRevision: config.revision
-      }
-    });
-    expect(wrongPassword.statusCode).toBe(400);
-    expect(wrongPassword.json().fieldErrors).toEqual({
-      currentPassword: ["当前密码不正确"]
-    });
     const changed = await app.inject({
       method: "POST",
       url: "/api/v1/auth/change-email",
@@ -1498,17 +1482,57 @@ describe("用户身份与审批生命周期", () => {
         email: "changed@example.com",
         challengeId: response.json().challengeId,
         code,
-        currentPassword: "Registration123!",
         expectedConfigRevision: config.revision
       }
     });
     expect(changed.statusCode).toBe(200);
+    const clearWithoutPassword = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/change-email",
+      headers: { cookie: userCookie },
+      payload: {
+        email: null,
+        clearEmailConfirmed: true,
+        expectedConfigRevision: config.revision
+      }
+    });
+    expect(clearWithoutPassword.statusCode).toBe(400);
+    expect(clearWithoutPassword.json().fieldErrors).toEqual({
+      currentPassword: ["请输入当前密码"]
+    });
+    const clearWithWrongPassword = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/change-email",
+      headers: { cookie: userCookie },
+      payload: {
+        email: null,
+        currentPassword: "WrongPassword123!",
+        clearEmailConfirmed: true,
+        expectedConfigRevision: config.revision
+      }
+    });
+    expect(clearWithWrongPassword.statusCode).toBe(400);
+    expect(clearWithWrongPassword.json().fieldErrors).toEqual({
+      currentPassword: ["当前密码不正确"]
+    });
+    const cleared = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/change-email",
+      headers: { cookie: userCookie },
+      payload: {
+        email: null,
+        currentPassword: "Registration123!",
+        clearEmailConfirmed: true,
+        expectedConfigRevision: config.revision
+      }
+    });
+    expect(cleared.statusCode).toBe(200);
     const me = await app.inject({
       method: "GET",
       url: "/api/v1/auth/me",
       headers: { cookie: userCookie }
     });
-    expect(me.json().user.email).toBe("changed@example.com");
+    expect(me.json().user.email).toBeNull();
   });
 
   it("打回和最终拒绝均允许不填写原因", async () => {
@@ -1666,7 +1690,6 @@ describe("用户身份与审批生命周期", () => {
         email: "latest-revision@example.com",
         challengeId: emailCode.json().challengeId,
         code,
-        currentPassword: "Registration123!",
         expectedConfigRevision: config.revision
       }
     });

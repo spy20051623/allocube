@@ -2414,50 +2414,48 @@ function RegisterPage({
                 onChange={(event) => updateFormField("email", event.target.value)}
               />
             </RegistrationFieldShell>
-            {form.email.trim() && (
-              <div className="verification-row">
-                <RegistrationFieldShell
-                  field="code"
-                  label="邮箱验证码"
-                  focused={focusedField === "code"}
-                  error={errors.code}
-                >
-                  <input
-                    {...inputAccessibility("code")}
-                    name="code"
-                    ref={codeInputRef}
-                    disabled={!codeEnabled}
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    value={form.code}
-                    onFocus={() => setFocusedField("code")}
-                    onBlur={() => validateOnBlur("code")}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        code: event.target.value.replace(/\D/g, "")
-                      }))
-                    }
-                  />
-                </RegistrationFieldShell>
-                <button
-                  type="button"
-                  className="secondary-button verification-button"
-                  disabled={
-                    submitting ||
-                    codeSending ||
-                    resendSeconds > 0 ||
-                    configError ||
-                    !emailIsValid ||
-                    emailHasCurrentServerError
+            <div className="verification-row">
+              <RegistrationFieldShell
+                field="code"
+                label="邮箱验证码"
+                focused={focusedField === "code"}
+                error={errors.code}
+              >
+                <input
+                  {...inputAccessibility("code")}
+                  name="code"
+                  ref={codeInputRef}
+                  disabled={!codeEnabled}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={form.code}
+                  onFocus={() => setFocusedField("code")}
+                  onBlur={() => validateOnBlur("code")}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      code: event.target.value.replace(/\D/g, "")
+                    }))
                   }
-                  onClick={() => void requestCode()}
-                >
-                  {codeButtonLabel}
-                </button>
-              </div>
-            )}
+                />
+              </RegistrationFieldShell>
+              <button
+                type="button"
+                className="secondary-button verification-button"
+                disabled={
+                  submitting ||
+                  codeSending ||
+                  resendSeconds > 0 ||
+                  configError ||
+                  !emailIsValid ||
+                  emailHasCurrentServerError
+                }
+                onClick={() => void requestCode()}
+              >
+                {codeButtonLabel}
+              </button>
+            </div>
           </>
         )}
         <RegistrationFieldShell
@@ -3642,7 +3640,7 @@ function EmailEditModal({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const dialog = useAppDialog();
+  const [step, setStep] = useState<"EDIT" | "CONFIRM_CLEAR">("EDIT");
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [code, setCode] = useState("");
@@ -3749,6 +3747,68 @@ function EmailEditModal({
       setSending(false);
     }
   };
+  const performChange = async ({
+    clearing,
+    password
+  }: {
+    clearing: boolean;
+    password?: string;
+  }) => {
+    if (!registrationConfig) return;
+    const normalizedEmail = normalizeRegistrationEmail(email);
+    setBusy(true);
+    try {
+      await api("/auth/change-email", {
+        method: "POST",
+        body: jsonBody({
+          email: clearing ? null : normalizedEmail,
+          challengeId: clearing ? null : challengeId,
+          code: clearing ? null : code,
+          clearEmailConfirmed: clearing,
+          expectedConfigRevision: registrationConfig.revision,
+          ...(clearing ? { currentPassword: password } : {})
+        })
+      });
+      await onSaved();
+    } catch (caught) {
+      if (
+        caught instanceof ApiError &&
+        (caught.code === "REGISTRATION_CONFIG_CHANGED" ||
+          caught.code === "EMAIL_FEATURE_DISABLED")
+      ) {
+        setStep("EDIT");
+        await loadConfig().catch(() =>
+          setConfigError("暂时无法加载邮箱规则，请稍后重试。")
+        );
+        notify("error", "邮件设置已更新，请按当前规则重新确认");
+        return;
+      }
+      const message = caught instanceof Error ? caught.message : "更换失败";
+      const passwordMessage = fieldErrorFromApi(caught, "currentPassword");
+      const codeMessage = fieldErrorFromApi(caught, "code");
+      const emailMessage = fieldErrorFromApi(caught, "email");
+      if (passwordMessage) {
+        setCurrentPasswordError(passwordMessage);
+        setStep("CONFIRM_CLEAR");
+      } else if (codeMessage) {
+        setCodeError(codeMessage);
+        setStep("EDIT");
+      } else if (emailMessage) {
+        setEmailError(emailMessage);
+        setStep("EDIT");
+      } else if (/验证码/.test(message)) {
+        setCodeError(message);
+        setStep("EDIT");
+      } else if (/邮箱|域名|占用/.test(message)) {
+        setEmailError(message);
+        setStep("EDIT");
+      } else {
+        notify("error", message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!registrationConfig) return;
@@ -3762,96 +3822,101 @@ function EmailEditModal({
           ? ""
           : "验证码无效，请重新输入"
         : "请输入6位验证码";
-    const nextCurrentPasswordError =
-      !currentPassword ? "请输入当前密码" : "";
     setEmailError(nextEmailError);
     setCodeError(nextCodeError);
-    setCurrentPasswordError(nextCurrentPasswordError);
-    if (nextEmailError || nextCodeError || nextCurrentPasswordError) return;
-    let clearEmailConfirmed = false;
+    if (nextEmailError || nextCodeError) return;
     if (clearing) {
-      clearEmailConfirmed = await dialog.confirm({
-        title: "清空邮箱？",
-        message:
-          "清空邮箱后将无法接收系统邮件提醒，也无法自行通过邮件找回密码。",
-        confirmLabel: "确认清空",
-        tone: "danger"
-      });
-      if (!clearEmailConfirmed) return;
+      setCurrentPassword("");
+      setCurrentPasswordError("");
+      setStep("CONFIRM_CLEAR");
+      return;
     }
-    setBusy(true);
-    try {
-      await api("/auth/change-email", {
-        method: "POST",
-        body: jsonBody({
-          email: clearing ? null : normalizedEmail,
-          challengeId: clearing ? null : challengeId,
-          code: clearing ? null : code,
-          clearEmailConfirmed,
-          expectedConfigRevision: registrationConfig.revision,
-          currentPassword
-        })
-      });
-      await onSaved();
-    } catch (caught) {
-      if (
-        caught instanceof ApiError &&
-        (caught.code === "REGISTRATION_CONFIG_CHANGED" ||
-          caught.code === "EMAIL_FEATURE_DISABLED")
-      ) {
-        await loadConfig().catch(() =>
-          setConfigError("暂时无法加载邮箱规则，请稍后重试。")
-        );
-        notify("error", "邮件设置已更新，请按当前规则重新确认");
-        return;
-      }
-      const message = caught instanceof Error ? caught.message : "更换失败";
-      const passwordMessage = fieldErrorFromApi(caught, "currentPassword");
-      const codeMessage = fieldErrorFromApi(caught, "code");
-      const emailMessage = fieldErrorFromApi(caught, "email");
-      if (passwordMessage) setCurrentPasswordError(passwordMessage);
-      else if (codeMessage) setCodeError(codeMessage);
-      else if (emailMessage) setEmailError(emailMessage);
-      else if (/验证码/.test(message)) setCodeError(message);
-      else if (/邮箱|域名|占用/.test(message)) setEmailError(message);
-      else notify("error", message);
-    } finally {
-      setBusy(false);
+    await performChange({ clearing: false });
+  };
+  const confirmClear = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!currentPassword) {
+      setCurrentPasswordError("请输入当前密码");
+      return;
     }
+    await performChange({ clearing: true, password: currentPassword });
   };
   const buttonLabel = verificationButtonLabel({
     sending,
     remainingSeconds: resendSeconds
   });
   return (
-    <Modal title="修改邮箱" onClose={onClose}>
-      <form className="stack-form profile-edit-form" noValidate onSubmit={submit}>
-        {configError && <AuthFeedback tone="error" anchored={false}>{configError}</AuthFeedback>}
-        {currentEmail && (
-          <label className="field">
-            <span>当前邮箱</span>
-            <input readOnly value={currentEmail} />
-          </label>
-        )}
-        <label className={`field${currentPasswordError ? " has-error" : ""}`}>
-          <span>当前密码</span>
-          <PasswordInput
-            autoFocus
-            name="currentPassword"
-            autoComplete="current-password"
-            value={currentPassword}
-            aria-invalid={Boolean(currentPasswordError)}
-            onChange={(event) => {
-              setCurrentPassword(event.target.value);
+    <Modal
+      title={step === "CONFIRM_CLEAR" ? "确认清空邮箱" : "修改邮箱"}
+      onClose={
+        step === "CONFIRM_CLEAR"
+          ? () => {
+              setStep("EDIT");
+              setCurrentPassword("");
               setCurrentPasswordError("");
-            }}
-          />
-          {currentPasswordError && (
-            <AuthFeedback tone="error">{currentPasswordError}</AuthFeedback>
+            }
+          : onClose
+      }
+    >
+      {step === "CONFIRM_CLEAR" ? (
+        <form
+          className="stack-form profile-edit-form"
+          noValidate
+          onSubmit={confirmClear}
+        >
+          <AuthFeedback tone="warning" anchored={false}>
+            清空邮箱后将无法接收系统邮件提醒，也无法自行通过邮件找回密码。
+          </AuthFeedback>
+          <label className={`field${currentPasswordError ? " has-error" : ""}`}>
+            <span>当前密码</span>
+            <PasswordInput
+              autoFocus
+              name="currentPassword"
+              autoComplete="current-password"
+              value={currentPassword}
+              aria-invalid={Boolean(currentPasswordError)}
+              onChange={(event) => {
+                setCurrentPassword(event.target.value);
+                setCurrentPasswordError("");
+              }}
+            />
+            {currentPasswordError && (
+              <AuthFeedback tone="error">{currentPasswordError}</AuthFeedback>
+            )}
+          </label>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => {
+                setStep("EDIT");
+                setCurrentPassword("");
+                setCurrentPasswordError("");
+              }}
+            >
+              返回
+            </button>
+            <button className="danger-button" disabled={busy}>
+              <BusyButtonContent busy={busy}>确认清空</BusyButtonContent>
+            </button>
+          </div>
+        </form>
+      ) : (
+        <form className="stack-form profile-edit-form" noValidate onSubmit={submit}>
+          {configError && (
+            <AuthFeedback tone="error" anchored={false}>
+              {configError}
+            </AuthFeedback>
           )}
-        </label>
-        {registrationConfig && !emailEnabled ? (
-          currentEmail ? (
+          {currentEmail && (
+            <label className="field">
+              <span>当前邮箱</span>
+              <input readOnly value={currentEmail} />
+            </label>
+          )}
+          {registrationConfig && !emailEnabled && (
+            currentEmail ? (
             <AuthFeedback tone="warning" anchored={false}>
               邮件功能未启用，只能清空当前邮箱。
             </AuthFeedback>
@@ -3860,81 +3925,83 @@ function EmailEditModal({
               邮件功能未启用，当前账号没有可修改的邮箱。
             </AuthFeedback>
           )
-        ) : (
-          <>
-            <label className={`field${emailError ? " has-error" : ""}`}>
-              <span>新邮箱（留空表示清空）</span>
+          )}
+          <label className={`field${emailError ? " has-error" : ""}`}>
+            <span>新邮箱（留空表示清空）</span>
+            <input
+              autoFocus
+              type="email"
+              name="email"
+              autoComplete="email"
+              disabled={!emailEnabled}
+              value={email}
+              aria-invalid={Boolean(emailError)}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setEmailError("");
+                setCode("");
+                setCodeError("");
+                setChallengeId("");
+              }}
+            />
+            {emailEnabled && allowedDomains?.length ? (
+              <small>仅允许以下邮箱域名：{allowedDomains.join("、")}。</small>
+            ) : null}
+            {emailError && <AuthFeedback tone="error">{emailError}</AuthFeedback>}
+          </label>
+          <div className="verification-row">
+            <label className={`field${codeError ? " has-error" : ""}`}>
+              <span>验证码</span>
               <input
-                type="email"
-                name="email"
-                autoComplete="email"
-                value={email}
-                aria-invalid={Boolean(emailError)}
+                ref={codeRef}
+                name="code"
+                inputMode="numeric"
+                maxLength={6}
+                disabled={!emailEnabled || !email.trim() || !challengeId}
+                value={code}
+                aria-invalid={Boolean(codeError)}
                 onChange={(event) => {
-                  setEmail(event.target.value);
-                  setEmailError("");
-                  setCode("");
+                  setCode(event.target.value.replace(/\D/g, ""));
                   setCodeError("");
-                  setChallengeId("");
                 }}
               />
-              {allowedDomains?.length ? (
-                <small>仅允许以下邮箱域名：{allowedDomains.join("、")}。</small>
-              ) : null}
-              {emailError && <AuthFeedback tone="error">{emailError}</AuthFeedback>}
+              {codeError && <AuthFeedback tone="error">{codeError}</AuthFeedback>}
             </label>
-            {email.trim() && (
-              <div className="verification-row">
-                <label className={`field${codeError ? " has-error" : ""}`}>
-                  <span>验证码</span>
-                  <input
-                    ref={codeRef}
-                    name="code"
-                    inputMode="numeric"
-                    maxLength={6}
-                    disabled={!challengeId}
-                    value={code}
-                    aria-invalid={Boolean(codeError)}
-                    onChange={(event) => {
-                      setCode(event.target.value.replace(/\D/g, ""));
-                      setCodeError("");
-                    }}
-                  />
-                  {codeError && <AuthFeedback tone="error">{codeError}</AuthFeedback>}
-                </label>
-                <button
-                  type="button"
-                  className="secondary-button verification-button"
-                  disabled={
-                    sending ||
-                    resendSeconds > 0 ||
-                    allowedDomains === null ||
-                    Boolean(configError) ||
-                    Boolean(validateCurrentEmail())
-                  }
-                  onClick={() => void sendCode()}
-                >
-                  {buttonLabel}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-        <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>取消</button>
-          <button
-            className="primary-button"
-            disabled={
-              busy ||
-              Boolean(configError) ||
-              !registrationConfig ||
-              (!emailEnabled && !currentEmail)
-            }
-          >
-            <BusyButtonContent busy={busy}>确认修改</BusyButtonContent>
-          </button>
-        </div>
-      </form>
+            <button
+              type="button"
+              className="secondary-button verification-button"
+              disabled={
+                !emailEnabled ||
+                !email.trim() ||
+                sending ||
+                resendSeconds > 0 ||
+                allowedDomains === null ||
+                Boolean(configError) ||
+                Boolean(validateCurrentEmail())
+              }
+              onClick={() => void sendCode()}
+            >
+              {buttonLabel}
+            </button>
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="secondary-button" onClick={onClose}>
+              取消
+            </button>
+            <button
+              className="primary-button"
+              disabled={
+                busy ||
+                Boolean(configError) ||
+                !registrationConfig ||
+                (!emailEnabled && !currentEmail)
+              }
+            >
+              <BusyButtonContent busy={busy}>确认修改</BusyButtonContent>
+            </button>
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }

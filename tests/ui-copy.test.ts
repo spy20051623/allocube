@@ -591,4 +591,34 @@ describe("角色化界面文案", () => {
     expect(source).not.toContain("/admin/users/${emailChangeUser.id}/email-change-code");
     expect(source).not.toContain("/admin/users/${emailChangeUser.id}/change-email");
   });
+
+  it("邮箱修改常驻显示验证码并仅在清空时进入密码确认", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const emailModal = source.slice(
+      source.indexOf("function EmailEditModal"),
+      source.indexOf("type PasswordChangeField")
+    );
+    expect(emailModal).toContain('<span>新邮箱（留空表示清空）</span>');
+    expect(emailModal).toContain('<span>验证码</span>');
+    expect(emailModal).toContain('step === "CONFIRM_CLEAR"');
+    expect(emailModal).toContain('title={step === "CONFIRM_CLEAR" ? "确认清空邮箱" : "修改邮箱"}');
+    expect(emailModal).not.toContain("{email.trim() && (");
+    expect(emailModal).toContain(
+      "disabled={!emailEnabled || !email.trim() || !challengeId}"
+    );
+  });
+
+  it("注册邮箱启用时常驻显示验证码组件", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const registerPage = source.slice(
+      source.indexOf("function RegisterPage"),
+      source.indexOf("function ForgotPasswordPage")
+    );
+    expect(registerPage).toContain('label="邮箱（选填）"');
+    expect(registerPage).toContain('label="邮箱验证码"');
+    expect(registerPage).not.toContain("{form.email.trim() && (");
+    expect(registerPage).toContain("disabled={!codeEnabled}");
+    expect(registerPage).toContain("if (emailEnabled && !normalizedEmail)");
+    expect(registerPage).toContain("withoutEmailConfirmed");
+  });
 });

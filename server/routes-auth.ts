@@ -1311,7 +1311,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
           email: z.union([z.string().trim().max(254), z.null()]),
           challengeId: z.string().uuid().nullable().optional(),
           code: z.string().nullable().optional(),
-          currentPassword: z.string().min(1).max(256),
+          currentPassword: z.string().max(256).optional(),
           clearEmailConfirmed: z.boolean().optional().default(false),
           expectedConfigRevision: z.number().int().min(1)
         })
@@ -1366,15 +1366,29 @@ export function registerAuthRoutes(app: FastifyInstance) {
           fieldErrors: { code: ["验证码无效，请重新输入"] }
         });
       }
-      const passwordRow = db
-        .prepare("SELECT password_hash FROM users WHERE id = ?")
-        .get(auth.user.id) as { password_hash: string };
-      if (!(await checkPassword(passwordRow.password_hash, rawBody.currentPassword))) {
-        return reply.code(400).send({
-          error: "当前密码不正确",
-          code: "CURRENT_PASSWORD_INVALID",
-          fieldErrors: { currentPassword: ["当前密码不正确"] }
-        });
+      if (targetEmail === null) {
+        if (!rawBody.currentPassword) {
+          return reply.code(400).send({
+            error: "请输入当前密码",
+            code: "CURRENT_PASSWORD_REQUIRED",
+            fieldErrors: { currentPassword: ["请输入当前密码"] }
+          });
+        }
+        const passwordRow = db
+          .prepare("SELECT password_hash FROM users WHERE id = ?")
+          .get(auth.user.id) as { password_hash: string };
+        if (
+          !(await checkPassword(
+            passwordRow.password_hash,
+            rawBody.currentPassword
+          ))
+        ) {
+          return reply.code(400).send({
+            error: "当前密码不正确",
+            code: "CURRENT_PASSWORD_INVALID",
+            fieldErrors: { currentPassword: ["当前密码不正确"] }
+          });
+        }
       }
       const current = db
         .prepare(

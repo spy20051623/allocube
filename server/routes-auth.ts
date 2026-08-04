@@ -23,6 +23,7 @@ import {
 import {
   addAudit,
   db,
+  getAllowRegistrationWithoutEmail,
   getAllowedEmailDomains,
   getPublicSiteOrigin,
   getRegistrationConfigRevision,
@@ -165,6 +166,7 @@ function readRegistrationPayload(input: unknown) {
 function registrationConfigPayload() {
   return {
     emailEnabled: Boolean(getSmtpSettingsRow().enabled),
+    allowRegistrationWithoutEmail: getAllowRegistrationWithoutEmail(),
     allowedEmailDomains: getAllowedEmailDomains(),
     revision: getRegistrationConfigRevision()
   };
@@ -174,7 +176,7 @@ class RegistrationConfigChangedError extends Error {}
 
 function sendRegistrationConfigChanged(reply: FastifyReply) {
   return reply.code(409).send({
-    error: "邮件设置已更新，请按最新规则确认后重试",
+    error: "注册规则已更新，请按最新规则确认后重试",
     code: "REGISTRATION_CONFIG_CHANGED",
     registrationConfig: registrationConfigPayload()
   });
@@ -459,6 +461,16 @@ export function registerAuthRoutes(app: FastifyInstance) {
       if (
         registrationConfig.emailEnabled &&
         body.email === null &&
+        !registrationConfig.allowRegistrationWithoutEmail
+      ) {
+        return sendRegistrationErrors(reply, {
+          email: ["请输入邮箱"]
+        });
+      }
+      if (
+        registrationConfig.emailEnabled &&
+        body.email === null &&
+        registrationConfig.allowRegistrationWithoutEmail &&
         !body.withoutEmailConfirmed
       ) {
         return reply.code(400).send({
@@ -597,7 +609,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
           const latestConfig = registrationConfigPayload();
           if (
             latestConfig.revision !== body.expectedConfigRevision ||
-            latestConfig.emailEnabled !== registrationConfig.emailEnabled
+            latestConfig.emailEnabled !== registrationConfig.emailEnabled ||
+            latestConfig.allowRegistrationWithoutEmail !==
+              registrationConfig.allowRegistrationWithoutEmail
           ) {
             throw new RegistrationConfigChangedError();
           }

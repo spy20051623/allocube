@@ -360,9 +360,8 @@ export function registerAdminRoutes(
       ) {
         throw new IdentityError("注册信息已被更新，请刷新后重试", 409);
       }
-      if (!user.email) throw new IdentityError("注册邮箱不存在", 409);
       ensureUsernameAvailable(user.username_normalized, id);
-      ensureEmailAvailable(user.email, id);
+      if (user.email) ensureEmailAvailable(user.email, id);
       const employeeRequest = db
         .prepare(
           `SELECT user_id AS id, employee_number
@@ -3280,6 +3279,68 @@ export function registerAdminRoutes(
         message: allowedEmailDomains.length
           ? "注册邮箱域名已更新"
           : "注册邮箱域名限制已取消",
+        settings
+      };
+    }
+  );
+
+  app.patch(
+    "/api/v1/admin/settings/registration-email",
+    async (request, reply) => {
+      const auth = requireSystemAdmin(request, reply);
+      if (!auth) return;
+      const body = z
+        .object({
+          allowRegistrationWithoutEmail: z.boolean(),
+          expectedVersion: z.number().int().min(1)
+        })
+        .parse(request.body);
+      const settings = withImmediateTransaction(() => {
+        const before = getAdminSettings();
+        if (before.version !== body.expectedVersion) {
+          throw new BusinessError(
+            "系统设置已由其他管理员更新，请刷新后重试",
+            409,
+            undefined,
+            "SETTINGS_VERSION_CONFLICT"
+          );
+        }
+        const updatedAt = nowIso();
+        db.prepare(
+          `INSERT INTO settings(key, value, updated_at) VALUES(?, ?, ?)
+           ON CONFLICT(key) DO UPDATE SET
+             value = excluded.value, updated_at = excluded.updated_at`
+        ).run(
+          "allow_registration_without_email",
+          body.allowRegistrationWithoutEmail ? "1" : "0",
+          updatedAt
+        );
+        incrementRegistrationConfigRevision(updatedAt);
+        db.prepare(
+          `UPDATE settings SET value = ?, updated_at = ?
+           WHERE key = 'settings_version'`
+        ).run(String(before.version + 1), updatedAt);
+        const after = getAdminSettings();
+        addAudit(
+          auth.user.id,
+          "REGISTRATION_EMAIL_POLICY_UPDATE",
+          "settings",
+          "registration_email",
+          {
+            allowRegistrationWithoutEmail:
+              before.allowRegistrationWithoutEmail
+          },
+          {
+            allowRegistrationWithoutEmail:
+              after.allowRegistrationWithoutEmail
+          }
+        );
+        return after;
+      });
+      return {
+        message: body.allowRegistrationWithoutEmail
+          ? "已允许注册时不填写邮箱"
+          : "注册时必须填写邮箱",
         settings
       };
     }

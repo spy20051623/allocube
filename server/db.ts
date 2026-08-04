@@ -357,6 +357,10 @@ export async function initializeDatabase() {
     `INSERT OR IGNORE INTO settings(key, value, updated_at)
      VALUES('registration_config_revision', '1', ?)`
   ).run(nowIso());
+  db.prepare(
+    `INSERT OR IGNORE INTO settings(key, value, updated_at)
+     VALUES('allow_registration_without_email', '1', ?)`
+  ).run(nowIso());
   assertPersistentConfiguration();
   migrateDevelopmentSmtpKey();
   cleanupExpiredSecurityRecords();
@@ -417,6 +421,7 @@ async function initializePersistentConfiguration() {
       timezone: "Asia/Shanghai",
       public_site_origin: siteOrigin,
       allowed_email_domains: JSON.stringify(allowedEmailDomains),
+      allow_registration_without_email: "1",
       registration_config_revision: "1",
       settings_version: "1"
     })) {
@@ -479,6 +484,7 @@ function adoptExistingPersistentConfiguration() {
         ? ""
         : "http://localhost:5173",
       allowed_email_domains: "[]",
+      allow_registration_without_email: "1",
       registration_config_revision: "1",
       settings_version: "1"
     };
@@ -518,6 +524,7 @@ function assertPersistentConfiguration() {
     "timezone",
     "public_site_origin",
     "allowed_email_domains",
+    "allow_registration_without_email",
     "registration_config_revision",
     "settings_version"
   ];
@@ -614,6 +621,10 @@ export function getRegistrationConfigRevision() {
   return getSettingNumber("registration_config_revision", 1);
 }
 
+export function getAllowRegistrationWithoutEmail() {
+  return getSettingNumber("allow_registration_without_email", 1) === 1;
+}
+
 export function incrementRegistrationConfigRevision(at = nowIso()) {
   db.prepare(
     `UPDATE settings
@@ -650,6 +661,7 @@ export function getAdminSettings() {
   return {
     ...getSettings(),
     allowedEmailDomains: getAllowedEmailDomains(),
+    allowRegistrationWithoutEmail: getAllowRegistrationWithoutEmail(),
     siteOrigin: getPublicSiteOrigin(),
     version: getSettingNumber("settings_version", 1)
   };

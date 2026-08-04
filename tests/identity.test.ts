@@ -73,6 +73,7 @@ async function registrationConfig() {
   expect(response.statusCode).toBe(200);
   return response.json() as {
     emailEnabled: boolean;
+    allowRegistrationWithoutEmail: boolean;
     allowedEmailDomains: string[];
     revision: number;
   };
@@ -151,6 +152,7 @@ describe("用户身份与审批生命周期", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       emailEnabled: true,
+      allowRegistrationWithoutEmail: true,
       allowedEmailDomains: [],
       revision: 1
     });
@@ -189,6 +191,25 @@ describe("用户身份与审批生命周期", () => {
         .prepare("SELECT email FROM registration_revisions WHERE user_id = ?")
         .get(confirmed.json().userId)
     ).toEqual({ email: null });
+
+    const adminCookie = await loginCookie("Administrator", "Admin12#$");
+    const approved = await app.inject({
+      method: "POST",
+      url: `/api/v1/admin/users/${confirmed.json().userId}/approve`,
+      headers: { cookie: adminCookie },
+      payload: { expectedRevision: 1 }
+    });
+    expect(approved.statusCode).toBe(200);
+    expect(
+      dbModule.db
+        .prepare("SELECT status, email FROM users WHERE id = ?")
+        .get(confirmed.json().userId)
+    ).toEqual({ status: "ACTIVE", email: null });
+    expect(
+      dbModule.db
+        .prepare("SELECT employee_number FROM employee_numbers WHERE user_id = ?")
+        .get(confirmed.json().userId)
+    ).toEqual({ employee_number: "10001999" });
   });
 
   it("登录和会话恢复均返回服务器时间", async () => {
@@ -250,6 +271,7 @@ describe("用户身份与审批生命周期", () => {
     });
     expect(publicConfig.json()).toEqual({
       emailEnabled: true,
+      allowRegistrationWithoutEmail: true,
       allowedEmailDomains: ["example.com"],
       revision: 2
     });
@@ -333,6 +355,50 @@ describe("用户身份与审批生命周期", () => {
     });
     expect(restored.statusCode).toBe(200);
     expect(restored.json().settings.allowedEmailDomains).toEqual([]);
+
+    const required = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/registration-email",
+      headers: { cookie: adminCookie },
+      payload: {
+        allowRegistrationWithoutEmail: false,
+        expectedVersion: restored.json().settings.version
+      }
+    });
+    expect(required.statusCode).toBe(200);
+    expect(required.json().settings.allowRegistrationWithoutEmail).toBe(false);
+
+    const requiredConfig = await registrationConfig();
+    expect(requiredConfig.allowRegistrationWithoutEmail).toBe(false);
+    const missingEmail = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      payload: {
+        username: "必须填写邮箱",
+        realName: "必填邮箱成员",
+        employeeNumber: "10009996",
+        email: null,
+        challengeId: null,
+        code: null,
+        password: "Registration123!",
+        expectedConfigRevision: requiredConfig.revision,
+        withoutEmailConfirmed: true
+      }
+    });
+    expect(missingEmail.statusCode).toBe(400);
+    expect(missingEmail.json().fieldErrors.email).toEqual(["请输入邮箱"]);
+
+    const optionalAgain = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/registration-email",
+      headers: { cookie: adminCookie },
+      payload: {
+        allowRegistrationWithoutEmail: true,
+        expectedVersion: required.json().settings.version
+      }
+    });
+    expect(optionalAgain.statusCode).toBe(200);
+    expect(optionalAgain.json().settings.allowRegistrationWithoutEmail).toBe(true);
   });
 
   it("系统管理员可以在线配置邮件使用的站点地址", async () => {
@@ -599,6 +665,16 @@ describe("用户身份与审批生命周期", () => {
       }
     });
     expect(update.statusCode).toBe(403);
+    const updatePolicy = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/registration-email",
+      headers: { cookie: userCookie },
+      payload: {
+        allowRegistrationWithoutEmail: false,
+        expectedVersion: 1
+      }
+    });
+    expect(updatePolicy.statusCode).toBe(403);
     expect(
       (
         await app.inject({

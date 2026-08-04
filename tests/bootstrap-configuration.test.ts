@@ -43,7 +43,8 @@ describe("首次启动配置", () => {
       maxBookingMinutes: 720,
       advanceDays: 60,
       siteOrigin: "https://allocube.company.test",
-      allowedEmailDomains: ["company.test", "example.test"]
+      allowedEmailDomains: ["company.test", "example.test"],
+      allowRegistrationWithoutEmail: true
     });
     expect(smtpModule.getSavedSmtpSettings()).toMatchObject({
       host: "smtp.company.test",

@@ -85,6 +85,7 @@ export function auditActionLabel(action: string) {
       SETTINGS_UPDATE: "修改占用规则",
       SITE_ORIGIN_UPDATE: "修改站点地址",
       EMAIL_DOMAIN_ALLOWLIST_UPDATE: "修改注册邮箱白名单",
+      REGISTRATION_EMAIL_POLICY_UPDATE: "修改注册邮箱规则",
       SMTP_SETTINGS_UPDATE: "修改邮件配置",
       SMTP_SETTINGS_ENABLE: "启用邮件发送",
       SMTP_SETTINGS_DISABLE: "停用邮件发送",

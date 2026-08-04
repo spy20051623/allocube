@@ -632,11 +632,15 @@ describe("角色化界面文案", () => {
       source.indexOf("function RegisterPage"),
       source.indexOf("function ForgotPasswordPage")
     );
-    expect(registerPage).toContain('label="邮箱（选填）"');
     expect(registerPage).toContain('label="邮箱验证码"');
     expect(registerPage).not.toContain("{form.email.trim() && (");
     expect(registerPage).toContain("disabled={!codeEnabled}");
-    expect(registerPage).toContain("if (emailEnabled && !normalizedEmail)");
+    expect(registerPage).toContain(
+      "if (emailEnabled && allowEmptyEmail && !normalizedEmail)"
+    );
+    expect(registerPage).toContain(
+      'label={allowEmptyEmail ? "邮箱（选填）" : "邮箱"}'
+    );
     expect(registerPage).toContain("withoutEmailConfirmed");
   });
 });

@@ -213,6 +213,7 @@ describe("系统管理员 SMTP 配置", () => {
     });
     expect(config.json()).toMatchObject({
       emailEnabled: false,
+      allowRegistrationWithoutEmail: true,
       allowedEmailDomains: []
     });
     const registration = await app.inject({

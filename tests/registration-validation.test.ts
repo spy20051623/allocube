@@ -84,6 +84,9 @@ describe("注册静态校验", () => {
         false
       )
     ).toEqual({});
+    expect(
+      validateRegistrationForm(blankEmail, ["example.com"], true, false)
+    ).toEqual({ email: ["请输入邮箱"] });
   });
 
   it("只接受两种工号格式", () => {

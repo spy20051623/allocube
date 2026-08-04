@@ -93,7 +93,8 @@ export function validateRegistrationField(
   field: RegistrationField,
   values: RegistrationFormValues,
   allowedDomains: string[],
-  emailEnabled = true
+  emailEnabled = true,
+  allowEmptyEmail = true
 ): string[] {
   switch (field) {
     case "username":
@@ -103,7 +104,8 @@ export function validateRegistrationField(
     case "employeeNumber":
       return validateEmployeeNumber(values.employeeNumber);
     case "email":
-      if (!emailEnabled || !values.email.trim()) return [];
+      if (!emailEnabled) return [];
+      if (!values.email.trim()) return allowEmptyEmail ? [] : ["请输入邮箱"];
       return validateEmail(values.email, allowedDomains);
     case "code":
       if (!emailEnabled || !values.email.trim()) return [];
@@ -126,7 +128,8 @@ export function validateRegistrationField(
 export function validateRegistrationForm(
   values: RegistrationFormValues,
   allowedDomains: string[],
-  emailEnabled = true
+  emailEnabled = true,
+  allowEmptyEmail = true
 ) {
   const errors: RegistrationFieldErrors = {};
   for (const field of registrationFields) {
@@ -134,7 +137,8 @@ export function validateRegistrationForm(
       field,
       values,
       allowedDomains,
-      emailEnabled
+      emailEnabled,
+      allowEmptyEmail
     );
     if (fieldErrors.length) errors[field] = fieldErrors;
   }

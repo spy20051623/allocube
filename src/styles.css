@@ -6320,6 +6320,11 @@ textarea::placeholder {
   background: rgba(255, 255, 255, .78);
 }
 
+.smtp-settings-body {
+  display: flex;
+  flex-direction: column;
+}
+
 .settings-intro {
   min-height: 52px;
   margin-bottom: 0;
@@ -6352,9 +6357,43 @@ textarea::placeholder {
 }
 
 .email-domain-settings {
-  padding: 18px 0;
+  padding-top: 10px;
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 24px;
+}
+
+.mail-service-section {
+  padding-top: 18px;
+}
+
+.smtp-configuration-section {
+  order: 1;
+}
+
+.registration-email-section {
+  order: 2;
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.mail-service-section-heading {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
   gap: 8px;
+  color: #344054;
+}
+
+.mail-service-section-heading svg {
+  flex: 0 0 auto;
+  color: #64748b;
+}
+
+.mail-service-section-heading strong {
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .site-origin-settings {
@@ -6405,6 +6444,41 @@ textarea::placeholder {
 .email-domain-policy-badge.is-restricted {
   color: #315ea8;
   background: #eaf1ff;
+}
+
+.registration-email-policy {
+  min-height: 82px;
+  padding: 2px 24px 2px 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border-right: 1px solid var(--line);
+}
+
+.registration-email-field-title {
+  color: #3d4758;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.registration-email-policy-control {
+  min-height: 39px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.registration-email-policy-control > strong {
+  color: #5d6879;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.registration-email-domains {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
 }
 
 .email-domain-list {
@@ -6483,13 +6557,6 @@ textarea::placeholder {
   font-weight: 600;
 }
 
-.email-domain-settings-card .settings-card-footer {
-  min-height: 39px;
-  padding-top: 0;
-  justify-content: flex-end;
-  border-top: 0;
-}
-
 .settings-card-footer {
   min-height: 55px;
   padding-top: 16px;
@@ -6534,7 +6601,7 @@ textarea::placeholder {
   background: #fff2d8;
 }
 
-.smtp-enabled-control {
+.settings-toggle-control {
   position: relative;
   display: flex;
   align-items: center;
@@ -6543,14 +6610,14 @@ textarea::placeholder {
   user-select: none;
 }
 
-.smtp-enabled-control strong {
+.settings-toggle-control strong {
   color: #3d4758;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
 }
 
-.smtp-enabled-control input {
+.settings-toggle-control input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -6558,7 +6625,7 @@ textarea::placeholder {
   pointer-events: none;
 }
 
-.smtp-switch {
+.settings-toggle {
   position: relative;
   width: 34px;
   height: 19px;
@@ -6570,7 +6637,7 @@ textarea::placeholder {
   transition: border-color .15s, background .15s, box-shadow .15s;
 }
 
-.smtp-switch > i {
+.settings-toggle > i {
   position: absolute;
   top: 2px;
   left: 2px;
@@ -6582,17 +6649,22 @@ textarea::placeholder {
   transition: transform .15s;
 }
 
-.smtp-enabled-control input:checked + .smtp-switch {
+.settings-toggle-control input:checked + .settings-toggle {
   border-color: var(--blue);
   background: var(--blue);
 }
 
-.smtp-enabled-control input:checked + .smtp-switch > i {
+.settings-toggle-control input:checked + .settings-toggle > i {
   transform: translateX(15px);
 }
 
-.smtp-enabled-control input:focus-visible + .smtp-switch {
+.settings-toggle-control input:focus-visible + .settings-toggle {
   box-shadow: 0 0 0 3px rgba(51, 101, 209, .16);
+}
+
+.settings-toggle-control:has(input:disabled) {
+  cursor: wait;
+  opacity: .65;
 }
 
 .smtp-summary {
@@ -6677,7 +6749,7 @@ textarea::placeholder {
 }
 
 .smtp-form-grid {
-  padding: 18px 0;
+  padding: 12px 0 18px;
   display: flex;
   flex-direction: column;
   gap: 14px;

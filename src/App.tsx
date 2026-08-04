@@ -263,6 +263,7 @@ type SmtpSettingsPayload = {
 
 type RegistrationConfigPayload = {
   emailEnabled: boolean;
+  allowRegistrationWithoutEmail: boolean;
   allowedEmailDomains: string[];
   revision: number;
 };
@@ -273,6 +274,7 @@ type AdminSettingsPayload = {
   advanceDays: number;
   timezone: string;
   allowedEmailDomains: string[];
+  allowRegistrationWithoutEmail: boolean;
   siteOrigin: string;
   version: number;
 };
@@ -1928,6 +1930,7 @@ function RegisterPage({
     );
     if (
       typeof result.emailEnabled !== "boolean" ||
+      typeof result.allowRegistrationWithoutEmail !== "boolean" ||
       !Number.isInteger(result.revision) ||
       !Array.isArray(result.allowedEmailDomains) ||
       !result.allowedEmailDomains.every(
@@ -1967,6 +1970,8 @@ function RegisterPage({
   const allowedEmailDomains =
     registrationConfig?.allowedEmailDomains ?? null;
   const emailEnabled = registrationConfig?.emailEnabled ?? false;
+  const allowEmptyEmail =
+    registrationConfig?.allowRegistrationWithoutEmail ?? true;
 
   const passwordChecks = getPasswordChecks(form.password, {
     username: form.username,
@@ -2026,7 +2031,8 @@ function RegisterPage({
       field,
       form,
       allowedEmailDomains,
-      emailEnabled
+      emailEnabled,
+      allowEmptyEmail
     );
     const value = registrationFieldValue(field, form);
     setErrors((current) => {
@@ -2114,7 +2120,8 @@ function RegisterPage({
     const staticErrors = validateRegistrationForm(
       form,
       allowedEmailDomains,
-      emailEnabled
+      emailEnabled,
+      allowEmptyEmail
     );
     if (Object.keys(staticErrors).length) {
       setErrors((current) => {
@@ -2145,7 +2152,7 @@ function RegisterPage({
 
     const normalizedEmail = normalizeRegistrationEmail(form.email);
     let withoutEmailConfirmed = false;
-    if (emailEnabled && !normalizedEmail) {
+    if (emailEnabled && allowEmptyEmail && !normalizedEmail) {
       withoutEmailConfirmed = await dialog.confirm({
         title: "不填写邮箱？",
         message:
@@ -2199,7 +2206,7 @@ function RegisterPage({
       ) {
         try {
           await loadRegistrationConfig();
-          notify("error", "邮件设置已更新，请按当前页面重新确认后提交");
+          notify("error", "注册规则已更新，请按当前页面重新确认后提交");
         } catch {
           setConfigError(true);
         }
@@ -2398,7 +2405,7 @@ function RegisterPage({
           <>
             <RegistrationFieldShell
               field="email"
-              label="邮箱（选填）"
+              label={allowEmptyEmail ? "邮箱（选填）" : "邮箱"}
               focused={focusedField === "email"}
               error={errors.email}
               hint={emailHint}
@@ -13137,7 +13144,7 @@ function ReportPanel({
           </div>
           <div className="report-layout">
             <section className="card report-card">
-              <SectionHeader title="资源组占用率" actions={<Activity size={18} />} />
+              <SectionHeader title="资源组占用率" leadingIcon={Activity} />
               <div className="utilization-list">
                 {report.groups.map((row: any) => (
                   <div key={row.resourceGroupId}>
@@ -13149,7 +13156,7 @@ function ReportPanel({
               </div>
             </section>
             <section className="card report-card">
-              <SectionHeader title="用户占用排行" actions={<Users size={18} />} />
+              <SectionHeader title="用户占用排行" leadingIcon={Users} />
               <div className="ranking-list">
                 {report.users.map((row: any, index: number) => (
                     <div key={`${row.displayName}-${row.employeeNumber ?? index}`}><span className="rank">{index + 1}</span><div><strong>{row.displayName}{row.employeeNumber ? ` · ${row.employeeNumber}` : ""}</strong></div><b>{durationHoursText(row.reservedMinutes)}</b></div>
@@ -13201,6 +13208,7 @@ function SettingsPanel({
   const [siteOriginError, setSiteOriginError] = useState("");
   const [savingBooking, setSavingBooking] = useState(false);
   const [savingEmailDomains, setSavingEmailDomains] = useState(false);
+  const [togglingEmptyEmail, setTogglingEmptyEmail] = useState(false);
   const [savingSiteOrigin, setSavingSiteOrigin] = useState(false);
   const [smtp, setSmtp] = useState<SmtpSettingsPayload | null>(null);
   const [smtpForm, setSmtpForm] = useState({
@@ -13259,27 +13267,69 @@ function SettingsPanel({
     loadSmtp().catch((error) => notify("error", error.message));
   }, [loadAdminSettings, loadSmtp, notify]);
 
-  const appendEmailDomain = () => {
-    if (!emailDomainInput.trim()) return allowedEmailDomains;
+  const updateEmailDomains = async (
+    nextDomains: string[],
+    successMessage: string,
+    showFieldError = false
+  ) => {
+    if (!adminSettings || savingEmailDomains) return false;
+    setSavingEmailDomains(true);
+    try {
+      const result = await api<{ settings: AdminSettingsPayload }>(
+        "/admin/settings/email-domains",
+        {
+          method: "PATCH",
+          body: jsonBody({
+            allowedEmailDomains: nextDomains,
+            expectedVersion: adminSettings.version
+          })
+        }
+      );
+      setAdminSettings(result.settings);
+      setAllowedEmailDomains(result.settings.allowedEmailDomains);
+      setEmailDomainError("");
+      notify("success", successMessage);
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        await loadAdminSettings();
+      }
+      const message = error instanceof Error ? error.message : "更新白名单失败";
+      if (showFieldError) setEmailDomainError(message);
+      notify("error", message);
+      return false;
+    } finally {
+      setSavingEmailDomains(false);
+    }
+  };
+
+  const appendEmailDomain = async () => {
+    if (!emailDomainInput.trim() || savingEmailDomains) return;
     try {
       const domain = normalizeAllowedEmailDomain(emailDomainInput);
       if (allowedEmailDomains.includes(domain)) {
         setEmailDomainError("该邮箱域名已经在白名单中");
-        return null;
+        return;
       }
       if (allowedEmailDomains.length >= 100) {
         setEmailDomainError("最多可以配置100个邮箱域名");
-        return null;
+        return;
       }
       const next = [...allowedEmailDomains, domain];
-      setAllowedEmailDomains(next);
-      setEmailDomainInput("");
-      setEmailDomainError("");
-      return next;
+      if (await updateEmailDomains(next, "邮箱域名已添加", true)) {
+        setEmailDomainInput("");
+      }
     } catch {
       setEmailDomainError(EMAIL_DOMAIN_MESSAGE);
-      return null;
     }
+  };
+
+  const removeEmailDomain = async (domain: string) => {
+    if (savingEmailDomains) return;
+    await updateEmailDomains(
+      allowedEmailDomains.filter((item) => item !== domain),
+      "邮箱域名已移除"
+    );
   };
 
   const saveBookingSettings = async () => {
@@ -13350,39 +13400,36 @@ function SettingsPanel({
     }
   };
 
-  const saveEmailDomains = async () => {
-    if (!adminSettings || savingEmailDomains) return;
-    const nextDomains = appendEmailDomain();
-    if (!nextDomains) return;
-    setSavingEmailDomains(true);
+  const toggleEmptyRegistrationEmail = async (allowed: boolean) => {
+    if (!adminSettings || togglingEmptyEmail) return;
+    if (allowed === adminSettings.allowRegistrationWithoutEmail) return;
+    setTogglingEmptyEmail(true);
     try {
       const result = await api<{ settings: AdminSettingsPayload }>(
-        "/admin/settings/email-domains",
+        "/admin/settings/registration-email",
         {
           method: "PATCH",
           body: jsonBody({
-            allowedEmailDomains: nextDomains,
+            allowRegistrationWithoutEmail: allowed,
             expectedVersion: adminSettings.version
           })
         }
       );
       setAdminSettings(result.settings);
-      setAllowedEmailDomains(result.settings.allowedEmailDomains);
-      setEmailDomainInput("");
-      setEmailDomainError("");
       notify(
         "success",
-        result.settings.allowedEmailDomains.length
-          ? "注册邮箱白名单已更新"
-          : "注册邮箱域名限制已取消"
+        allowed ? "已允许注册时不填写邮箱" : "注册时必须填写邮箱"
       );
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         await loadAdminSettings();
       }
-      notify("error", error instanceof Error ? error.message : "保存失败");
+      notify(
+        "error",
+        error instanceof Error ? error.message : "注册邮箱规则更新失败"
+      );
     } finally {
-      setSavingEmailDomains(false);
+      setTogglingEmptyEmail(false);
     }
   };
 
@@ -13405,16 +13452,6 @@ function SettingsPanel({
         bookingForm.maxBookingMinutes !== adminSettings.maxBookingMinutes ||
         bookingForm.advanceDays !== adminSettings.advanceDays)
   );
-  const emailDomainsDirty = Boolean(
-    adminSettings &&
-      (emailDomainInput.trim() ||
-        allowedEmailDomains.length !==
-          adminSettings.allowedEmailDomains.length ||
-        allowedEmailDomains.some(
-          (domain, index) =>
-            domain !== adminSettings.allowedEmailDomains[index]
-        ))
-  );
   const siteOriginDirty = Boolean(
     adminSettings && siteOrigin.trim() !== adminSettings.siteOrigin
   );
@@ -13424,7 +13461,7 @@ function SettingsPanel({
     if (
       !enabled &&
       !(await dialog.confirm({
-        title: "停用邮件发送",
+        title: "停用邮件服务",
         message: "停用后，全部尚未发送的邮件都会被取消。",
         confirmLabel: "确认停用",
         tone: "danger"
@@ -13457,7 +13494,7 @@ function SettingsPanel({
         ...current,
         enabled: result.settings.enabled
       }));
-      notify("success", enabled ? "邮件发送已启用" : "邮件发送已停用");
+      notify("success", enabled ? "邮件服务已启用" : "邮件服务已停用");
     } catch (error) {
       setSmtpForm((current) => ({ ...current, enabled: smtp.enabled }));
       if (error instanceof ApiError && error.status === 409) {
@@ -13470,7 +13507,7 @@ function SettingsPanel({
       }
       notify(
         "error",
-        error instanceof Error ? error.message : "邮件发送状态更新失败"
+        error instanceof Error ? error.message : "邮件服务状态更新失败"
       );
     } finally {
       setTogglingSmtp(false);
@@ -13578,109 +13615,6 @@ function SettingsPanel({
         </div>
       </section>
       <section
-        className="settings-card email-domain-settings-card card"
-        aria-labelledby="email-domain-settings-title"
-      >
-        <SectionHeader
-          id="email-domain-settings-title"
-          title="注册邮箱"
-          leadingIcon={ShieldCheck}
-          className="settings-intro"
-          actions={
-            <span
-              className={`email-domain-policy-badge${
-                allowedEmailDomains.length ? " is-restricted" : ""
-              }`}
-            >
-              {allowedEmailDomains.length
-                ? `${allowedEmailDomains.length} 个域名`
-                : "不限制"}
-            </span>
-          }
-        />
-        <div className="email-domain-settings">
-          <div
-            className={`email-domain-entry${
-              emailDomainError ? " is-invalid" : ""
-            }`}
-          >
-            <input
-              name="allowed-email-domain"
-              aria-label="邮箱域名"
-              placeholder="example.com"
-              value={emailDomainInput}
-              aria-invalid={Boolean(emailDomainError)}
-              aria-describedby={
-                emailDomainError ? "email-domain-error" : undefined
-              }
-              onChange={(event) => {
-                setEmailDomainInput(event.target.value);
-                setEmailDomainError("");
-              }}
-              onKeyDown={(event) => {
-                if (
-                  event.key !== "Enter" ||
-                  event.nativeEvent.isComposing
-                ) {
-                  return;
-                }
-                event.preventDefault();
-                appendEmailDomain();
-              }}
-            />
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={!emailDomainInput.trim()}
-              onClick={appendEmailDomain}
-            >
-              添加
-            </button>
-          </div>
-          {emailDomainError && (
-            <div
-              id="email-domain-error"
-              className="email-domain-error"
-              role="alert"
-            >
-              {emailDomainError}
-            </div>
-          )}
-          {allowedEmailDomains.length > 0 && (
-            <div className="email-domain-list" aria-label="邮箱域名白名单">
-              {allowedEmailDomains.map((domain) => (
-                <span className="email-domain-token" key={domain}>
-                  <span>{domain}</span>
-                  <button
-                    type="button"
-                    aria-label={`移除邮箱域名 ${domain}`}
-                    onClick={() => {
-                      setAllowedEmailDomains((current) =>
-                        current.filter((item) => item !== domain)
-                      );
-                      setEmailDomainError("");
-                    }}
-                  >
-                    <X size={12} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="settings-card-footer">
-          <button
-            className="primary-button"
-            disabled={
-              !adminSettings || savingEmailDomains || !emailDomainsDirty
-            }
-            onClick={() => void saveEmailDomains()}
-          >
-            保存白名单
-          </button>
-        </div>
-      </section>
-      <section
         className={`settings-card smtp-settings-card card${
           smtp && !smtpForm.enabled ? " is-disabled" : ""
         }`}
@@ -13688,7 +13622,7 @@ function SettingsPanel({
       >
         <SectionHeader
           id="smtp-settings-title"
-          title="邮件发送"
+          title="邮件服务"
           leadingIcon={Mail}
           className="settings-intro"
           actions={smtp ? (
@@ -13712,8 +13646,8 @@ function SettingsPanel({
                     ? "运行正常"
                     : "配置不可用"}
               </span>
-              <label className="smtp-enabled-control">
-                <strong>启用邮件发送</strong>
+              <label className="settings-toggle-control">
+                <strong>启用邮件服务</strong>
                 <input
                   type="checkbox"
                   checked={smtpForm.enabled}
@@ -13721,14 +13655,14 @@ function SettingsPanel({
                   aria-busy={togglingSmtp}
                   onChange={(event) => void toggleSmtp(event.target.checked)}
                 />
-                <i className="smtp-switch" aria-hidden="true"><i /></i>
+                <i className="settings-toggle" aria-hidden="true"><i /></i>
               </label>
             </div>
           ) : undefined}
         />
         {smtp ? (
           <div className="smtp-settings-body">
-            <div className="smtp-summary" aria-label="邮件发送状态摘要">
+            <div className="smtp-summary" aria-label="邮件服务状态摘要">
               <div><span>等待发送</span><strong>{smtp.queue.pending}</strong></div>
               <div><span>发送失败</span><strong>{smtp.queue.failed}</strong></div>
               <div><span>密码状态</span><strong>{smtp.passwordStatus === "READY" ? "已安全保存" : smtp.passwordStatus === "UNREADABLE" ? "需要重新输入" : "尚未设置"}</strong></div>
@@ -13740,7 +13674,111 @@ function SettingsPanel({
                 <span>{smtp.lastTest?.error || smtp.queue.lastError}</span>
               </div>
             )}
-            <div className="smtp-form-grid">
+            <div className="mail-service-section registration-email-section">
+              <div className="mail-service-section-heading">
+                <ShieldCheck size={16} />
+                <strong>注册邮箱</strong>
+              </div>
+              <div className="email-domain-settings">
+                <div className="registration-email-policy">
+                  <span className="registration-email-field-title">邮箱要求</span>
+                  <div className="registration-email-policy-control">
+                    <strong>允许空邮箱</strong>
+                    <label className="settings-toggle-control">
+                      <input
+                        type="checkbox"
+                        aria-label="允许空邮箱"
+                        checked={Boolean(
+                          adminSettings?.allowRegistrationWithoutEmail
+                        )}
+                        disabled={!adminSettings || togglingEmptyEmail}
+                        aria-busy={togglingEmptyEmail}
+                        onChange={(event) =>
+                          void toggleEmptyRegistrationEmail(event.target.checked)
+                        }
+                      />
+                      <i className="settings-toggle" aria-hidden="true"><i /></i>
+                    </label>
+                  </div>
+                </div>
+                <div className="registration-email-domains">
+                  <label className="registration-email-field-title" htmlFor="allowed-email-domain">
+                    邮箱域名白名单
+                  </label>
+                  <div
+                    className={`email-domain-entry${
+                      emailDomainError ? " is-invalid" : ""
+                    }`}
+                  >
+                    <input
+                      id="allowed-email-domain"
+                      name="allowed-email-domain"
+                      aria-label="邮箱域名"
+                      placeholder="example.com"
+                      value={emailDomainInput}
+                      aria-invalid={Boolean(emailDomainError)}
+                      aria-describedby={
+                        emailDomainError ? "email-domain-error" : undefined
+                      }
+                      onChange={(event) => {
+                        setEmailDomainInput(event.target.value);
+                        setEmailDomainError("");
+                      }}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key !== "Enter" ||
+                          event.nativeEvent.isComposing
+                        ) {
+                          return;
+                        }
+                        event.preventDefault();
+                        void appendEmailDomain();
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={!emailDomainInput.trim() || savingEmailDomains}
+                      onClick={() => void appendEmailDomain()}
+                    >
+                      {savingEmailDomains ? "处理中" : "添加"}
+                    </button>
+                  </div>
+                  {emailDomainError && (
+                    <div
+                      id="email-domain-error"
+                      className="email-domain-error"
+                      role="alert"
+                    >
+                      {emailDomainError}
+                    </div>
+                  )}
+                  {allowedEmailDomains.length > 0 && (
+                    <div className="email-domain-list" aria-label="邮箱域名白名单">
+                      {allowedEmailDomains.map((domain) => (
+                        <span className="email-domain-token" key={domain}>
+                          <span>{domain}</span>
+                          <button
+                            type="button"
+                            disabled={savingEmailDomains}
+                            aria-label={`移除邮箱域名 ${domain}`}
+                            onClick={() => void removeEmailDomain(domain)}
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="mail-service-section smtp-configuration-section">
+              <div className="mail-service-section-heading">
+                <Settings size={16} />
+                <strong>发送配置</strong>
+              </div>
+              <div className="smtp-form-grid">
               <div className="smtp-connection-fields">
                 <Field label="SMTP 服务器">
                   <input
@@ -13829,8 +13867,8 @@ function SettingsPanel({
                   />
                 </Field>
               </div>
-            </div>
-            <div className="smtp-test">
+              </div>
+              <div className="smtp-test">
               <div className="smtp-test-copy">
                 <strong>发送测试邮件</strong>
               </div>
@@ -13875,8 +13913,8 @@ function SettingsPanel({
                   )}
                 </button>
               </div>
-            </div>
-            <div className="settings-card-footer smtp-footer">
+              </div>
+              <div className="settings-card-footer smtp-footer">
               <div className="smtp-footer-meta">
                 {smtp.hasPassword && (
                   <button
@@ -13939,6 +13977,7 @@ function SettingsPanel({
                   <span>保存邮件配置</span>
                 )}
               </button>
+              </div>
             </div>
           </div>
         ) : (

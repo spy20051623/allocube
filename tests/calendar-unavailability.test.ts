@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mergeProjectedUnavailability } from "../src/calendar-unavailability";
+import {
+  mergeProjectedDisableHistory,
+  mergeProjectedUnavailability
+} from "../src/calendar-unavailability";
 import type { UnavailabilityWindow } from "../src/shared/types";
 
 function planned(
@@ -17,6 +20,18 @@ function planned(
     endAt,
     reason: "",
     status: "ACTIVE"
+  };
+}
+
+function disabled(
+  id: string,
+  startAt: string,
+  endAt: string,
+  resourceGroupId: string | null
+): UnavailabilityWindow {
+  return {
+    ...planned(id, startAt, endAt, resourceGroupId),
+    kind: "LONG_TERM"
   };
 }
 
@@ -118,5 +133,76 @@ describe("mergeProjectedUnavailability", () => {
       "first",
       "second"
     ]);
+  });
+});
+
+describe("mergeProjectedDisableHistory", () => {
+  it("merges ended machine and resource-group disable periods", () => {
+    const result = mergeProjectedDisableHistory(
+      [
+        disabled(
+          "machine-disable",
+          "2026-07-29T02:00:00.000Z",
+          "2026-07-29T04:00:00.000Z",
+          null
+        )
+      ],
+      [
+        disabled(
+          "group-disable",
+          "2026-07-29T03:00:00.000Z",
+          "2026-07-29T05:00:00.000Z",
+          "group-1"
+        ),
+        planned(
+          "maintenance",
+          "2026-07-29T06:00:00.000Z",
+          "2026-07-29T07:00:00.000Z",
+          "group-1"
+        )
+      ]
+    );
+
+    expect(result).toEqual([
+      {
+        startAt: "2026-07-29T02:00:00.000Z",
+        endAt: "2026-07-29T05:00:00.000Z",
+        sources: [
+          expect.objectContaining({
+            scope: "MACHINE",
+            window: expect.objectContaining({ id: "machine-disable" })
+          }),
+          expect.objectContaining({
+            scope: "RESOURCE_GROUP",
+            window: expect.objectContaining({ id: "group-disable" })
+          })
+        ]
+      }
+    ]);
+  });
+
+  it("ignores cancelled and invalid disable periods", () => {
+    expect(
+      mergeProjectedDisableHistory(
+        [],
+        [
+          {
+            ...disabled(
+              "cancelled",
+              "2026-07-29T02:00:00.000Z",
+              "2026-07-29T03:00:00.000Z",
+              "group-1"
+            ),
+            status: "CANCELLED"
+          },
+          disabled(
+            "invalid",
+            "2026-07-29T03:00:00.000Z",
+            "2026-07-29T03:00:00.000Z",
+            "group-1"
+          )
+        ]
+      )
+    ).toEqual([]);
   });
 });

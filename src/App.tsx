@@ -183,6 +183,7 @@ import {
   writeCalendarPreference
 } from "./calendar-preference";
 import {
+  mergeProjectedDisableHistory,
   mergeProjectedUnavailability,
   type ProjectedUnavailability
 } from "./calendar-unavailability";
@@ -6677,6 +6678,20 @@ function CalendarPage({
                       unavailable,
                       groupUnavailability
                     );
+                  const visibleDisableHistory = longTermDisabled
+                    ? []
+                    : mergeProjectedDisableHistory(
+                        unavailable,
+                        groupUnavailability
+                      );
+                  const visibleResourceWindows = [
+                    ...visibleUnavailability,
+                    ...visibleDisableHistory
+                  ].sort(
+                    (left, right) =>
+                      new Date(left.startAt).getTime() -
+                      new Date(right.startAt).getTime()
+                  );
                   const groupMaintenanceNow = visibleUnavailability.some(
                     (item) =>
                       new Date(item.startAt).getTime() <= currentTime &&
@@ -6885,25 +6900,31 @@ function CalendarPage({
                                }
                              />
                            )}
-                        {visibleUnavailability.map((item) => {
+                        {visibleResourceWindows.map((item) => {
+                          const isDisableHistory =
+                            item.sources[0]?.window.kind === "LONG_TERM";
                           const onlySource =
                             item.sources.length === 1
                               ? item.sources[0]
                               : null;
                           const label =
                             item.sources.length > 1
-                              ? `维护 · ${item.sources.length}项`
+                              ? `${isDisableHistory ? "停用" : "维护"} · ${item.sources.length}项`
                               : onlySource?.window.reason ||
                                 (onlySource?.scope === "MACHINE"
-                                  ? "整机维护"
-                                  : "资源组维护");
+                                  ? isDisableHistory
+                                    ? "整机停用"
+                                    : "整机维护"
+                                  : isDisableHistory
+                                    ? "资源组停用"
+                                    : "资源组维护");
                           return (
                           <TimelineBar
                             key={`${group.id}-${item.startAt}-${item.endAt}-${item.sources.map((source) => source.window.id).join("-")}`}
                             start={item.startAt}
                             end={item.endAt}
                             range={range}
-                            className="unavailability-bar"
+                            className={`unavailability-bar${isDisableHistory ? " disable-history-bar" : ""}`}
                             onClick={(event) => {
                               event.stopPropagation();
                               setReservationDetail(null);
@@ -7742,11 +7763,14 @@ function CalendarWeekDayCell({
     })),
     ...unavailable.map((item) => ({
       id: item.id,
-      kind: "unavailable" as const,
+      kind:
+        item.kind === "LONG_TERM"
+          ? "disabled" as const
+          : "unavailable" as const,
       startAt: item.startAt,
       endAt: item.endAt,
-      persistent: item.kind === "LONG_TERM",
-      label: item.reason || "资源不可用"
+      persistent: item.kind === "LONG_TERM" && item.endAt >= dayEnd,
+      label: item.reason || (item.kind === "LONG_TERM" ? "停用" : "维护")
     }))
   ].sort((left, right) => left.startAt.localeCompare(right.startAt));
 
@@ -7826,7 +7850,11 @@ function CalendarWeekDayCell({
             {unavailable.map((item) => (
               <i
                 key={`unavailable-${item.id}`}
-                className="unavailable"
+                className={
+                  item.kind === "LONG_TERM"
+                    ? "unavailable disabled"
+                    : "unavailable"
+                }
                 style={rangeStyle(item.startAt, item.endAt)}
               />
             ))}
@@ -8711,6 +8739,8 @@ function CalendarUnavailabilityPopover({
   onClose: () => void;
 }) {
   const popoverRef = useRef<HTMLElement | null>(null);
+  const isDisableHistory =
+    detail.item.sources[0]?.window.kind === "LONG_TERM";
   const popoverWidth = 360;
   const viewportPadding = 12;
   const anchorGap = 8;
@@ -8756,18 +8786,20 @@ function CalendarUnavailabilityPopover({
     <div className="reservation-popover-layer">
       <article
         ref={popoverRef}
-        className="reservation-popover unavailability-popover"
+        className={`reservation-popover unavailability-popover${isDisableHistory ? " disable-history-popover" : ""}`}
         style={{ left, top }}
         role="dialog"
         aria-modal="false"
-        aria-label="维护详情"
+        aria-label={isDisableHistory ? "停用详情" : "维护详情"}
         tabIndex={-1}
       >
         <div className="reservation-popover-head">
           <div>
-            <strong>维护详情</strong>
-            <span className="state-chip scheduled">
-              {detail.item.sources.length}项安排
+            <strong>{isDisableHistory ? "停用详情" : "维护详情"}</strong>
+            <span
+              className={`state-chip ${isDisableHistory ? "disabled" : "scheduled"}`}
+            >
+              {detail.item.sources.length}项{isDisableHistory ? "记录" : "安排"}
             </span>
           </div>
           <div className="reservation-popover-actions">
@@ -8815,8 +8847,12 @@ function CalendarUnavailabilityPopover({
               <div>
                 <strong>
                   {source.scope === "MACHINE"
-                    ? "整机维护"
-                    : "资源组维护"}
+                    ? isDisableHistory
+                      ? "整机停用"
+                      : "整机维护"
+                    : isDisableHistory
+                      ? "资源组停用"
+                      : "资源组维护"}
                 </strong>
               </div>
               <time>

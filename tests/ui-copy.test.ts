@@ -194,10 +194,13 @@ describe("角色化界面文案", () => {
     expect(source).toContain('title="重新启用"');
     expect(source).toContain('title="永久删除"');
     expect(source).toContain("/enable");
-    expect(source).toContain("visibleUnavailability.map");
+    expect(source).toContain("visibleResourceWindows.map");
     expect(source).toContain("mergeProjectedUnavailability");
+    expect(source).toContain("mergeProjectedDisableHistory");
+    expect(source).toContain("disable-history-bar");
     expect(source).toContain("CalendarUnavailabilityPopover");
-    expect(calendarUnavailability).toContain('window.kind === "PLANNED"');
+    expect(calendarUnavailability).toContain('window.kind === kind');
+    expect(calendarUnavailability).toContain('"LONG_TERM"');
     expect(calendarUnavailability).toContain("sourceStart > previousEnd");
     expect(source).toContain('" long-term-disabled"');
     expect(source).toContain("function MaintenanceModal");
@@ -233,7 +236,22 @@ describe("角色化界面文案", () => {
     expect(source).toContain('"全天停用"');
     expect(source).toContain("–24:00");
     expect(source).not.toContain("–持续停用");
-    expect(source).toContain('persistent: item.kind === "LONG_TERM"');
+    expect(source).toContain(
+      'persistent: item.kind === "LONG_TERM" && item.endAt >= dayEnd'
+    );
+  });
+
+  it("周视图占用、维护和停用色块使用相同高度", () => {
+    const styles = fs.readFileSync(
+      new URL("../src/styles.css", import.meta.url),
+      "utf8"
+    );
+    const unavailableRule = styles.slice(
+      styles.indexOf(".week-mini-track i.unavailable {"),
+      styles.indexOf(".week-mini-track i.unavailable.disabled {")
+    );
+    expect(unavailableRule).not.toContain("top: 0");
+    expect(unavailableRule).not.toContain("bottom: 0");
   });
 
   it("周视图占用详情不重复标注我的占用", () => {

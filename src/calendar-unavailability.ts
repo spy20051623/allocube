@@ -11,9 +11,10 @@ export type ProjectedUnavailability = {
   sources: ProjectedUnavailabilitySource[];
 };
 
-export function mergeProjectedUnavailability(
+function mergeProjectedWindows(
   machineWindows: UnavailabilityWindow[],
-  groupWindows: UnavailabilityWindow[]
+  groupWindows: UnavailabilityWindow[],
+  kind: UnavailabilityWindow["kind"]
 ): ProjectedUnavailability[] {
   const sources: ProjectedUnavailabilitySource[] = [
     ...machineWindows.map((window) => ({
@@ -27,7 +28,7 @@ export function mergeProjectedUnavailability(
   ]
     .filter(
       ({ window }) =>
-        window.kind === "PLANNED" &&
+        window.kind === kind &&
         window.status === "ACTIVE" &&
         Number.isFinite(new Date(window.startAt).getTime()) &&
         Number.isFinite(new Date(window.endAt).getTime()) &&
@@ -72,4 +73,18 @@ export function mergeProjectedUnavailability(
   }
 
   return merged;
+}
+
+export function mergeProjectedUnavailability(
+  machineWindows: UnavailabilityWindow[],
+  groupWindows: UnavailabilityWindow[]
+): ProjectedUnavailability[] {
+  return mergeProjectedWindows(machineWindows, groupWindows, "PLANNED");
+}
+
+export function mergeProjectedDisableHistory(
+  machineWindows: UnavailabilityWindow[],
+  groupWindows: UnavailabilityWindow[]
+): ProjectedUnavailability[] {
+  return mergeProjectedWindows(machineWindows, groupWindows, "LONG_TERM");
 }

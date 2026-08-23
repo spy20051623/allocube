@@ -22,6 +22,7 @@ import {
   KeyRound,
   LogOut,
   Mail,
+  MessageSquare,
   Megaphone,
   Plus,
   Pencil,
@@ -29,6 +30,7 @@ import {
   PowerOff,
   RefreshCw,
   Search,
+  Send,
   Server,
   Settings,
   ShieldCheck,
@@ -62,6 +64,7 @@ import { DocumentationPage } from "./DocumentationPage";
 import { AnnouncementMarkdown } from "./AnnouncementMarkdown";
 import {
   appPath,
+  feedbackPath,
   machineAdminPath,
   resolveAppRoute,
   type AdminTab,
@@ -133,6 +136,20 @@ import {
   rememberSeenAnnouncement
 } from "./shared/announcements";
 import { resolveCatalogAccessDisplay } from "./catalog-access-state";
+import {
+  feedbackLevelLabels,
+  feedbackLevelsFor,
+  feedbackStatusLabels,
+  feedbackStatusesFor,
+  feedbackTemplates,
+  feedbackTypeLabels,
+  type FeedbackAttachment,
+  type FeedbackLevel,
+  type FeedbackStatus,
+  type FeedbackTicketDetail,
+  type FeedbackTicketSummary,
+  type FeedbackType
+} from "./shared/feedback";
 import { calculateVisibleManagerCount } from "./manager-summary";
 import {
   resolveNotificationDestination,
@@ -505,6 +522,8 @@ export function App() {
   const [toast, setToast] = useState<ToastState>(null);
   const [passwordReminderDismissed, setPasswordReminderDismissed] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [feedbackUnreadCount, setFeedbackUnreadCount] = useState(0);
+  const [feedbackRefreshToken, setFeedbackRefreshToken] = useState(0);
   const [announcementRefreshToken, setAnnouncementRefreshToken] = useState(0);
 
   const notify = useCallback((kind: "success" | "error", message: string) => {
@@ -535,8 +554,9 @@ export function App() {
 
   const loadUnreadNotificationCount = useCallback(async () => {
     try {
-      const result = await api<{ unreadCount: number }>("/notifications/unread-count");
+      const result = await api<{ unreadCount: number; feedbackUnreadCount: number }>("/notifications/unread-count");
       setUnreadNotificationCount(Math.max(0, result.unreadCount));
+      setFeedbackUnreadCount(Math.max(0, result.feedbackUnreadCount));
     } catch {
       // 通知数量属于辅助状态，短暂加载失败不应干扰当前页面。
     }
@@ -580,6 +600,10 @@ export function App() {
     events.addEventListener("announcement", () => {
       setAnnouncementRefreshToken((current) => current + 1);
     });
+    events.addEventListener("feedback", () => {
+      setFeedbackRefreshToken((current) => current + 1);
+      void loadUnreadNotificationCount();
+    });
     return () => events.close();
   }, [
     bootstrap?.user.id,
@@ -592,6 +616,7 @@ export function App() {
   useEffect(() => {
     if (docsRoute || !bootstrap) {
       setUnreadNotificationCount(0);
+      setFeedbackUnreadCount(0);
       return;
     }
     void loadUnreadNotificationCount();
@@ -643,7 +668,7 @@ export function App() {
       currentRoute.page === "admin" &&
       bootstrap.user.role !== "SYSTEM_ADMIN" &&
       currentRoute.adminTab &&
-      ["announcements", "settings", "audit"].includes(currentRoute.adminTab)
+      ["announcements", "feedback", "settings", "audit"].includes(currentRoute.adminTab)
     ) {
       return "/admin/machines";
     }
@@ -709,6 +734,7 @@ export function App() {
       setCsrfToken("");
       setBootstrap(null);
       setUnreadNotificationCount(0);
+      setFeedbackUnreadCount(0);
       void routeNavigate({
         href: "/login",
         replace: true,
@@ -735,7 +761,7 @@ export function App() {
   return (
     <ServerClockProvider initialServerNow={bootstrap.serverNow}>
       <DialogProvider>
-        <div className={`app-frame${showPasswordReminder ? " has-password-banner" : ""}`}>
+        <div className={`app-frame${showPasswordReminder ? " has-password-banner" : ""}${visiblePage === "admin" && adminTab === "feedback" && currentRoute?.feedbackId ? " feedback-admin-detail-frame" : ""}`}>
         <AutoLogoutGuard
           userId={bootstrap.user.id}
           minutes={bootstrap.user.autoLogoutMinutes}
@@ -749,6 +775,7 @@ export function App() {
           showAdmin={Boolean(activeUser)}
           page={visiblePage}
           unreadNotificationCount={unreadNotificationCount}
+          feedbackUnreadCount={feedbackUnreadCount}
           navigate={navigate}
           onLogout={() => void logout()}
         />
@@ -795,12 +822,23 @@ export function App() {
             <NotificationsPage
               notify={notify}
               onUnreadCountChange={setUnreadNotificationCount}
+              onFeedbackUnreadCountChange={setFeedbackUnreadCount}
               navigate={(path) => {
                 if (resolveAppRoute(path)) void routeNavigate({ href: path });
               }}
             />
           )}
           {visiblePage === "announcements" && <AnnouncementListPage />}
+          {visiblePage === "feedback" && (
+            <FeedbackPage
+              feedbackId={currentRoute?.feedbackId}
+              refreshToken={feedbackRefreshToken}
+              notify={notify}
+              onUnreadCountRefresh={loadUnreadNotificationCount}
+              onOpen={(id) => void routeNavigate({ href: feedbackPath(id) })}
+              onBack={() => void routeNavigate({ href: "/feedback" })}
+            />
+          )}
           {visiblePage === "admin" && (
             <AdminPage
               bootstrap={bootstrap}
@@ -810,6 +848,10 @@ export function App() {
               onOpenResourceCatalog={() => navigate("resources")}
               machineId={currentRoute?.machineId}
               machineSection={currentRoute?.machineSection}
+              feedbackId={currentRoute?.feedbackId}
+              feedbackRefreshToken={feedbackRefreshToken}
+              onFeedbackRoute={(id) => void routeNavigate({ href: id ? feedbackPath(id, true) : "/admin/feedback" })}
+              onUnreadCountRefresh={loadUnreadNotificationCount}
               onMachineRoute={(nextMachineId, nextSection, replace = false) => {
                 void routeNavigate({
                   href: machineAdminPath(nextMachineId, nextSection),
@@ -4833,6 +4875,7 @@ function Topbar({
   showAdmin,
   page,
   unreadNotificationCount,
+  feedbackUnreadCount,
   navigate,
   onLogout
 }: {
@@ -4841,6 +4884,7 @@ function Topbar({
   showAdmin: boolean;
   page: Page;
   unreadNotificationCount: number;
+  feedbackUnreadCount: number;
   navigate: (page: Page) => void;
   onLogout: () => void;
 }) {
@@ -4952,6 +4996,28 @@ function Topbar({
                 }}
               >
                 <Megaphone size={16} />系统公告
+              </button>
+            )}
+            {!restricted && (
+              <button
+                type="button"
+                role="menuitem"
+                className={page === "feedback" ? "active" : ""}
+                onClick={() => {
+                  navigate("feedback");
+                  setUserMenuOpen(false);
+                }}
+              >
+                <MessageSquare size={16} />
+                <span>反馈</span>
+                {feedbackUnreadCount > 0 && (
+                  <span
+                    className="notification-menu-indicator"
+                    aria-label={`${feedbackUnreadCount} 条反馈未读更新`}
+                  >
+                    {notificationBadgeText(feedbackUnreadCount)}
+                  </span>
+                )}
               </button>
             )}
             <button
@@ -9786,13 +9852,780 @@ function stateClass(state: string) {
   return ({ "未开始": "upcoming", "进行中": "active", "已结束": "done", "已取消": "cancelled", "因维护取消": "cancelled" } as Record<string, string>)[state] ?? "";
 }
 
+type FeedbackNotify = (kind: "success" | "error", message: string) => void;
+
+function feedbackMultipart(metadata: unknown, images: File[]) {
+  const data = new FormData();
+  data.append("metadata", JSON.stringify(metadata));
+  for (const image of images) data.append("images", image, image.name);
+  return data;
+}
+
+const FEEDBACK_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const FEEDBACK_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const FEEDBACK_IMAGE_MESSAGE_MAX_BYTES = 20 * 1024 * 1024;
+
+function FeedbackImagePicker({
+  files,
+  onChange,
+  onError,
+  maxFiles = 5,
+  maxTotalBytes = FEEDBACK_IMAGE_MESSAGE_MAX_BYTES,
+  compact = false
+}: {
+  files: File[];
+  onChange: (files: File[]) => void;
+  onError: (message: string) => void;
+  maxFiles?: number;
+  maxTotalBytes?: number;
+  compact?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const selectedBytes = files.reduce((sum, file) => sum + file.size, 0);
+  const canAdd = files.length < maxFiles && selectedBytes < maxTotalBytes;
+  const previews = useMemo(
+    () => files.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [files]
+  );
+  useEffect(
+    () => () => previews.forEach((preview) => URL.revokeObjectURL(preview.url)),
+    [previews]
+  );
+
+  const addFiles = (candidates: File[]) => {
+    let next = [...files];
+    let rejectedType = false;
+    let rejectedSize = false;
+    let rejectedCount = false;
+    let rejectedTotal = false;
+    for (const candidate of candidates) {
+      if (!FEEDBACK_IMAGE_TYPES.has(candidate.type)) {
+        rejectedType = true;
+        continue;
+      }
+      if (candidate.size <= 0 || candidate.size > FEEDBACK_IMAGE_MAX_BYTES) {
+        rejectedSize = true;
+        continue;
+      }
+      if (
+        next.some(
+          (file) =>
+            file.name === candidate.name &&
+            file.size === candidate.size &&
+            file.lastModified === candidate.lastModified
+        )
+      ) {
+        continue;
+      }
+      if (next.length >= maxFiles) {
+        rejectedCount = true;
+        continue;
+      }
+      if (next.reduce((sum, file) => sum + file.size, 0) + candidate.size > maxTotalBytes) {
+        rejectedTotal = true;
+        continue;
+      }
+      next.push(candidate);
+    }
+    onChange(next);
+    if (rejectedType) onError("仅支持 PNG、JPEG 或 WebP 图片");
+    else if (rejectedSize) onError("每张图片必须小于等于 5 MB");
+    else if (rejectedCount) onError(`最多还能选择 ${Math.max(0, maxFiles - files.length)} 张图片`);
+    else if (rejectedTotal) onError("本次图片合计不能超过 20 MB");
+  };
+
+  const openPicker = () => {
+    if (canAdd) inputRef.current?.click();
+  };
+
+  return (
+    <div className={`feedback-image-picker${compact ? " compact" : ""}`}>
+      <input
+        ref={inputRef}
+        className="feedback-image-native-input"
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        multiple
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(event) => {
+          addFiles(Array.from(event.target.files ?? []));
+          event.target.value = "";
+        }}
+      />
+      <div
+        className={`feedback-image-dropzone${dragging ? " dragging" : ""}${canAdd ? "" : " full"}`}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          addFiles(Array.from(event.dataTransfer.files));
+        }}
+      >
+        <span className="feedback-image-dropzone-icon"><Plus size={18} /></span>
+        <span className="feedback-image-dropzone-copy">
+          <strong>{dragging ? "松开即可添加图片" : compact ? "添加评论图片" : "拖拽图片到这里"}</strong>
+          <small>PNG、JPEG、WebP · 单张 5 MB · 合计 20 MB</small>
+        </span>
+        <button
+          type="button"
+          className="secondary-button compact"
+          disabled={!canAdd}
+          onClick={openPicker}
+        >
+          选择图片
+        </button>
+      </div>
+      {previews.length > 0 && (
+        <div className="feedback-selected-images" aria-label="已选择的图片">
+          {previews.map(({ file, url }, index) => (
+            <div className="feedback-selected-image" key={`${file.name}-${file.lastModified}-${index}`}>
+              <img src={url} alt="" />
+              <span>
+                <strong title={file.name}>{file.name}</strong>
+                <small>{feedbackFileSize(file.size)}</small>
+              </span>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={`移除 ${file.name}`}
+                onClick={() => onChange(files.filter((_, fileIndex) => fileIndex !== index))}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function feedbackFileSize(bytes: number) {
+  return bytes >= 1024 * 1024
+    ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function FeedbackPage({
+  feedbackId,
+  refreshToken,
+  notify,
+  onUnreadCountRefresh,
+  onOpen,
+  onBack
+}: {
+  feedbackId?: string;
+  refreshToken: number;
+  notify: FeedbackNotify;
+  onUnreadCountRefresh: () => Promise<void>;
+  onOpen: (id: string) => void;
+  onBack: () => void;
+}) {
+  const [tickets, setTickets] = useState<FeedbackTicketSummary[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [typeFilter, setTypeFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const load = useCallback(async () => {
+    if (feedbackId) return;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (typeFilter) params.set("type", typeFilter);
+      if (statusFilter) params.set("status", statusFilter);
+      const result = await api<{ tickets: FeedbackTicketSummary[]; nextCursor: string | null }>(
+        `/feedback${params.size ? `?${params}` : ""}`
+      );
+      setTickets(result.tickets);
+      setNextCursor(result.nextCursor);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "反馈加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }, [feedbackId, notify, statusFilter, typeFilter]);
+  useEffect(() => { void load(); }, [load, refreshToken]);
+
+  if (feedbackId) {
+    return (
+      <FeedbackDetailView
+        id={feedbackId}
+        admin={false}
+        refreshToken={refreshToken}
+        notify={notify}
+        onBack={onBack}
+        onRead={() => void onUnreadCountRefresh()}
+      />
+    );
+  }
+
+  return (
+    <div className="page-shell feedback-page">
+      <PageHeader
+        title="我的反馈"
+        actions={
+          <button type="button" className="primary-button" onClick={() => setCreating(true)}>
+            <Plus size={16} />提交反馈
+          </button>
+        }
+      />
+      <div className="feedback-filter-bar card">
+        <select aria-label="反馈类型" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+          <option value="">全部类型</option>
+          <option value="ISSUE">问题单</option>
+          <option value="REQUIREMENT">需求单</option>
+        </select>
+        <select aria-label="反馈状态" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <option value="">全部状态</option>
+          {Object.entries(feedbackStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </div>
+      {loading ? (
+        <div className="content-loading"><RefreshCw className="spin" />正在载入</div>
+      ) : tickets.length ? (
+        <>
+        <div className="feedback-ticket-list">
+          {tickets.map((ticket) => (
+            <button type="button" className="card feedback-ticket-card" key={ticket.id} onClick={() => onOpen(ticket.id)}>
+              <span className="feedback-ticket-main">
+                <span className="feedback-ticket-number">{ticket.displayNumber}</span>
+                <span className="feedback-ticket-title-row">
+                  <strong>{ticket.title}</strong>
+                  <span className="feedback-intrinsic-badges">
+                    <FeedbackPill value={ticket.type}>{feedbackTypeLabels[ticket.type]}</FeedbackPill>
+                    <FeedbackPill tone="level" value={ticket.level}>{feedbackLevelLabels[ticket.level]}</FeedbackPill>
+                  </span>
+                </span>
+                <small>{formatChina(ticket.updatedAt)} 更新</small>
+              </span>
+              <span className="feedback-ticket-status">
+                <FeedbackPill tone="status" value={ticket.status}>{feedbackStatusLabels[ticket.status]}</FeedbackPill>
+                <ChevronRight size={18} />
+              </span>
+            </button>
+          ))}
+        </div>
+        {nextCursor && (
+          <button type="button" className="secondary-button feedback-load-more" onClick={async () => {
+            const params = new URLSearchParams({ cursor: nextCursor });
+            if (typeFilter) params.set("type", typeFilter);
+            if (statusFilter) params.set("status", statusFilter);
+            try {
+              const result = await api<{ tickets: FeedbackTicketSummary[]; nextCursor: string | null }>(`/feedback?${params}`);
+              setTickets((current) => [...current, ...result.tickets]);
+              setNextCursor(result.nextCursor);
+            } catch (error) {
+              notify("error", error instanceof Error ? error.message : "更多反馈加载失败");
+            }
+          }}>加载更多</button>
+        )}
+        </>
+      ) : (
+        <EmptyState icon={MessageSquare} title="还没有反馈" />
+      )}
+      {creating && (
+        <FeedbackEditorModal
+          notify={notify}
+          onClose={() => setCreating(false)}
+          onSaved={(ticket) => {
+            setCreating(false);
+            notify("success", "反馈已提交");
+            onOpen(ticket.id);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function FeedbackPill({
+  children,
+  tone = "type",
+  value
+}: {
+  children: React.ReactNode;
+  tone?: "type" | "level" | "status";
+  value: FeedbackType | FeedbackLevel | FeedbackStatus;
+}) {
+  return <span className={`feedback-pill ${tone} ${tone}-${value.toLowerCase().replaceAll("_", "-")}`}>{children}</span>;
+}
+
+function FeedbackEditorModal({
+  ticket,
+  notify,
+  onClose,
+  onSaved
+}: {
+  ticket?: FeedbackTicketDetail;
+  notify: FeedbackNotify;
+  onClose: () => void;
+  onSaved: (ticket: FeedbackTicketDetail) => void;
+}) {
+  const editing = Boolean(ticket);
+  const [type, setType] = useState<FeedbackType>(ticket?.type ?? "ISSUE");
+  const [level, setLevel] = useState<FeedbackLevel>(ticket?.level ?? "NORMAL");
+  const [title, setTitle] = useState(ticket?.title ?? "");
+  const [bodyMarkdown, setBodyMarkdown] = useState(ticket?.bodyMarkdown ?? feedbackTemplates.ISSUE);
+  const [retainedIds, setRetainedIds] = useState(() => new Set(ticket?.attachments.map((item) => item.id) ?? []));
+  const [images, setImages] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const changeType = (next: FeedbackType) => {
+    setType(next);
+    setLevel("NORMAL");
+    if (!editing && (bodyMarkdown === feedbackTemplates.ISSUE || bodyMarkdown === feedbackTemplates.REQUIREMENT)) {
+      setBodyMarkdown(feedbackTemplates[next]);
+    }
+  };
+  const currentAttachments = ticket?.attachments.filter((item) => retainedIds.has(item.id)) ?? [];
+  const totalImages = currentAttachments.length + images.length;
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!title.trim() || !bodyMarkdown.trim()) return;
+    if (totalImages > 5) {
+      notify("error", "正文最多包含 5 张图片");
+      return;
+    }
+    setBusy(true);
+    try {
+      const metadata = editing
+        ? { expectedVersion: ticket!.version, level, title, bodyMarkdown, retainedAttachmentIds: currentAttachments.map((item) => item.id) }
+        : { type, level, title, bodyMarkdown };
+      const result = await api<{ ticket: FeedbackTicketDetail }>(
+        editing ? `/feedback/${ticket!.id}` : "/feedback",
+        { method: editing ? "PUT" : "POST", body: feedbackMultipart(metadata, images) }
+      );
+      onSaved(result.ticket);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "反馈保存失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal title={editing ? `编辑 ${ticket!.displayNumber}` : "提交反馈"} onClose={onClose} large className="feedback-editor-modal">
+      <form className="feedback-editor-form" onSubmit={(event) => void submit(event)}>
+        <div className="feedback-editor-scroll">
+          <div className="feedback-editor-fields">
+            <div className="feedback-editor-row">
+              <Field label="类型">
+                <select disabled={editing} value={type} onChange={(event) => changeType(event.target.value as FeedbackType)}>
+                  <option value="ISSUE">问题单</option>
+                  <option value="REQUIREMENT">需求单</option>
+                </select>
+              </Field>
+              <Field label="等级">
+                <select value={level} onChange={(event) => setLevel(event.target.value as FeedbackLevel)}>
+                  {feedbackLevelsFor(type).map((value) => <option key={value} value={value}>{feedbackLevelLabels[value]}</option>)}
+                </select>
+              </Field>
+            </div>
+            <Field label="标题">
+              <input autoFocus maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} />
+            </Field>
+            <Field label="正文">
+              <textarea maxLength={10000} value={bodyMarkdown} onChange={(event) => setBodyMarkdown(event.target.value)} />
+            </Field>
+            <div className="field">
+              <span>图片（{totalImages}/5）</span>
+              <FeedbackImagePicker
+                files={images}
+                onChange={setImages}
+                onError={(message) => notify("error", message)}
+                maxFiles={Math.max(0, 5 - currentAttachments.length)}
+                maxTotalBytes={Math.max(
+                  0,
+                  FEEDBACK_IMAGE_MESSAGE_MAX_BYTES -
+                    currentAttachments.reduce((sum, attachment) => sum + attachment.byteSize, 0)
+                )}
+              />
+            </div>
+            {currentAttachments.length > 0 && (
+              <div className="feedback-retained-images">
+                {currentAttachments.map((attachment) => (
+                  <button type="button" key={attachment.id} onClick={() => setRetainedIds((current) => {
+                    const next = new Set(current); next.delete(attachment.id); return next;
+                  })}>
+                    <img src={attachment.contentUrl} alt="" />
+                    <span><X size={13} />移除</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="feedback-editor-preview">
+            <strong>预览</strong>
+            <AnnouncementMarkdown markdown={bodyMarkdown} />
+          </div>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>取消</button>
+          <button className="primary-button" disabled={busy || !title.trim() || !bodyMarkdown.trim()}>
+            <BusyButtonContent busy={busy}>{editing ? "保存修改" : "提交反馈"}</BusyButtonContent>
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function FeedbackDetailView({
+  id,
+  admin,
+  refreshToken,
+  notify,
+  onBack,
+  onRead
+}: {
+  id: string;
+  admin: boolean;
+  refreshToken: number;
+  notify: FeedbackNotify;
+  onBack: () => void;
+  onRead?: () => void;
+}) {
+  const dialog = useAppDialog();
+  const onReadRef = useRef(onRead);
+  onReadRef.current = onRead;
+  const [ticket, setTicket] = useState<FeedbackTicketDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [comment, setComment] = useState("");
+  const [commentImages, setCommentImages] = useState<File[]>([]);
+  const [commenting, setCommenting] = useState(false);
+  const [nextStatus, setNextStatus] = useState<FeedbackStatus | "">("");
+  const [processingNote, setProcessingNote] = useState("");
+  const [changing, setChanging] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const result = await api<{ ticket: FeedbackTicketDetail }>(`${admin ? "/admin" : ""}/feedback/${id}`);
+      setTicket(result.ticket);
+      setNextStatus("");
+      onReadRef.current?.();
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "反馈加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }, [admin, id, notify]);
+  useEffect(() => { void load(); }, [load, refreshToken]);
+
+  if (loading) return <div className="content-loading"><RefreshCw className="spin" />正在载入</div>;
+  if (!ticket) return <div className="page-shell"><EmptyState icon={CircleAlert} title="反馈不存在" /></div>;
+
+  const withdraw = async () => {
+    if (!(await dialog.confirm({ title: "撤回反馈", message: "撤回后反馈将完全只读，且管理员不能恢复。", confirmLabel: "确认撤回", tone: "danger" }))) return;
+    try {
+      const result = await api<{ ticket: FeedbackTicketDetail }>(`/feedback/${id}/withdraw`, {
+        method: "POST", body: jsonBody({ expectedVersion: ticket.version })
+      });
+      setTicket(result.ticket);
+      notify("success", "反馈已撤回");
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "撤回失败");
+      if (error instanceof ApiError && error.status === 409) void load();
+    }
+  };
+
+  const submitComment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!comment.trim()) return;
+    setCommenting(true);
+    try {
+      const result = await api<{ ticket: FeedbackTicketDetail }>(`${admin ? "/admin" : ""}/feedback/${id}/comments`, {
+        method: "POST", body: feedbackMultipart({ bodyMarkdown: comment }, commentImages)
+      });
+      setTicket(result.ticket);
+      setComment("");
+      setCommentImages([]);
+      notify("success", "评论已发送");
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "评论发送失败");
+    } finally {
+      setCommenting(false);
+    }
+  };
+
+  const changeStatus = async () => {
+    if (!nextStatus || !processingNote.trim()) return;
+    setChanging(true);
+    try {
+      const result = await api<{ ticket: FeedbackTicketDetail }>(`/admin/feedback/${id}/status`, {
+        method: "PUT",
+        body: jsonBody({ expectedVersion: ticket.version, status: nextStatus, processingNote })
+      });
+      setTicket(result.ticket);
+      setNextStatus("");
+      setProcessingNote("");
+      notify("success", "反馈状态已更新");
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "状态更新失败");
+      if (error instanceof ApiError && error.status === 409) void load();
+    } finally {
+      setChanging(false);
+    }
+  };
+
+  const changeLevel = async (level: FeedbackLevel) => {
+    if (level === ticket.level) return;
+    setChanging(true);
+    try {
+      const result = await api<{ ticket: FeedbackTicketDetail }>(`/admin/feedback/${id}/level`, {
+        method: "PUT", body: jsonBody({ expectedVersion: ticket.version, level })
+      });
+      setTicket(result.ticket);
+      notify("success", "反馈等级已更新");
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "等级更新失败");
+      if (error instanceof ApiError && error.status === 409) void load();
+    } finally {
+      setChanging(false);
+    }
+  };
+
+  return (
+    <div className={`page-shell feedback-detail-page${admin ? " admin-feedback-detail" : ""}`}>
+      <button type="button" className="feedback-back-button" onClick={onBack}><ChevronLeft size={16} />返回反馈列表</button>
+      <section className="card feedback-detail-header">
+        <div>
+          <span className="feedback-ticket-number">{ticket.displayNumber}</span>
+          <div className="feedback-detail-title-row">
+            <h1>{ticket.title}</h1>
+            <div className="feedback-intrinsic-badges">
+              <FeedbackPill value={ticket.type}>{feedbackTypeLabels[ticket.type]}</FeedbackPill>
+              <FeedbackPill tone="level" value={ticket.level}>{feedbackLevelLabels[ticket.level]}</FeedbackPill>
+            </div>
+          </div>
+          <p>{ticket.submittedByName} · {formatChina(ticket.createdAt)} 提交</p>
+        </div>
+        <div className="feedback-detail-status">
+          <FeedbackPill tone="status" value={ticket.status}>{feedbackStatusLabels[ticket.status]}</FeedbackPill>
+        </div>
+        {!admin && (ticket.canEdit || ticket.canWithdraw) && (
+          <div className="feedback-detail-actions">
+            {ticket.canEdit && <button type="button" className="secondary-button" onClick={() => setEditing(true)}><Pencil size={15} />编辑</button>}
+            {ticket.canWithdraw && <button type="button" className="danger-button" onClick={() => void withdraw()}>撤回</button>}
+          </div>
+        )}
+      </section>
+      {admin && ticket.status !== "WITHDRAWN" && (
+        <section className="card feedback-admin-actions">
+          <div>
+            <Field label="调整等级">
+              <select disabled={changing} value={ticket.level} onChange={(event) => void changeLevel(event.target.value as FeedbackLevel)}>
+                {feedbackLevelsFor(ticket.type).map((value) => <option key={value} value={value}>{feedbackLevelLabels[value]}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div className="feedback-status-change">
+            <Field label="变更状态">
+              <select disabled={changing} value={nextStatus} onChange={(event) => setNextStatus(event.target.value as FeedbackStatus)}>
+                <option value="">选择新状态</option>
+                {feedbackStatusesFor(ticket.type).filter((value) => value !== ticket.status).map((value) => <option key={value} value={value}>{feedbackStatusLabels[value]}</option>)}
+              </select>
+            </Field>
+            <Field label="处理说明">
+              <textarea maxLength={10000} value={processingNote} onChange={(event) => setProcessingNote(event.target.value)} />
+            </Field>
+            <button type="button" className="primary-button" disabled={changing || !nextStatus || !processingNote.trim()} onClick={() => void changeStatus()}>
+              <BusyButtonContent busy={changing}>更新状态</BusyButtonContent>
+            </button>
+          </div>
+        </section>
+      )}
+      <section className="card feedback-current-content">
+        <h2>反馈内容</h2>
+        <AnnouncementMarkdown markdown={ticket.bodyMarkdown} />
+        <FeedbackAttachments attachments={ticket.attachments} />
+      </section>
+      <section className="feedback-timeline">
+        <h2>处理时间线</h2>
+        {ticket.activities.map((activity) => (
+          <article className="card feedback-activity" key={activity.id}>
+            <div className="feedback-activity-marker"><MessageSquare size={15} /></div>
+            <div>
+              <header>
+                <strong>{activity.actorName}</strong>
+                <span>{feedbackActivityTitle(activity)}</span>
+                <time>{formatChina(activity.createdAt)}</time>
+              </header>
+              {activity.bodyMarkdown && <AnnouncementMarkdown markdown={activity.bodyMarkdown} />}
+              {activity.changedFields.length > 0 && <p className="feedback-changed-fields">已更新：{activity.changedFields.map(feedbackChangedFieldLabel).join("、")}</p>}
+              <FeedbackAttachments attachments={activity.attachments} />
+            </div>
+          </article>
+        ))}
+      </section>
+      {ticket.canComment && (
+        <form className="card feedback-comment-form" onSubmit={(event) => void submitComment(event)}>
+          <Field label={admin ? "管理员回复" : "追加评论"}>
+            <textarea maxLength={10000} value={comment} onChange={(event) => setComment(event.target.value)} />
+          </Field>
+          <FeedbackImagePicker
+            compact
+            files={commentImages}
+            onChange={setCommentImages}
+            onError={(message) => notify("error", message)}
+          />
+          <div className="feedback-comment-actions">
+            <button className="primary-button" disabled={commenting || !comment.trim()}><Send size={15} /><BusyButtonContent busy={commenting}>发送评论</BusyButtonContent></button>
+          </div>
+        </form>
+      )}
+      {editing && (
+        <FeedbackEditorModal
+          ticket={ticket}
+          notify={notify}
+          onClose={() => setEditing(false)}
+          onSaved={(updated) => { setTicket(updated); setEditing(false); notify("success", "反馈已更新"); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function FeedbackAttachments({ attachments }: { attachments: FeedbackAttachment[] }) {
+  if (!attachments.length) return null;
+  return (
+    <div className="feedback-attachments">
+      {attachments.map((attachment) => (
+        <a key={attachment.id} href={attachment.contentUrl} target="_blank" rel="noreferrer">
+          <img src={attachment.contentUrl} alt={attachment.originalName} />
+          <span>{attachment.originalName}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function feedbackActivityTitle(activity: FeedbackTicketDetail["activities"][number]) {
+  if (activity.kind === "CREATED") return "提交了反馈";
+  if (activity.kind === "COMMENT") return "追加了评论";
+  if (activity.kind === "CONTENT_UPDATED") return "更新了反馈内容";
+  if (activity.kind === "WITHDRAWN") return "撤回了反馈";
+  if (activity.kind === "STATUS_CHANGED" && activity.toStatus) return `将状态改为“${feedbackStatusLabels[activity.toStatus]}”`;
+  if (activity.kind === "LEVEL_CHANGED" && activity.toLevel) return `将等级改为“${feedbackLevelLabels[activity.toLevel]}”`;
+  return "更新了反馈";
+}
+
+function feedbackChangedFieldLabel(value: string) {
+  return ({ title: "标题", bodyMarkdown: "正文", level: "等级", attachments: "图片" } as Record<string, string>)[value] ?? value;
+}
+
+function FeedbackAdminPanel({
+  feedbackId,
+  refreshToken,
+  notify,
+  onOpen,
+  onUnreadCountRefresh
+}: {
+  feedbackId?: string;
+  refreshToken: number;
+  notify: FeedbackNotify;
+  onOpen: (id?: string) => void;
+  onUnreadCountRefresh: () => Promise<void>;
+}) {
+  const [tickets, setTickets] = useState<FeedbackTicketSummary[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [type, setType] = useState("");
+  const [status, setStatus] = useState("");
+  const [level, setLevel] = useState("");
+  const load = useCallback(async () => {
+    if (feedbackId) return;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (search.trim()) params.set("search", search.trim());
+      if (type) params.set("type", type);
+      if (status) params.set("status", status);
+      if (level) params.set("level", level);
+      const result = await api<{ tickets: FeedbackTicketSummary[]; nextCursor: string | null }>(`/admin/feedback${params.size ? `?${params}` : ""}`);
+      setTickets(result.tickets);
+      setNextCursor(result.nextCursor);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "反馈队列加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }, [feedbackId, level, notify, search, status, type]);
+  useEffect(() => { const timer = window.setTimeout(() => void load(), 180); return () => window.clearTimeout(timer); }, [load, refreshToken]);
+  if (feedbackId) {
+    return <FeedbackDetailView id={feedbackId} admin refreshToken={refreshToken} notify={notify} onBack={() => onOpen()} onRead={() => void onUnreadCountRefresh()} />;
+  }
+  return (
+    <div className="feedback-admin-page">
+      <PageHeader title="反馈处理" />
+      <div className="feedback-filter-bar card feedback-admin-filters">
+        <label className="feedback-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索编号或标题" /></label>
+        <select aria-label="类型" value={type} onChange={(event) => setType(event.target.value)}><option value="">全部类型</option><option value="ISSUE">问题单</option><option value="REQUIREMENT">需求单</option></select>
+        <select aria-label="状态" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">全部状态</option>{Object.entries(feedbackStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+        <select aria-label="等级" value={level} onChange={(event) => setLevel(event.target.value)}><option value="">全部等级</option>{Object.entries(feedbackLevelLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+      </div>
+      {loading ? <div className="content-loading"><RefreshCw className="spin" />正在载入</div> : tickets.length ? (
+        <>
+        <div className="card feedback-admin-table">
+          {tickets.map((ticket) => (
+            <button type="button" key={ticket.id} onClick={() => onOpen(ticket.id)}>
+              <span className="feedback-ticket-number">{ticket.displayNumber}</span>
+              <span>
+                <span className="feedback-ticket-title-row">
+                  <strong>{ticket.title}</strong>
+                  <span className="feedback-intrinsic-badges">
+                    <FeedbackPill value={ticket.type}>{feedbackTypeLabels[ticket.type]}</FeedbackPill>
+                    <FeedbackPill tone="level" value={ticket.level}>{feedbackLevelLabels[ticket.level]}</FeedbackPill>
+                  </span>
+                </span>
+                <small>{ticket.submittedByName} · {formatChina(ticket.updatedAt)}</small>
+              </span>
+              <span className="feedback-ticket-status">
+                <FeedbackPill tone="status" value={ticket.status}>{feedbackStatusLabels[ticket.status]}</FeedbackPill>
+              </span>
+              <ChevronRight size={17} />
+            </button>
+          ))}
+        </div>
+        {nextCursor && (
+          <button type="button" className="secondary-button feedback-load-more" onClick={async () => {
+            const params = new URLSearchParams({ cursor: nextCursor });
+            if (search.trim()) params.set("search", search.trim());
+            if (type) params.set("type", type);
+            if (status) params.set("status", status);
+            if (level) params.set("level", level);
+            try {
+              const result = await api<{ tickets: FeedbackTicketSummary[]; nextCursor: string | null }>(`/admin/feedback?${params}`);
+              setTickets((current) => [...current, ...result.tickets]);
+              setNextCursor(result.nextCursor);
+            } catch (error) {
+              notify("error", error instanceof Error ? error.message : "更多反馈加载失败");
+            }
+          }}>加载更多</button>
+        )}
+        </>
+      ) : <EmptyState icon={MessageSquare} title="没有匹配的反馈" />}
+    </div>
+  );
+}
+
 function NotificationsPage({
   notify,
   onUnreadCountChange,
+  onFeedbackUnreadCountChange,
   navigate
 }: {
   notify: (kind: "success" | "error", message: string) => void;
   onUnreadCountChange: (count: number) => void;
+  onFeedbackUnreadCountChange: (count: number) => void;
   navigate: (path: AppPath) => void;
 }) {
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -9804,17 +10637,19 @@ function NotificationsPage({
     try {
       const result = await api<{
         unreadCount: number;
+        feedbackUnreadCount: number;
         notifications: NotificationItem[];
       }>("/notifications");
       setItems(result.notifications);
       setUnreadCount(result.unreadCount);
       onUnreadCountChange(result.unreadCount);
+      onFeedbackUnreadCountChange(result.feedbackUnreadCount);
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "通知加载失败");
     } finally {
       setLoading(false);
     }
-  }, [notify, onUnreadCountChange]);
+  }, [notify, onFeedbackUnreadCountChange, onUnreadCountChange]);
   useEffect(() => { void load(); }, [load]);
 
   const markRead = async (item: NotificationItem) => {
@@ -9833,6 +10668,14 @@ function NotificationsPage({
         onUnreadCountChange(next);
         return next;
       });
+      if (item.entityType === "FEEDBACK") {
+        const counts = await api<{ unreadCount: number; feedbackUnreadCount: number }>(
+          "/notifications/unread-count"
+        );
+        setUnreadCount(counts.unreadCount);
+        onUnreadCountChange(counts.unreadCount);
+        onFeedbackUnreadCountChange(counts.feedbackUnreadCount);
+      }
     } finally {
       markingReadIds.current.delete(item.id);
     }
@@ -9868,6 +10711,7 @@ function NotificationsPage({
       );
       setUnreadCount(0);
       onUnreadCountChange(0);
+      onFeedbackUnreadCountChange(0);
       notify("success", "全部通知已标为已读");
     } catch (error) {
       notify(
@@ -9956,6 +10800,7 @@ function NotificationsPage({
 }
 
 function notificationIcon(type: string) {
+  if (type.includes("FEEDBACK")) return <MessageSquare size={18} />;
   if (type.includes("UNAVAILABILITY") || type.includes("DISABLED")) {
     return <PowerOff size={18} />;
   }
@@ -9972,7 +10817,11 @@ function AdminPage({
   onOpenResourceCatalog,
   machineId,
   machineSection,
-  onMachineRoute
+  onMachineRoute,
+  feedbackId,
+  feedbackRefreshToken,
+  onFeedbackRoute,
+  onUnreadCountRefresh
 }: {
   bootstrap: DashboardBootstrap;
   notify: (kind: "success" | "error", message: string) => void;
@@ -9981,6 +10830,10 @@ function AdminPage({
   onOpenResourceCatalog: () => void;
   machineId?: string;
   machineSection?: MachineAdminSection;
+  feedbackId?: string;
+  feedbackRefreshToken: number;
+  onFeedbackRoute: (feedbackId?: string) => void;
+  onUnreadCountRefresh: () => Promise<void>;
   onMachineRoute: (
     machineId: string,
     section: MachineAdminSection,
@@ -9989,7 +10842,7 @@ function AdminPage({
 }) {
   const isSystemAdmin = bootstrap.user.role === "SYSTEM_ADMIN";
   const visibleTab =
-    !isSystemAdmin && ["announcements", "settings", "audit"].includes(tab)
+    !isSystemAdmin && ["announcements", "feedback", "settings", "audit"].includes(tab)
       ? "machines"
       : tab;
   const [machines, setMachines] = useState<any[]>([]);
@@ -9997,6 +10850,7 @@ function AdminPage({
   const [newMachineOpen, setNewMachineOpen] = useState(false);
   const [machineSearch, setMachineSearch] = useState("");
   const [machinesLoaded, setMachinesLoaded] = useState(false);
+  const [feedbackOpenCount, setFeedbackOpenCount] = useState(0);
 
   const loadMachines = useCallback(async () => {
     try {
@@ -10027,6 +10881,13 @@ function AdminPage({
   }, [loadMachines, loadUsers]);
 
   useEffect(() => {
+    if (!isSystemAdmin) return;
+    void api<{ openCount: number }>("/admin/feedback/summary")
+      .then((result) => setFeedbackOpenCount(result.openCount))
+      .catch(() => undefined);
+  }, [feedbackRefreshToken, isSystemAdmin]);
+
+  useEffect(() => {
     if (visibleTab !== "machines") return;
     const events = new EventSource("/api/v1/events");
     events.addEventListener("revision", () => void loadMachines());
@@ -10051,12 +10912,13 @@ function AdminPage({
     { id: "users" as const, label: "用户管理", icon: Users, show: true },
     { id: "report" as const, label: "使用统计", icon: Activity, show: true },
     { id: "announcements" as const, label: "系统公告", icon: Megaphone, show: isSystemAdmin },
+    { id: "feedback" as const, label: "反馈处理", icon: MessageSquare, show: isSystemAdmin, badge: feedbackOpenCount },
     { id: "settings" as const, label: "系统设置", icon: Settings, show: isSystemAdmin },
     { id: "audit" as const, label: "审计记录", icon: ShieldCheck, show: isSystemAdmin }
   ];
 
   return (
-    <div className="admin-shell">
+    <div className={`admin-shell${visibleTab === "feedback" ? " feedback-admin-shell" : ""}`}>
       <aside className="admin-sidebar">
         <div>
           <h2>管理控制台</h2>
@@ -10065,12 +10927,15 @@ function AdminPage({
           {tabs.filter((item) => item.show).map((item) => (
             <button key={item.id} className={visibleTab === item.id ? "active" : ""} onClick={() => onTabChange(item.id)}>
               <item.icon size={17} />{item.label}
+              {"badge" in item && typeof item.badge === "number" && item.badge > 0 && (
+                <span className="admin-tab-badge">{notificationBadgeText(item.badge)}</span>
+              )}
             </button>
           ))}
         </nav>
       </aside>
       <section
-        className={`admin-content${visibleTab === "machines" ? " machine-management-content" : ""}${visibleTab === "report" ? " report-management-content" : ""}`}
+        className={`admin-content${visibleTab === "machines" ? " machine-management-content" : ""}${visibleTab === "report" ? " report-management-content" : ""}${visibleTab === "feedback" ? " feedback-management-content" : ""}`}
       >
         {visibleTab === "machines" && (
           <>
@@ -10180,6 +11045,15 @@ function AdminPage({
         )}
         {visibleTab === "report" && <ReportPanel machines={machines} notify={notify} />}
         {visibleTab === "announcements" && <AnnouncementAdminPanel notify={notify} />}
+        {visibleTab === "feedback" && (
+          <FeedbackAdminPanel
+            feedbackId={feedbackId}
+            refreshToken={feedbackRefreshToken}
+            notify={notify}
+            onOpen={onFeedbackRoute}
+            onUnreadCountRefresh={onUnreadCountRefresh}
+          />
+        )}
         {visibleTab === "settings" && <SettingsPanel notify={notify} />}
         {visibleTab === "audit" && <AuditPanel notify={notify} />}
       </section>
@@ -13211,6 +14085,8 @@ function UserAdminPanel({
           reservations: number;
           notifications: number;
           auditLogs: number;
+          feedbackTickets: number;
+          feedbackActivities: number;
         };
       }>(`/admin/users/${user.id}/deletion-impact`);
       if (impact.user.status !== "DISABLED") {
@@ -13225,7 +14101,7 @@ function UserAdminPanel({
         message:
           `删除 ${impact.user.displayName} 后无法恢复，用户名、邮箱和工号将被释放。\n` +
           `将清除 ${permissionCount} 项机器权限、${impact.counts.accessRequests} 条使用权申请和 ${impact.counts.notifications} 条通知。\n` +
-          `将保留 ${impact.counts.reservations} 条占用记录和 ${impact.counts.auditLogs} 条审计记录，其中用户统一显示为“用户已删除”。`,
+          `将保留 ${impact.counts.reservations} 条占用记录、${impact.counts.feedbackTickets} 条反馈及 ${impact.counts.feedbackActivities} 条反馈活动和 ${impact.counts.auditLogs} 条审计记录，其中用户统一显示为“用户已删除”。`,
         confirmLabel: "永久删除",
         tone: "danger"
       }))) {

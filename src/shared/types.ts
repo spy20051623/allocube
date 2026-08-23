@@ -214,6 +214,8 @@ export interface NotificationItem {
   title: string;
   body: string;
   link: string;
+  entityType: string | null;
+  entityId: string | null;
   readAt: string | null;
   createdAt: string;
 }

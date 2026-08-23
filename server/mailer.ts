@@ -140,7 +140,8 @@ export function createNotification(
   title: string,
   body: string,
   link = "",
-  sendEmail = true
+  sendEmail = true,
+  entity?: { type: string; id: string }
 ) {
   const safeLink = normalizeNotificationLink(link);
   const user = db
@@ -166,9 +167,19 @@ export function createNotification(
   const id = randomUUID();
   db.prepare(
     `INSERT INTO notifications(
-      id, user_id, type, title, body, link, created_at
-    ) VALUES(?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, userId, type, title, body, safeLink, nowIso());
+      id, user_id, type, title, body, link, entity_type, entity_id, created_at
+    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    userId,
+    type,
+    title,
+    body,
+    safeLink,
+    entity?.type ?? null,
+    entity?.id ?? null,
+    nowIso()
+  );
   if (sendEmail && notificationEmailEnabled(type, user)) {
     if (user.email) {
       const siteOrigin = getPublicSiteOrigin();

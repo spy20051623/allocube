@@ -42,7 +42,7 @@ npm run dev
 | `npm run build` | 生成生产页面和服务端代码 |
 | `npm start` | 运行已构建的服务 |
 | `npm run test:production-http` | 检查生产 HTTP 与安全契约 |
-| `npm run backup` | 创建 SQLite 在线备份 |
+| `npm run backup` | 创建 SQLite 与私有反馈图片的配套校验备份集 |
 | `npm run admin:reset-password` | 在服务器端恢复 Administrator 密码 |
 
 健康检查地址为 `/health`。详细的环境变量、Docker Compose、备份恢复和升级步骤见[部署与运维](docs/manual/operations.md)。

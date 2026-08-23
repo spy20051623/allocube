@@ -707,14 +707,23 @@ export function registerScheduleRoutes(
          WHERE user_id = ? AND read_at IS NULL`
       )
       .get(auth.user.id) as { count: number };
+    const feedbackUnread = db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM notifications
+         WHERE user_id = ? AND read_at IS NULL AND entity_type = 'FEEDBACK'`
+      )
+      .get(auth.user.id) as { count: number };
     return {
       unreadCount: unread.count,
+      feedbackUnreadCount: feedbackUnread.count,
       notifications: rows.map((row) => ({
         id: row.id,
         type: row.type,
         title: row.title,
         body: row.body,
         link: row.link,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
         readAt: row.read_at,
         createdAt: row.created_at
       }))
@@ -730,7 +739,13 @@ export function registerScheduleRoutes(
          WHERE user_id = ? AND read_at IS NULL`
       )
       .get(auth.user.id) as { count: number };
-    return { unreadCount: row.count };
+    const feedback = db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM notifications
+         WHERE user_id = ? AND read_at IS NULL AND entity_type = 'FEEDBACK'`
+      )
+      .get(auth.user.id) as { count: number };
+    return { unreadCount: row.count, feedbackUnreadCount: feedback.count };
   });
 
   app.post("/api/v1/notifications/read-all", async (request, reply) => {

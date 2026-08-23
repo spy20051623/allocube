@@ -49,6 +49,15 @@ describe("最终数据库结构", () => {
     expect(tables).toContain("api_tokens");
     expect(tables).toContain("prepared_api_operations");
     expect(tables).toContain("announcements");
+    expect(tables).toEqual(expect.arrayContaining([
+      "feedback_tickets",
+      "feedback_activities",
+      "feedback_attachments"
+    ]));
+    const notificationColumns = (
+      dbModule.db.prepare("PRAGMA table_info(notifications)").all() as Array<{ name: string }>
+    ).map((column) => column.name);
+    expect(notificationColumns).toEqual(expect.arrayContaining(["entity_type", "entity_id"]));
     const announcementColumns = (
       dbModule.db.prepare("PRAGMA table_info(announcements)").all() as Array<{
         name: string;

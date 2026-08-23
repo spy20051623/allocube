@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   appPath,
+  feedbackPath,
   isAppPath,
   machineAdminPath,
   resolveAppRoute
@@ -12,6 +13,7 @@ describe("应用页面路径", () => {
     expect(appPath("resources")).toBe("/resources");
     expect(appPath("my")).toBe("/reservations");
     expect(appPath("announcements")).toBe("/announcements");
+    expect(appPath("feedback")).toBe("/feedback");
     expect(appPath("profile")).toBe("/profile");
     expect(appPath("notifications")).toBe("/notifications");
   });
@@ -21,6 +23,7 @@ describe("应用页面路径", () => {
     expect(appPath("admin", "users")).toBe("/admin/users");
     expect(appPath("admin", "report")).toBe("/admin/reports");
     expect(appPath("admin", "announcements")).toBe("/admin/announcements");
+    expect(appPath("admin", "feedback")).toBe("/admin/feedback");
     expect(appPath("admin", "settings")).toBe("/admin/settings");
     expect(appPath("admin", "audit")).toBe("/admin/audit");
   });
@@ -40,6 +43,16 @@ describe("应用页面路径", () => {
       page: "admin",
       adminTab: "announcements"
     });
+    expect(resolveAppRoute("/feedback/550e8400-e29b-41d4-a716-446655440000")).toEqual({
+      page: "feedback",
+      feedbackId: "550e8400-e29b-41d4-a716-446655440000"
+    });
+    expect(resolveAppRoute("/admin/feedback/550e8400-e29b-41d4-a716-446655440000")).toEqual({
+      page: "admin",
+      adminTab: "feedback",
+      feedbackId: "550e8400-e29b-41d4-a716-446655440000"
+    });
+    expect(feedbackPath("id/特殊")).toBe("/feedback/id%2F%E7%89%B9%E6%AE%8A");
     expect(resolveAppRoute("/admin/machines/machine-1/resources")).toEqual({
       page: "admin",
       adminTab: "machines",
@@ -60,6 +73,8 @@ describe("应用页面路径", () => {
   it("不接受旧路径或未知路径", () => {
     expect(isAppPath("/calendar")).toBe(true);
     expect(isAppPath("/announcements")).toBe(true);
+    expect(isAppPath("/feedback/example-id")).toBe(true);
+    expect(isAppPath("/admin/feedback/example-id")).toBe(true);
     expect(isAppPath("/admin/machines/machine-1/info")).toBe(true);
     expect(isAppPath("/my")).toBe(false);
     expect(resolveAppRoute("/admin/machines/machine-1/unknown")).toBeNull();

@@ -30,6 +30,12 @@ describe("通知目标解析", () => {
         link: "/profile"
       })
     ).toEqual({ path: "/profile" });
+    expect(
+      resolveNotificationDestination({
+        type: "FEEDBACK_STATUS_CHANGED",
+        link: "/feedback/550e8400-e29b-41d4-a716-446655440000"
+      })
+    ).toEqual({ path: "/feedback/550e8400-e29b-41d4-a716-446655440000" });
   });
 
   it("只为适合处理的通知提供目标", () => {

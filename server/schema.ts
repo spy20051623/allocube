@@ -1,4 +1,4 @@
-export const FINAL_SCHEMA_VERSION = 16;
+export const FINAL_SCHEMA_VERSION = 17;
 
 export const FINAL_SCHEMA_SQL = `
   CREATE TABLE schema_migrations (
@@ -457,10 +457,14 @@ export const FINAL_SCHEMA_SQL = `
     title TEXT NOT NULL,
     body TEXT NOT NULL,
     link TEXT NOT NULL DEFAULT '',
+    entity_type TEXT,
+    entity_id TEXT,
     read_at TEXT,
     created_at TEXT NOT NULL
   );
   CREATE INDEX notifications_user_idx ON notifications(user_id, created_at DESC);
+  CREATE INDEX notifications_entity_unread_idx
+    ON notifications(user_id, entity_type, entity_id, read_at);
 
   CREATE TABLE user_email_preferences (
     user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -536,6 +540,73 @@ export const FINAL_SCHEMA_SQL = `
   );
   CREATE INDEX announcements_status_published_idx
     ON announcements(status, published_at, id);
+
+  CREATE TABLE feedback_tickets (
+    number INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT NOT NULL UNIQUE,
+    type TEXT NOT NULL CHECK(type IN ('ISSUE', 'REQUIREMENT')),
+    level TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'SUBMITTED',
+    title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 120),
+    body_markdown TEXT NOT NULL CHECK(length(body_markdown) BETWEEN 1 AND 10000),
+    submitted_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    submitted_by_name TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    withdrawn_at TEXT,
+    CHECK(
+      (type = 'ISSUE'
+        AND level IN ('SUGGESTION', 'NORMAL', 'SERIOUS', 'FATAL')
+        AND status IN ('SUBMITTED', 'CONFIRMED', 'FIXED', 'REJECTED', 'WITHDRAWN'))
+      OR
+      (type = 'REQUIREMENT'
+        AND level IN ('NOT_URGENT', 'NORMAL', 'URGENT', 'VERY_URGENT')
+        AND status IN ('SUBMITTED', 'ADOPTED', 'IMPLEMENTED', 'REJECTED', 'WITHDRAWN'))
+    )
+  );
+  CREATE INDEX feedback_owner_activity_idx
+    ON feedback_tickets(submitted_by, updated_at DESC, number DESC);
+  CREATE INDEX feedback_admin_queue_idx
+    ON feedback_tickets(status, level, updated_at DESC, number DESC);
+
+  CREATE TABLE feedback_activities (
+    id TEXT PRIMARY KEY,
+    feedback_id TEXT NOT NULL REFERENCES feedback_tickets(id) ON DELETE CASCADE,
+    actor_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    actor_name TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN (
+      'CREATED', 'CONTENT_UPDATED', 'STATUS_CHANGED', 'LEVEL_CHANGED',
+      'COMMENT', 'WITHDRAWN'
+    )),
+    body_markdown TEXT NOT NULL DEFAULT '' CHECK(length(body_markdown) <= 10000),
+    from_status TEXT,
+    to_status TEXT,
+    from_level TEXT,
+    to_level TEXT,
+    changed_fields_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX feedback_activities_ticket_idx
+    ON feedback_activities(feedback_id, created_at, id);
+
+  CREATE TABLE feedback_attachments (
+    id TEXT PRIMARY KEY,
+    feedback_id TEXT NOT NULL REFERENCES feedback_tickets(id) ON DELETE CASCADE,
+    activity_id TEXT REFERENCES feedback_activities(id) ON DELETE CASCADE,
+    uploaded_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    original_name TEXT NOT NULL,
+    stored_name TEXT NOT NULL UNIQUE,
+    mime_type TEXT NOT NULL CHECK(mime_type IN ('image/png', 'image/jpeg', 'image/webp')),
+    byte_size INTEGER NOT NULL CHECK(byte_size > 0 AND byte_size <= 5242880),
+    removed_at TEXT,
+    purged_at TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX feedback_attachments_ticket_idx
+    ON feedback_attachments(feedback_id, removed_at, created_at);
+  CREATE INDEX feedback_attachments_cleanup_idx
+    ON feedback_attachments(removed_at, purged_at);
 
   CREATE TABLE audit_logs (
     id TEXT PRIMARY KEY,

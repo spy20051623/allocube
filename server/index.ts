@@ -4,6 +4,7 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import {
   SESSION_COOKIE,
@@ -32,6 +33,7 @@ import { registerAnnouncementRoutes } from "./announcements.js";
 import { registerAuthRoutes } from "./routes-auth.js";
 import { registerScheduleRoutes } from "./routes-schedule.js";
 import { registerOpenApiRoutes } from "./open-api.js";
+import { cleanupFeedbackAttachments, registerFeedbackRoutes } from "./feedback.js";
 import {
   SourceRateLimiter,
   type SourceRateLimitPolicy
@@ -44,6 +46,8 @@ if (config.instanceSecretsCreatedForExistingDatabase) {
   );
 }
 await initializeDatabase();
+cleanupFeedbackAttachments();
+setInterval(cleanupFeedbackAttachments, 24 * 60 * 60 * 1000).unref();
 const passwordReminder = db
   .prepare(
     `SELECT 1 FROM users
@@ -63,6 +67,9 @@ const app = Fastify({
 });
 
 await app.register(cookie, { secret: config.sessionSecret });
+await app.register(multipart, {
+  limits: { files: 5, fileSize: 5 * 1024 * 1024, fields: 5, parts: 10 }
+});
 await app.register(helmet, {
   strictTransportSecurity: false,
   contentSecurityPolicy: config.isProduction
@@ -265,11 +272,25 @@ function publishAnnouncementChange() {
   }
 }
 
+function publishFeedbackChange() {
+  const payload = `event: feedback\ndata: ${JSON.stringify({
+    changedAt: nowIso()
+  })}\n\n`;
+  for (const client of eventClients.keys()) {
+    try {
+      client.write(payload);
+    } catch {
+      removeEventClient(client);
+    }
+  }
+}
+
 registerAuthRoutes(app);
 registerApiTokenManagementRoutes(app);
 registerScheduleRoutes(app, publishRevision);
 registerAdminRoutes(app, publishRevision);
 registerAnnouncementRoutes(app, publishAnnouncementChange);
+registerFeedbackRoutes(app, publishFeedbackChange);
 registerOpenApiRoutes(app, publishRevision);
 
 app.get("/api/v1/events", async (request, reply) => {

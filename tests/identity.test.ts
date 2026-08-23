@@ -1693,7 +1693,8 @@ describe("用户身份与审批生命周期", () => {
     });
     expect(unreadCount.statusCode).toBe(200);
     expect(unreadCount.json()).toEqual({
-      unreadCount: notifications.json().unreadCount
+      unreadCount: notifications.json().unreadCount,
+      feedbackUnreadCount: 0
     });
     const readAll = await app.inject({
       method: "POST",

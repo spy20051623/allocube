@@ -3829,6 +3829,14 @@ function userDeleteImpact(userId: string) {
        WHERE actor_user_id = ? OR (entity_type = 'user' AND entity_id = ?)`,
       userId,
       userId
+    ),
+    feedbackTickets: countRows(
+      "SELECT COUNT(*) AS count FROM feedback_tickets WHERE submitted_by = ?",
+      userId
+    ),
+    feedbackActivities: countRows(
+      "SELECT COUNT(*) AS count FROM feedback_activities WHERE actor_user_id = ?",
+      userId
     )
   };
 }
@@ -3854,6 +3862,12 @@ function deleteUserRecords(
   db.prepare("DELETE FROM machine_access_requests WHERE user_id = ?").run(userId);
   db.prepare("DELETE FROM notifications WHERE user_id = ?").run(userId);
   db.prepare("DELETE FROM email_outbox WHERE user_id = ?").run(userId);
+  db.prepare(
+    "UPDATE feedback_tickets SET submitted_by_name = '用户已删除' WHERE submitted_by = ?"
+  ).run(userId);
+  db.prepare(
+    "UPDATE feedback_activities SET actor_name = '用户已删除' WHERE actor_user_id = ?"
+  ).run(userId);
   db.prepare(
     `UPDATE audit_logs
      SET before_json = NULL, after_json = NULL

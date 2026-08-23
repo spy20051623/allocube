@@ -56,7 +56,7 @@ export const docsSections: readonly DocsSection[] = [
   {
     slug: "system-admin",
     title: "系统管理员指南",
-    description: "用户、机器、系统设置、统计和审计。",
+    description: "用户、机器、系统公告、系统设置、统计和审计。",
     path: docsPath("system-admin"),
     markdown: systemAdminMarkdown
   },

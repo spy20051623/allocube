@@ -93,7 +93,11 @@ export function auditActionLabel(action: string) {
       SMTP_SETTINGS_TEST: "测试邮件配置",
       API_TOKEN_CREATE: "创建个人访问令牌",
       API_TOKEN_REVOKE: "吊销个人访问令牌",
-      API_TOKEN_REVOKE_ALL: "吊销全部个人访问令牌"
+      API_TOKEN_REVOKE_ALL: "吊销全部个人访问令牌",
+      ANNOUNCEMENT_CREATE: "创建系统公告",
+      ANNOUNCEMENT_UPDATE: "编辑系统公告",
+      ANNOUNCEMENT_REACTIVATE: "重新启用系统公告",
+      ANNOUNCEMENT_WITHDRAW: "撤下系统公告"
     } as Record<string, string>
   )[action] ?? "其他系统操作";
 }

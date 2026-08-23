@@ -22,6 +22,7 @@ import {
   KeyRound,
   LogOut,
   Mail,
+  Megaphone,
   Plus,
   Pencil,
   Power,
@@ -58,6 +59,7 @@ import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { ApiError, api, jsonBody, setCsrfToken } from "./api";
 import { DocumentationPage } from "./DocumentationPage";
+import { AnnouncementMarkdown } from "./AnnouncementMarkdown";
 import {
   appPath,
   machineAdminPath,
@@ -124,6 +126,12 @@ import {
   normalizeSiteOrigin,
   siteOriginValidationError
 } from "./shared/site-origin";
+import {
+  announcementSeenStorageKey,
+  hasSeenAnnouncementVersion,
+  readSeenAnnouncementIds,
+  rememberSeenAnnouncement
+} from "./shared/announcements";
 import { resolveCatalogAccessDisplay } from "./catalog-access-state";
 import { calculateVisibleManagerCount } from "./manager-summary";
 import {
@@ -217,6 +225,26 @@ type TimelinePayload = {
   revision: number;
   serverNow: string;
 };
+
+type SystemAnnouncement = {
+  id: string;
+  title: string;
+  bodyMarkdown: string;
+  status: "ACTIVE" | "WITHDRAWN";
+  version: number;
+  createdByName: string;
+  createdAt: string;
+  publishedAt: string;
+  updatedAt: string;
+  withdrawnAt: string | null;
+};
+
+type AnnouncementEditorState =
+  | { mode: "CREATE" }
+  | {
+      mode: "EDIT" | "REACTIVATE";
+      announcement: SystemAnnouncement;
+    };
 
 type CalendarReservationTarget = {
   scope: "RESOURCE_GROUP" | "MACHINE";
@@ -477,6 +505,7 @@ export function App() {
   const [toast, setToast] = useState<ToastState>(null);
   const [passwordReminderDismissed, setPasswordReminderDismissed] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [announcementRefreshToken, setAnnouncementRefreshToken] = useState(0);
 
   const notify = useCallback((kind: "success" | "error", message: string) => {
     setToast({ kind, message });
@@ -548,6 +577,9 @@ export function App() {
       void loadSession();
       void loadUnreadNotificationCount();
     });
+    events.addEventListener("announcement", () => {
+      setAnnouncementRefreshToken((current) => current + 1);
+    });
     return () => events.close();
   }, [
     bootstrap?.user.id,
@@ -611,7 +643,7 @@ export function App() {
       currentRoute.page === "admin" &&
       bootstrap.user.role !== "SYSTEM_ADMIN" &&
       currentRoute.adminTab &&
-      ["settings", "audit"].includes(currentRoute.adminTab)
+      ["announcements", "settings", "audit"].includes(currentRoute.adminTab)
     ) {
       return "/admin/machines";
     }
@@ -768,6 +800,7 @@ export function App() {
               }}
             />
           )}
+          {visiblePage === "announcements" && <AnnouncementListPage />}
           {visiblePage === "admin" && (
             <AdminPage
               bootstrap={bootstrap}
@@ -788,8 +821,166 @@ export function App() {
         </main>
         {toast && <Toast {...toast} />}
         </div>
+        {activeUser && (
+          <AnnouncementCenter
+            userId={bootstrap.user.id}
+            refreshToken={announcementRefreshToken}
+            onInternalNavigate={(href) => window.location.assign(href)}
+          />
+        )}
       </DialogProvider>
     </ServerClockProvider>
+  );
+}
+
+function AnnouncementCenter({
+  userId,
+  refreshToken,
+  onInternalNavigate
+}: {
+  userId: string;
+  refreshToken: number;
+  onInternalNavigate: (href: string) => void;
+}) {
+  const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([]);
+
+  const load = useCallback(async () => {
+    try {
+      const result = await api<{ announcements: SystemAnnouncement[] }>(
+        "/announcements"
+      );
+      const seen = readSeenAnnouncementIds(userId, window.localStorage);
+      setAnnouncements(
+        result.announcements.filter(
+          (announcement) =>
+            !hasSeenAnnouncementVersion(
+              seen,
+              announcement.id,
+              announcement.version
+            )
+        )
+      );
+    } catch {
+      // 公告加载失败不阻止用户进入系统。
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    void load();
+  }, [load, refreshToken]);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === announcementSeenStorageKey(userId)) void load();
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [load, userId]);
+
+  const current = announcements[0];
+  if (!current) return null;
+
+  const dismiss = () => {
+    try {
+      rememberSeenAnnouncement(
+        userId,
+        current.id,
+        current.version,
+        window.localStorage
+      );
+    } catch {
+      // 本机存储不可用时，本次页面仍继续展示后续公告。
+    }
+    setAnnouncements((items) => items.filter((item) => item.id !== current.id));
+  };
+
+  return (
+    <Modal title={current.title} onClose={dismiss} wide>
+      <div className="announcement-dialog">
+        <AnnouncementMarkdown
+          markdown={current.bodyMarkdown}
+          onInternalNavigate={(href) => {
+            dismiss();
+            onInternalNavigate(href);
+          }}
+        />
+        <div className="announcement-dialog-footer">
+          {announcements.length > 1 && (
+            <span>还有 {announcements.length - 1} 条公告</span>
+          )}
+          <button type="button" className="primary-button" onClick={dismiss}>
+            我知道了
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function AnnouncementListPage() {
+  const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const result = await api<{ announcements: SystemAnnouncement[] }>(
+        "/announcements"
+      );
+      setAnnouncements(result.announcements);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+    const events = new EventSource("/api/v1/events");
+    events.addEventListener("announcement", () => void load());
+    return () => events.close();
+  }, [load]);
+
+  return (
+    <div className="page-shell narrow-page announcement-viewer-page">
+      <PageHeader title="系统公告" />
+      {loading ? (
+        <div className="card announcement-admin-empty">正在加载系统公告…</div>
+      ) : loadError ? (
+        <div className="card announcement-load-error" role="alert">
+          <span>系统公告加载失败</span>
+          <button type="button" className="secondary-button" onClick={() => void load()}>
+            重试
+          </button>
+        </div>
+      ) : announcements.length ? (
+        <div className="announcement-admin-list">
+          {announcements.map((announcement) => (
+            <article className="card announcement-admin-card" key={announcement.id}>
+              <header>
+                <div><h2>{announcement.title}</h2></div>
+              </header>
+              <AnnouncementMarkdown
+                markdown={announcement.bodyMarkdown}
+                onInternalNavigate={(href) => window.location.assign(href)}
+              />
+              <footer>
+                <span>{announcement.createdByName}</span>
+                <time>发布于 {formatChinaFullMinute(announcement.publishedAt)}</time>
+              </footer>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={Megaphone}
+          title="暂无系统公告"
+          text="当前没有正在展示的系统公告。"
+        />
+      )}
+    </div>
   );
 }
 
@@ -3832,6 +4023,22 @@ function fieldErrorFromApi(error: unknown, field: string) {
   return Array.isArray(value) && typeof value[0] === "string" ? value[0] : "";
 }
 
+function validationDetailFromApi(error: unknown, field: string) {
+  if (!(error instanceof ApiError) || !Array.isArray(error.details)) return "";
+  const issue = error.details.find(
+    (item): item is { path: string; message: string } =>
+      Boolean(
+        item &&
+          typeof item === "object" &&
+          "path" in item &&
+          item.path === field &&
+          "message" in item &&
+          typeof item.message === "string"
+      )
+  );
+  return issue?.message ?? "";
+}
+
 function UsernameEditModal({
   currentUsername,
   onClose,
@@ -4734,6 +4941,19 @@ function Topbar({
             >
               <UserCheck size={16} />用户信息
             </button>
+            {!restricted && (
+              <button
+                type="button"
+                role="menuitem"
+                className={page === "announcements" ? "active" : ""}
+                onClick={() => {
+                  navigate("announcements");
+                  setUserMenuOpen(false);
+                }}
+              >
+                <Megaphone size={16} />系统公告
+              </button>
+            )}
             <button
               type="button"
               role="menuitem"
@@ -9769,7 +9989,7 @@ function AdminPage({
 }) {
   const isSystemAdmin = bootstrap.user.role === "SYSTEM_ADMIN";
   const visibleTab =
-    !isSystemAdmin && ["settings", "audit"].includes(tab)
+    !isSystemAdmin && ["announcements", "settings", "audit"].includes(tab)
       ? "machines"
       : tab;
   const [machines, setMachines] = useState<any[]>([]);
@@ -9830,6 +10050,7 @@ function AdminPage({
     { id: "machines" as const, label: "资源管理", icon: Server, show: true },
     { id: "users" as const, label: "用户管理", icon: Users, show: true },
     { id: "report" as const, label: "使用统计", icon: Activity, show: true },
+    { id: "announcements" as const, label: "系统公告", icon: Megaphone, show: isSystemAdmin },
     { id: "settings" as const, label: "系统设置", icon: Settings, show: isSystemAdmin },
     { id: "audit" as const, label: "审计记录", icon: ShieldCheck, show: isSystemAdmin }
   ];
@@ -9958,6 +10179,7 @@ function AdminPage({
           />
         )}
         {visibleTab === "report" && <ReportPanel machines={machines} notify={notify} />}
+        {visibleTab === "announcements" && <AnnouncementAdminPanel notify={notify} />}
         {visibleTab === "settings" && <SettingsPanel notify={notify} />}
         {visibleTab === "audit" && <AuditPanel notify={notify} />}
       </section>
@@ -13571,6 +13793,369 @@ function MetricCard({
       <div className="metric-icon"><Icon size={22} /></div>
       <div className="metric-copy"><span>{label}</span><strong>{value}</strong></div>
     </article>
+  );
+}
+
+function AnnouncementAdminPanel({
+  notify
+}: {
+  notify: (kind: "success" | "error", message: string) => void;
+}) {
+  const dialog = useAppDialog();
+  const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [editorState, setEditorState] = useState<AnnouncementEditorState | null>(null);
+  const [showWithdrawn, setShowWithdrawn] = useState(false);
+
+  const visibleAnnouncements = showWithdrawn
+    ? announcements
+    : announcements.filter((announcement) => announcement.status === "ACTIVE");
+
+  const load = useCallback(async () => {
+    try {
+      const result = await api<{ announcements: SystemAnnouncement[] }>(
+        "/admin/announcements"
+      );
+      setAnnouncements(result.announcements);
+      setLoadError(false);
+    } catch (error) {
+      setLoadError(true);
+      notify("error", error instanceof Error ? error.message : "公告加载失败");
+    } finally {
+      setLoaded(true);
+    }
+  }, [notify]);
+
+  useEffect(() => {
+    void load();
+    const events = new EventSource("/api/v1/events");
+    events.addEventListener("announcement", () => void load());
+    return () => events.close();
+  }, [load]);
+
+  const withdraw = async (announcement: SystemAnnouncement) => {
+    if (!(await dialog.confirm({
+      title: "撤下系统公告",
+      message: `撤下“${announcement.title}”后，尚未查看的用户将不再收到此公告。`,
+      confirmLabel: "确认撤下",
+      tone: "danger"
+    }))) return;
+    try {
+      await api(`/admin/announcements/${announcement.id}/withdraw`, {
+        method: "POST",
+        body: jsonBody({ expectedVersion: announcement.version })
+      });
+      notify("success", "系统公告已撤下");
+      await load();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) await load();
+      notify("error", error instanceof Error ? error.message : "公告撤下失败");
+    }
+  };
+
+  return (
+    <div className="announcement-management-page">
+      <PageHeader
+        title="系统公告"
+        actions={
+          <div className="announcement-page-actions">
+            <label className="settings-toggle-control announcement-history-toggle">
+              <strong>显示已撤下</strong>
+              <input
+                type="checkbox"
+                checked={showWithdrawn}
+                onChange={(event) => setShowWithdrawn(event.target.checked)}
+              />
+              <i className="settings-toggle" aria-hidden="true"><i /></i>
+            </label>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setEditorState({ mode: "CREATE" })}
+            >
+              <Plus size={16} />创建公告
+            </button>
+          </div>
+        }
+      />
+      {!loaded ? (
+        <div className="card announcement-admin-empty">正在加载系统公告…</div>
+      ) : loadError ? (
+        <div className="card announcement-load-error" role="alert">
+          <span>系统公告加载失败，当前列表可能不是最新状态</span>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              setLoaded(false);
+              void load();
+            }}
+          >
+            重试
+          </button>
+        </div>
+      ) : visibleAnnouncements.length ? (
+        <div className="announcement-admin-list">
+          {visibleAnnouncements.map((announcement) => (
+            <article className="card announcement-admin-card" key={announcement.id}>
+              <header>
+                <div>
+                  <span className={`state-chip ${announcement.status === "ACTIVE" ? "active" : ""}`}>
+                    {announcement.status === "ACTIVE" ? "展示中" : "已撤下"}
+                  </span>
+                  <h2>{announcement.title}</h2>
+                </div>
+                <div className="announcement-card-actions">
+                  {announcement.status === "ACTIVE" ? (
+                    <>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => setEditorState({ mode: "EDIT", announcement })}
+                      >
+                        编辑
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-button"
+                        onClick={() => void withdraw(announcement)}
+                      >
+                        撤下
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="primary-button"
+                      onClick={() => setEditorState({ mode: "REACTIVATE", announcement })}
+                    >
+                      重新启用
+                    </button>
+                  )}
+                </div>
+              </header>
+              <AnnouncementMarkdown
+                markdown={announcement.bodyMarkdown}
+                onInternalNavigate={(href) => window.location.assign(href)}
+              />
+              <footer>
+                <span>{announcement.createdByName}</span>
+                <time>发布于 {formatChinaFullMinute(announcement.publishedAt)}</time>
+                {announcement.withdrawnAt && (
+                  <span>撤下于 {formatChinaFullMinute(announcement.withdrawnAt)}</span>
+                )}
+              </footer>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={Megaphone}
+          title={announcements.length ? "暂无展示中的公告" : "暂无系统公告"}
+          text={
+            announcements.length
+              ? "打开“显示已撤下”可查看历史公告，或创建一条新公告。"
+              : "创建后，用户下次进入系统时会依次看到公告。"
+          }
+        />
+      )}
+      {editorState && (
+        <AnnouncementEditorModal
+          key={`${editorState.mode}:${editorState.mode === "CREATE" ? "new" : editorState.announcement.id}`}
+          state={editorState}
+          notify={notify}
+          onClose={() => setEditorState(null)}
+          onSaved={async (message) => {
+            setEditorState(null);
+            notify("success", message);
+            await load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function AnnouncementEditorModal({
+  state,
+  notify,
+  onClose,
+  onSaved
+}: {
+  state: AnnouncementEditorState;
+  notify: (kind: "success" | "error", message: string) => void;
+  onClose: () => void;
+  onSaved: (message: string) => Promise<void>;
+}) {
+  const existing = state.mode === "CREATE" ? null : state.announcement;
+  const [title, setTitle] = useState(existing?.title ?? "");
+  const [bodyMarkdown, setBodyMarkdown] = useState(existing?.bodyMarkdown ?? "");
+  const [expectedVersion, setExpectedVersion] = useState(existing?.version ?? 1);
+  const [serverStatus, setServerStatus] = useState<"ACTIVE" | "WITHDRAWN">(
+    existing?.status ?? "ACTIVE"
+  );
+  const [fieldErrors, setFieldErrors] = useState<{
+    title?: string;
+    bodyMarkdown?: string;
+  }>({});
+  const [conflictMessage, setConflictMessage] = useState("");
+  const [conflictLoadFailed, setConflictLoadFailed] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const effectiveMode =
+    state.mode === "CREATE"
+      ? "CREATE"
+      : serverStatus === "WITHDRAWN"
+        ? "REACTIVATE"
+        : "EDIT";
+
+  const modalTitle =
+    effectiveMode === "CREATE"
+      ? "创建系统公告"
+      : effectiveMode === "EDIT"
+        ? "编辑系统公告"
+        : "重新启用系统公告";
+  const submitLabel =
+    effectiveMode === "CREATE"
+      ? "发布公告"
+      : effectiveMode === "EDIT"
+        ? "保存并重新发布"
+        : "重新启用";
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!title.trim() || !bodyMarkdown.trim()) return;
+    setFieldErrors({});
+    setConflictMessage("");
+    setConflictLoadFailed(false);
+    setSaving(true);
+    try {
+      if (effectiveMode === "CREATE") {
+        await api("/admin/announcements", {
+          method: "POST",
+          body: jsonBody({ title, bodyMarkdown })
+        });
+        await onSaved("系统公告已发布");
+      } else if (existing) {
+        await api(`/admin/announcements/${existing.id}`, {
+          method: "PUT",
+          body: jsonBody({
+            title,
+            bodyMarkdown,
+            expectedVersion,
+            reactivate: effectiveMode === "REACTIVATE"
+          })
+        });
+        await onSaved(
+          effectiveMode === "REACTIVATE" ? "系统公告已重新启用" : "系统公告已更新"
+        );
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409 && existing) {
+        try {
+          const result = await api<{ announcements: SystemAnnouncement[] }>(
+            "/admin/announcements"
+          );
+          const latest = result.announcements.find(
+            (announcement) => announcement.id === existing.id
+          );
+          if (!latest) {
+            setConflictLoadFailed(true);
+            setConflictMessage("公告已不存在，请关闭编辑器后刷新列表。");
+            return;
+          }
+          setExpectedVersion(latest.version);
+          setServerStatus(latest.status);
+          setConflictMessage(
+            latest.status === "WITHDRAWN"
+              ? "公告已被其他管理员撤下。当前草稿已保留；核对后再次提交将重新启用公告。"
+              : "公告已被其他管理员更新。当前草稿已保留；核对后再次提交将覆盖最新版本。"
+          );
+        } catch {
+          setConflictLoadFailed(true);
+          setConflictMessage("公告状态已变化，但最新状态加载失败，请关闭编辑器后重试。");
+        }
+        return;
+      }
+      const titleError = validationDetailFromApi(error, "title");
+      const bodyMarkdownError = validationDetailFromApi(error, "bodyMarkdown");
+      if (titleError || bodyMarkdownError) {
+        setFieldErrors({
+          ...(titleError ? { title: titleError } : {}),
+          ...(bodyMarkdownError ? { bodyMarkdown: bodyMarkdownError } : {})
+        });
+        return;
+      }
+      notify("error", error instanceof Error ? error.message : "公告保存失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={modalTitle} onClose={onClose} large>
+      <form className="announcement-create-form" onSubmit={(event) => void submit(event)}>
+        <div className="announcement-create-fields">
+          <Field label="公告标题" error={fieldErrors.title}>
+            <input
+              autoFocus
+              maxLength={120}
+              value={title}
+              onChange={(event) => {
+                setTitle(event.target.value);
+                setFieldErrors((current) => ({ ...current, title: undefined }));
+              }}
+            />
+          </Field>
+          <Field label="公告内容" error={fieldErrors.bodyMarkdown}>
+            <textarea
+              maxLength={10_000}
+              value={bodyMarkdown}
+              onChange={(event) => {
+                setBodyMarkdown(event.target.value);
+                setFieldErrors((current) => ({
+                  ...current,
+                  bodyMarkdown: undefined
+                }));
+              }}
+              placeholder={"支持 Markdown。外链：[说明](https://example.org)\n站内跳转：[查看资源日历](allocube:/calendar)"}
+            />
+            <small>
+              支持段落、列表、粗体、行内代码和链接；站内链接使用
+              <code>[文字](allocube:/路径)</code>，原始 HTML 和其他协议不会渲染。
+            </small>
+          </Field>
+        </div>
+        <section className="announcement-preview" aria-label="公告预览">
+          <strong>预览</strong>
+          {bodyMarkdown.trim() ? (
+            <AnnouncementMarkdown markdown={bodyMarkdown} interactive={false} />
+          ) : (
+            <span>输入内容后在这里预览</span>
+          )}
+        </section>
+        {conflictMessage && (
+          <AuthFeedback
+            tone={conflictLoadFailed ? "error" : "warning"}
+            anchored={false}
+            className="announcement-editor-feedback"
+          >
+            {conflictMessage}
+          </AuthFeedback>
+        )}
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>取消</button>
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={saving || !title.trim() || !bodyMarkdown.trim()}
+          >
+            {saving ? "保存中" : submitLabel}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

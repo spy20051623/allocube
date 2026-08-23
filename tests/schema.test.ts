@@ -48,6 +48,13 @@ describe("最终数据库结构", () => {
     expect(tables).toContain("user_email_preferences");
     expect(tables).toContain("api_tokens");
     expect(tables).toContain("prepared_api_operations");
+    expect(tables).toContain("announcements");
+    const announcementColumns = (
+      dbModule.db.prepare("PRAGMA table_info(announcements)").all() as Array<{
+        name: string;
+      }>
+    ).map((column) => column.name);
+    expect(announcementColumns).toContain("published_at");
     expect(tables).toContain("schema_migrations");
     expect(tables).not.toContain("availability_watches");
     expect(tables).not.toContain("employee_number_requests");

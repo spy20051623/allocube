@@ -45,6 +45,7 @@ const REQUIRED_TABLES = [
   "email_outbox",
   "smtp_settings",
   "settings",
+  "announcements",
   "audit_logs",
   "app_meta"
 ] as const;
@@ -356,6 +357,77 @@ export async function initializeDatabase() {
       ).run(nowIso());
       db.exec("COMMIT");
       schemaVersion = { version: 14 };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+  if (schemaVersion.version === 14 && FINAL_SCHEMA_VERSION >= 15) {
+    db.exec("BEGIN EXCLUSIVE");
+    try {
+      db.exec(`
+        CREATE TABLE announcements (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          body_markdown TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'ACTIVE'
+            CHECK(status IN ('ACTIVE', 'WITHDRAWN')),
+          version INTEGER NOT NULL DEFAULT 1,
+          created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          withdrawn_at TEXT,
+          withdrawn_by TEXT REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE INDEX announcements_status_created_idx
+          ON announcements(status, created_at, id);
+      `);
+      db.prepare(
+        "INSERT INTO schema_migrations(version, applied_at) VALUES(15, ?)"
+      ).run(nowIso());
+      db.exec("COMMIT");
+      schemaVersion = { version: 15 };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+  if (schemaVersion.version === 15 && FINAL_SCHEMA_VERSION >= 16) {
+    db.exec("BEGIN EXCLUSIVE");
+    try {
+      db.exec(`
+        ALTER TABLE announcements RENAME TO announcements_v15;
+        CREATE TABLE announcements (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          body_markdown TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'ACTIVE'
+            CHECK(status IN ('ACTIVE', 'WITHDRAWN')),
+          version INTEGER NOT NULL DEFAULT 1,
+          created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+          created_at TEXT NOT NULL,
+          published_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          withdrawn_at TEXT,
+          withdrawn_by TEXT REFERENCES users(id) ON DELETE SET NULL
+        );
+        INSERT INTO announcements(
+          id, title, body_markdown, status, version, created_by,
+          created_at, published_at, updated_at, withdrawn_at, withdrawn_by
+        )
+        SELECT
+          id, title, body_markdown, status, version, created_by,
+          created_at, created_at, updated_at, withdrawn_at, withdrawn_by
+        FROM announcements_v15;
+        DROP TABLE announcements_v15;
+        CREATE INDEX announcements_status_published_idx
+          ON announcements(status, published_at, id);
+      `);
+      db.prepare(
+        "INSERT INTO schema_migrations(version, applied_at) VALUES(16, ?)"
+      ).run(nowIso());
+      db.exec("COMMIT");
+      schemaVersion = { version: 16 };
     } catch (error) {
       db.exec("ROLLBACK");
       throw error;

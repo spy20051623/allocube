@@ -1,4 +1,4 @@
-export const FINAL_SCHEMA_VERSION = 14;
+export const FINAL_SCHEMA_VERSION = 16;
 
 export const FINAL_SCHEMA_SQL = `
   CREATE TABLE schema_migrations (
@@ -519,6 +519,23 @@ export const FINAL_SCHEMA_SQL = `
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+
+  CREATE TABLE announcements (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    body_markdown TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ACTIVE'
+      CHECK(status IN ('ACTIVE', 'WITHDRAWN')),
+    version INTEGER NOT NULL DEFAULT 1,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    published_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    withdrawn_at TEXT,
+    withdrawn_by TEXT REFERENCES users(id) ON DELETE SET NULL
+  );
+  CREATE INDEX announcements_status_published_idx
+    ON announcements(status, published_at, id);
 
   CREATE TABLE audit_logs (
     id TEXT PRIMARY KEY,

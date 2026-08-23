@@ -11,6 +11,7 @@ describe("应用页面路径", () => {
     expect(appPath("calendar")).toBe("/calendar");
     expect(appPath("resources")).toBe("/resources");
     expect(appPath("my")).toBe("/reservations");
+    expect(appPath("announcements")).toBe("/announcements");
     expect(appPath("profile")).toBe("/profile");
     expect(appPath("notifications")).toBe("/notifications");
   });
@@ -19,12 +20,14 @@ describe("应用页面路径", () => {
     expect(appPath("admin", "machines")).toBe("/admin/machines");
     expect(appPath("admin", "users")).toBe("/admin/users");
     expect(appPath("admin", "report")).toBe("/admin/reports");
+    expect(appPath("admin", "announcements")).toBe("/admin/announcements");
     expect(appPath("admin", "settings")).toBe("/admin/settings");
     expect(appPath("admin", "audit")).toBe("/admin/audit");
   });
 
   it("从路径恢复页面和管理标签", () => {
     expect(resolveAppRoute("/reservations")).toEqual({ page: "my" });
+    expect(resolveAppRoute("/announcements/")).toEqual({ page: "announcements" });
     expect(resolveAppRoute("/admin/users")).toEqual({
       page: "admin",
       adminTab: "users"
@@ -32,6 +35,10 @@ describe("应用页面路径", () => {
     expect(resolveAppRoute("/admin/settings/")).toEqual({
       page: "admin",
       adminTab: "settings"
+    });
+    expect(resolveAppRoute("/admin/announcements")).toEqual({
+      page: "admin",
+      adminTab: "announcements"
     });
     expect(resolveAppRoute("/admin/machines/machine-1/resources")).toEqual({
       page: "admin",
@@ -52,6 +59,7 @@ describe("应用页面路径", () => {
 
   it("不接受旧路径或未知路径", () => {
     expect(isAppPath("/calendar")).toBe(true);
+    expect(isAppPath("/announcements")).toBe(true);
     expect(isAppPath("/admin/machines/machine-1/info")).toBe(true);
     expect(isAppPath("/my")).toBe(false);
     expect(resolveAppRoute("/admin/machines/machine-1/unknown")).toBeNull();

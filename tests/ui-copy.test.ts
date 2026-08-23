@@ -660,4 +660,67 @@ describe("角色化界面文案", () => {
     expect(source).toContain('href="/docs/api"');
     expect(source).not.toContain('href="/api/open/docs"');
   });
+
+  it("系统公告默认隐藏已撤下记录并提供显式开关", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const panel = source.slice(
+      source.indexOf("function AnnouncementAdminPanel"),
+      source.indexOf("function AnnouncementEditorModal")
+    );
+    expect(panel).toContain("const [showWithdrawn, setShowWithdrawn] = useState(false)");
+    expect(panel).toContain('announcement.status === "ACTIVE"');
+    expect(panel).toContain("显示已撤下");
+    expect(panel).toContain("checked={showWithdrawn}");
+    expect(panel).toContain("const [loadError, setLoadError] = useState(false)");
+    expect(panel).toContain("系统公告加载失败，当前列表可能不是最新状态");
+    expect(panel).toContain("setLoaded(false)");
+    expect(panel).toContain('mode: "EDIT"');
+    expect(panel).toContain('mode: "REACTIVATE"');
+    expect(panel).toContain(
+      'onInternalNavigate={(href) => window.location.assign(href)}'
+    );
+    expect(panel).not.toContain(
+      '<AnnouncementMarkdown markdown={announcement.bodyMarkdown} interactive={false}'
+    );
+  });
+
+  it("普通用户公告页只读取当前展示中的公告", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const page = source.slice(
+      source.indexOf("function AnnouncementListPage"),
+      source.indexOf("function LoadingScreen")
+    );
+    expect(source).toContain('<Megaphone size={16} />系统公告');
+    expect(page).toContain('"/announcements"');
+    expect(page).not.toContain('"/admin/announcements"');
+    expect(page).not.toContain("创建公告");
+    expect(page).not.toContain("编辑");
+    expect(page).not.toContain("撤下");
+  });
+
+  it("公告弹窗只在存在后续公告时显示剩余数量", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const center = source.slice(
+      source.indexOf("function AnnouncementCenter"),
+      source.indexOf("function AnnouncementListPage")
+    );
+    expect(center).toContain("announcements.length > 1 &&");
+    expect(center).toContain("还有 {announcements.length - 1} 条公告");
+    expect(center).not.toContain("关闭后本机不再显示此公告");
+  });
+
+  it("公告编辑冲突会保留草稿并同步最新版本，校验错误显示到字段", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const editor = source.slice(
+      source.indexOf("function AnnouncementEditorModal"),
+      source.indexOf("function SettingsPanel")
+    );
+    expect(editor).toContain("const [expectedVersion, setExpectedVersion]");
+    expect(editor).toContain("error instanceof ApiError && error.status === 409");
+    expect(editor).toContain("setExpectedVersion(latest.version)");
+    expect(editor).toContain("当前草稿已保留");
+    expect(editor).toContain('validationDetailFromApi(error, "title")');
+    expect(editor).toContain('validationDetailFromApi(error, "bodyMarkdown")');
+    expect(editor).toContain('error={fieldErrors.bodyMarkdown}');
+  });
 });

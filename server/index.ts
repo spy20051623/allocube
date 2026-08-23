@@ -28,6 +28,7 @@ import {
 } from "./db.js";
 import { processEmailOutbox } from "./mailer.js";
 import { registerAdminRoutes } from "./routes-admin.js";
+import { registerAnnouncementRoutes } from "./announcements.js";
 import { registerAuthRoutes } from "./routes-auth.js";
 import { registerScheduleRoutes } from "./routes-schedule.js";
 import { registerOpenApiRoutes } from "./open-api.js";
@@ -251,10 +252,24 @@ function publishRevision(revision: number) {
   }
 }
 
+function publishAnnouncementChange() {
+  const payload = `event: announcement\ndata: ${JSON.stringify({
+    changedAt: nowIso()
+  })}\n\n`;
+  for (const client of eventClients.keys()) {
+    try {
+      client.write(payload);
+    } catch {
+      removeEventClient(client);
+    }
+  }
+}
+
 registerAuthRoutes(app);
 registerApiTokenManagementRoutes(app);
 registerScheduleRoutes(app, publishRevision);
 registerAdminRoutes(app, publishRevision);
+registerAnnouncementRoutes(app, publishAnnouncementChange);
 registerOpenApiRoutes(app, publishRevision);
 
 app.get("/api/v1/events", async (request, reply) => {

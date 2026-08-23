@@ -2,22 +2,31 @@ export type Page =
   | "calendar"
   | "resources"
   | "my"
+  | "announcements"
   | "profile"
   | "notifications"
   | "admin";
 
-export type AdminTab = "machines" | "users" | "report" | "settings" | "audit";
+export type AdminTab =
+  | "machines"
+  | "users"
+  | "report"
+  | "announcements"
+  | "settings"
+  | "audit";
 export type MachineAdminSection = "info" | "resources" | "users";
 
 export const appPaths = [
   "/calendar",
   "/resources",
   "/reservations",
+  "/announcements",
   "/profile",
   "/notifications",
   "/admin/machines",
   "/admin/users",
   "/admin/reports",
+  "/admin/announcements",
   "/admin/settings",
   "/admin/audit"
 ] as const;
@@ -38,11 +47,13 @@ const canonicalRoutes = new Map<StaticAppPath, ResolvedAppRoute>([
   ["/calendar", { page: "calendar" }],
   ["/resources", { page: "resources" }],
   ["/reservations", { page: "my" }],
+  ["/announcements", { page: "announcements" }],
   ["/profile", { page: "profile" }],
   ["/notifications", { page: "notifications" }],
   ["/admin/machines", { page: "admin", adminTab: "machines" }],
   ["/admin/users", { page: "admin", adminTab: "users" }],
   ["/admin/reports", { page: "admin", adminTab: "report" }],
+  ["/admin/announcements", { page: "admin", adminTab: "announcements" }],
   ["/admin/settings", { page: "admin", adminTab: "settings" }],
   ["/admin/audit", { page: "admin", adminTab: "audit" }]
 ]);
@@ -51,10 +62,12 @@ export function appPath(page: Page, adminTab: AdminTab = "machines"): StaticAppP
   if (page === "calendar") return "/calendar";
   if (page === "resources") return "/resources";
   if (page === "my") return "/reservations";
+  if (page === "announcements") return "/announcements";
   if (page === "profile") return "/profile";
   if (page === "notifications") return "/notifications";
   if (adminTab === "users") return "/admin/users";
   if (adminTab === "report") return "/admin/reports";
+  if (adminTab === "announcements") return "/admin/announcements";
   if (adminTab === "settings") return "/admin/settings";
   if (adminTab === "audit") return "/admin/audit";
   return "/admin/machines";

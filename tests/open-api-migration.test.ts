@@ -15,19 +15,29 @@ process.env.BOOTSTRAP_ADMIN_PASSWORD = "Admin12#$";
 let dbModule: typeof import("../server/db.js");
 
 beforeAll(async () => {
-  const apiTokenStart = FINAL_SCHEMA_SQL.indexOf("  CREATE TABLE api_tokens (");
-  const legacyNextTable = FINAL_SCHEMA_SQL.indexOf("  CREATE TABLE auth_tokens (");
-  if (apiTokenStart < 0 || legacyNextTable < 0) {
-    throw new Error("无法构造版本 13 数据库结构");
-  }
-  const version13Schema =
-    FINAL_SCHEMA_SQL.slice(0, apiTokenStart) +
-    FINAL_SCHEMA_SQL.slice(legacyNextTable)
-      .replace(
-        "    actor_api_token_id TEXT REFERENCES api_tokens(id) ON DELETE SET NULL,\n",
-        ""
-      )
-      .replace("    api_operation_id TEXT,\n", "");
+  const removeSchemaSection = (schema: string, start: string, end: string) => {
+    const sectionStart = schema.indexOf(start);
+    const sectionEnd = schema.indexOf(end);
+    if (sectionStart < 0 || sectionEnd < 0 || sectionEnd <= sectionStart) {
+      throw new Error("无法构造旧版数据库结构");
+    }
+    return schema.slice(0, sectionStart) + schema.slice(sectionEnd);
+  };
+  let version13Schema = removeSchemaSection(
+    FINAL_SCHEMA_SQL,
+    "  CREATE TABLE api_tokens (",
+    "  CREATE TABLE auth_tokens ("
+  );
+  version13Schema = removeSchemaSection(
+    version13Schema,
+    "  CREATE TABLE announcements (",
+    "  CREATE TABLE audit_logs ("
+  )
+    .replace(
+      "    actor_api_token_id TEXT REFERENCES api_tokens(id) ON DELETE SET NULL,\n",
+      ""
+    )
+    .replace("    api_operation_id TEXT,\n", "");
   const legacy = new Database(databasePath);
   legacy.pragma("foreign_keys = ON");
   legacy.exec(version13Schema);
@@ -40,13 +50,13 @@ beforeAll(async () => {
   await dbModule.initializeDatabase();
 });
 
-describe("官方 API 数据库迁移", () => {
-  it("从版本 13 原地升级到版本 14", () => {
+describe("数据库连续迁移", () => {
+  it("从版本 13 原地升级到当前版本", () => {
     expect(
       dbModule.db
         .prepare("SELECT MAX(version) AS version FROM schema_migrations")
         .get()
-    ).toEqual({ version: 14 });
+    ).toEqual({ version: 16 });
     const tables = new Set(
       (
         dbModule.db
@@ -56,6 +66,7 @@ describe("官方 API 数据库迁移", () => {
     );
     expect(tables.has("api_tokens")).toBe(true);
     expect(tables.has("prepared_api_operations")).toBe(true);
+    expect(tables.has("announcements")).toBe(true);
     const auditColumns = (
       dbModule.db.prepare("PRAGMA table_info(audit_logs)").all() as Array<{
         name: string;

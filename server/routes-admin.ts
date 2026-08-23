@@ -3483,6 +3483,11 @@ export function registerAdminRoutes(
                WHERE target.id = a.entity_id),
               '资源项已删除'
             )
+            WHEN a.entity_type = 'announcement' THEN COALESCE(
+              (SELECT target.title FROM announcements target
+               WHERE target.id = a.entity_id),
+              '系统公告'
+            )
             ELSE NULL
           END AS entity_name,
           CASE

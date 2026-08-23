@@ -65,6 +65,7 @@ Allocube 是面向内部团队的计算资源占用系统。它把机器上的�
 | `<MACHINE_IDS>` | 使用英文逗号分隔的一个或多个机器 UUID |
 | `<RESOURCE_GROUP_ID>` | 资源组 UUID |
 | `<RESERVATION_ID>` | 本人占用 UUID |
+| `<BATCH_ID>` | 同一次 CREATE 提交产生的占用批次 UUID |
 | `<CURSOR>` | 上一页 `meta.nextCursor` 返回的不透明字符串 |
 | `<START_AT_RFC3339>` / `<END_AT_RFC3339>` | 实际占用的 UTC RFC 3339 开始和结束时间 |
 | `<REQUEST_ID>` | 实际响应中的请求追踪 ID，仅用于展示响应示例或问题定位 |

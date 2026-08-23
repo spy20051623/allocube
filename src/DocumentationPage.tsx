@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   BookOpenText,
   Boxes,
-  Check,
   ChevronRight,
   Clipboard,
   ExternalLink,
@@ -15,8 +14,10 @@ import {
 } from "lucide-react";
 import {
   Children,
+  createContext,
   isValidElement,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -36,6 +37,7 @@ import {
 import type { ResolvedDocsRoute } from "./docs-routing";
 import {
   isObject,
+  buildOpenApiOperationUrl,
   listOpenApiOperations,
   mediaTypeDetails,
   openApiOperationMatches,
@@ -59,7 +61,11 @@ type SearchResult = {
   detail: string;
 };
 
-export function DocumentationPage({ route }: { route: ResolvedDocsRoute }) {
+type DocsNotify = (kind: "success" | "error", message: string) => void;
+
+const DocsNotifyContext = createContext<DocsNotify>(() => undefined);
+
+export function DocumentationPage({ route, notify }: { route: ResolvedDocsRoute; notify: DocsNotify }) {
   const [query, setQuery] = useState("");
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [openApi, setOpenApi] = useState<OpenApiState>({ status: "loading" });
@@ -128,6 +134,7 @@ export function DocumentationPage({ route }: { route: ResolvedDocsRoute }) {
   const searchResults = buildSearchResults(query, operations);
 
   return (
+    <DocsNotifyContext.Provider value={notify}>
     <div className="docs-shell">
       <header className="docs-header">
         <a className="docs-brand" href="/docs" aria-label="Allocube 文档中心首页">
@@ -218,6 +225,7 @@ export function DocumentationPage({ route }: { route: ResolvedDocsRoute }) {
         </aside>
       </div>
     </div>
+    </DocsNotifyContext.Provider>
   );
 }
 
@@ -262,22 +270,13 @@ function LinkedHeading({ level, children }: { level: 2 | 3; children: ReactNode 
 }
 
 function CopyableCode({ children }: { children: ReactNode }) {
-  const [copied, setCopied] = useState(false);
+  const copyToClipboard = useCopyToClipboard();
   const text = nodeText(children).replace(/\n$/, "");
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      setCopied(false);
-    }
-  };
   return (
     <div className="docs-code-block">
-      <button type="button" onClick={() => void copy()} aria-label="复制代码">
-        {copied ? <Check size={14} /> : <Clipboard size={14} />}
-        {copied ? "已复制" : "复制"}
+      <button type="button" onClick={() => void copyToClipboard(text)} aria-label="复制代码">
+        <Clipboard size={14} />
+        复制
       </button>
       <pre>{children}</pre>
     </div>
@@ -382,17 +381,45 @@ function OpenApiGroups({ document, operations }: { document: unknown; operations
 }
 
 function OpenApiOperationCard({ document, operation }: { document: unknown; operation: OpenApiOperation }) {
+  const copyToClipboard = useCopyToClipboard();
+  const endpointUrl = buildOpenApiOperationUrl(window.location.origin, operation.path);
+
   return (
     <details className="api-operation" id={operationAnchor(operation)}>
       <summary>
         <span className={`api-method method-${operation.method.toLocaleLowerCase()}`}>{operation.method}</span>
         <code>{operation.path}</code>
         <span className="api-summary">{operation.summary}</span>
+        <button
+          type="button"
+          className="api-copy-endpoint"
+          aria-label={`复制接口地址 ${endpointUrl}`}
+          title={endpointUrl}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void copyToClipboard(endpointUrl);
+          }}
+        >
+          <Clipboard size={11} />
+        </button>
         <ChevronRight className="api-chevron" size={17} />
       </summary>
       <div className="api-operation-body">
         {operation.description && <p>{operation.description}</p>}
         {operation.operationId && <p className="api-operation-id"><strong>operationId</strong><code>{operation.operationId}</code></p>}
+        <div className="api-endpoint-url">
+          <strong>完整 URL</strong>
+          <button
+            type="button"
+            className="api-endpoint-url-value"
+            aria-label={`复制完整接口地址 ${endpointUrl}`}
+            title="点击复制完整 URL"
+            onClick={() => void copyToClipboard(endpointUrl)}
+          >
+            <code>{endpointUrl}</code>
+          </button>
+        </div>
         {operation.parameters.length > 0 && (
           <ApiParameters document={document} parameters={operation.parameters} />
         )}
@@ -410,17 +437,22 @@ function ApiParameters({ document, parameters }: { document: unknown; parameters
     <div className="api-subsection">
       <h4>参数</h4>
       <div className="docs-table-wrap">
-        <table>
-          <thead><tr><th>名称</th><th>位置</th><th>必填</th><th>说明 / Schema</th></tr></thead>
+        <table className="api-parameters-table">
+          <thead><tr><th>参数名</th><th>类型</th><th>位置</th><th>必填</th><th>说明</th></tr></thead>
           <tbody>
             {parameters.map((parameter, index) => (
               <tr key={`${String(parameter.name)}-${index}`}>
-                <td><code>{String(parameter.name ?? "-")}</code></td>
-                <td>{String(parameter.in ?? "-")}</td>
-                <td>{parameter.required === true ? "是" : "否"}</td>
+                <td className="api-parameter-name"><code>{String(parameter.name ?? "-")}</code></td>
+                <td><span className="api-parameter-type">{schemaTypeLabel(document, parameter.schema)}</span></td>
+                <td><span className="api-parameter-location">{parameterLocationLabel(parameter.in)}</span></td>
                 <td>
+                  <span className={`api-parameter-required ${parameter.required === true ? "required" : "optional"}`}>
+                    {parameter.required === true ? "是" : "否"}
+                  </span>
+                </td>
+                <td className="api-parameter-description">
                   {typeof parameter.description === "string" && <span>{parameter.description}</span>}
-                  {parameter.schema !== undefined && <JsonPreview value={resolveOpenApiValue(document, parameter.schema)} compact />}
+                  {parameter.schema !== undefined && <SchemaConstraintSummary document={document} value={parameter.schema} />}
                 </td>
               </tr>
             ))}
@@ -440,17 +472,23 @@ function ApiResponses({ document, responses }: { document: unknown; responses: R
           const response = resolveOpenApiValue(document, raw);
           const object = isObject(response) ? response : {};
           const media = mediaTypeDetails(object);
+          const headers = isObject(object.headers) ? object.headers : undefined;
           return (
-            <div className="api-response" key={status}>
-              <div><code>{status}</code><span>{String(object.description ?? "")}</span></div>
+            <details className={`api-response api-response-${responseStatusTone(status)}`} key={status}>
+              <summary>
+                <code>{status}</code>
+                <span>{String(object.description ?? "")}</span>
+                <ChevronRight className="api-response-chevron" size={15} />
+              </summary>
+              {headers && <ApiResponseHeaders document={document} headers={headers} />}
               {media?.schema !== undefined && (
-                <SchemaDisclosure value={resolveOpenApiValue(document, media.schema)} />
+                <SchemaDisclosure document={document} value={media.schema} />
               )}
               {media?.example !== undefined && <ApiExample title="示例" value={media.example} />}
               {isObject(media?.examples) && Object.entries(media.examples).map(([name, example]) => (
                 <ApiExample key={name} title={name} value={example} />
               ))}
-            </div>
+            </details>
           );
         })}
       </div>
@@ -462,9 +500,9 @@ function ApiRequestBody({ document, requestBody }: { document: unknown; requestB
   const media = mediaTypeDetails(requestBody);
   return (
     <div className="api-subsection">
-      <h4>请求体{media?.mediaType ? ` · ${media.mediaType}` : ""}</h4>
+      <h4>请求体</h4>
       {media?.schema !== undefined && (
-        <SchemaDisclosure value={resolveOpenApiValue(document, media.schema)} />
+        <SchemaDisclosure document={document} value={media.schema} />
       )}
       {media?.example !== undefined && <ApiExample title="示例" value={media.example} />}
       {isObject(media?.examples) && Object.entries(media.examples).map(([name, example]) => (
@@ -486,32 +524,254 @@ function ApiExample({ title, value }: { title: string; value: unknown }) {
   );
 }
 
-function SchemaDisclosure({ value }: { value: unknown }) {
+function ApiResponseHeaders({ document, headers }: { document: unknown; headers: Record<string, unknown> }) {
   return (
-    <details className="api-schema-disclosure">
-      <summary>查看 Schema</summary>
-      <JsonPreview value={value} />
-    </details>
+    <div className="api-response-headers">
+      <strong>响应头</strong>
+      <div className="docs-table-wrap">
+        <table>
+          <thead><tr><th>名称</th><th>类型</th><th>说明</th></tr></thead>
+          <tbody>
+            {Object.entries(headers).map(([name, raw]) => {
+              const header = resolveOpenApiValue(document, raw);
+              const object = isObject(header) ? header : {};
+              return (
+                <tr key={name}>
+                  <td><code>{name}</code></td>
+                  <td><SchemaInlineSummary document={document} value={object.schema} compact /></td>
+                  <td>{String(object.description ?? "")}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
+function SchemaDisclosure({ document, value }: { document: unknown; value: unknown }) {
+  const resolved = resolveOpenApiValue(document, value);
+  return (
+    <div className="api-schema-disclosure">
+      <SchemaExplorer document={document} value={value} />
+      <details className="api-schema-raw">
+        <summary>查看原始 Schema</summary>
+        <JsonPreview value={resolved} />
+      </details>
+    </div>
+  );
+}
+
+function SchemaExplorer({
+  document,
+  value,
+  depth = 0,
+  references = new Set<string>(),
+  showDescription = true
+}: {
+  document: unknown;
+  value: unknown;
+  depth?: number;
+  references?: Set<string>;
+  showDescription?: boolean;
+}) {
+  const reference = isObject(value) && typeof value.$ref === "string" ? value.$ref : undefined;
+  if (reference && references.has(reference)) {
+    return <div className="api-schema-reference">引用 {reference.split("/").at(-1)}</div>;
+  }
+  const resolved = resolveOpenApiValue(document, value);
+  if (!isObject(resolved)) return <SchemaInlineSummary document={document} value={resolved} />;
+  const nextReferences = reference ? new Set([...references, reference]) : references;
+  const required = new Set(Array.isArray(resolved.required) ? resolved.required.filter((item): item is string => typeof item === "string") : []);
+  const properties = isObject(resolved.properties) ? resolved.properties : undefined;
+  const variants = Array.isArray(resolved.oneOf)
+    ? { label: "可选结构", values: resolved.oneOf }
+    : Array.isArray(resolved.anyOf)
+      ? { label: "可选结构", values: resolved.anyOf }
+      : Array.isArray(resolved.allOf)
+        ? { label: "组合结构", values: resolved.allOf }
+        : undefined;
+
+  return (
+    <div className={`api-schema-explorer depth-${Math.min(depth, 4)}`}>
+      {showDescription && typeof resolved.description === "string" && <p className="api-schema-description">{resolved.description}</p>}
+      {showDescription && <SchemaInlineSummary document={document} value={resolved} compact />}
+      {properties && (
+        <div className="api-schema-fields">
+          {Object.entries(properties).map(([name, property]) => {
+            const propertySchema = resolveOpenApiValue(document, property);
+            const description = isObject(propertySchema) && typeof propertySchema.description === "string" ? propertySchema.description : "";
+            return (
+              <div className="api-schema-field" key={name}>
+                <div className="api-schema-field-head">
+                  <code>{name}</code>
+                  <SchemaInlineSummary document={document} value={property} compact />
+                  {required.has(name) && <span className="api-required-badge">必填</span>}
+                </div>
+                {description && <p>{description}</p>}
+                {depth < 8 && schemaHasChildren(document, property) && (
+                  <SchemaExplorer
+                    document={document}
+                    value={property}
+                    depth={depth + 1}
+                    references={nextReferences}
+                    showDescription={false}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {resolved.items !== undefined && depth < 8 && (
+        <div className="api-schema-items">
+          <strong>数组元素</strong>
+          <SchemaExplorer document={document} value={resolved.items} depth={depth + 1} references={nextReferences} />
+        </div>
+      )}
+      {variants && depth < 8 && (
+        <div className="api-schema-variants">
+          <strong>{variants.label}</strong>
+          {variants.values.map((variant, index) => (
+            <details key={index}>
+              <summary>{schemaVariantLabel(document, variant, index)}</summary>
+              <SchemaExplorer document={document} value={variant} depth={depth + 1} references={nextReferences} />
+            </details>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SchemaInlineSummary({ document, value, compact = false }: { document: unknown; value: unknown; compact?: boolean }) {
+  const resolved = resolveOpenApiValue(document, value);
+  if (!isObject(resolved)) return <span className="api-schema-type">{schemaDisplayValue(resolved)}</span>;
+  const constraints = schemaConstraintLabels(resolved);
+  return (
+    <span className={`api-schema-inline${compact ? " compact" : ""}`}>
+      <span className="api-schema-type">{schemaTypeLabel(document, value)}</span>
+      {constraints.map((constraint) => <span className="api-schema-constraint" key={constraint}>{constraint}</span>)}
+    </span>
+  );
+}
+
+function SchemaConstraintSummary({ document, value }: { document: unknown; value: unknown }) {
+  const resolved = resolveOpenApiValue(document, value);
+  if (!isObject(resolved)) return null;
+  const constraints = schemaConstraintLabels(resolved);
+  if (constraints.length === 0) return null;
+  return (
+    <span className="api-parameter-constraints">
+      {constraints.map((constraint) => <span className="api-schema-constraint" key={constraint}>{constraint}</span>)}
+    </span>
+  );
+}
+
+function schemaTypeLabel(document: unknown, value: unknown): string {
+  const resolved = resolveOpenApiValue(document, value);
+  if (!isObject(resolved)) return typeof resolved;
+  if (Array.isArray(resolved.type)) return resolved.type.map(String).join(" | ");
+  if (typeof resolved.type === "string") {
+    if (resolved.type === "array") return `array<${schemaTypeLabel(document, resolved.items)}>`;
+    return resolved.format ? `${resolved.type} · ${String(resolved.format)}` : resolved.type;
+  }
+  if (Array.isArray(resolved.oneOf) || Array.isArray(resolved.anyOf)) return "联合类型";
+  if (Array.isArray(resolved.allOf)) return "组合对象";
+  if (isObject(resolved.properties)) return "object";
+  if (resolved.const !== undefined) return typeof resolved.const;
+  return "任意类型";
+}
+
+function schemaVariantLabel(document: unknown, value: unknown, index: number) {
+  const resolved = resolveOpenApiValue(document, value);
+  if (isObject(resolved)) {
+    if (typeof resolved.title === "string" && resolved.title.trim()) return resolved.title;
+    if (typeof resolved.description === "string" && resolved.description.trim()) return resolved.description;
+    if (isObject(resolved.properties)) {
+      const action = resolveOpenApiValue(document, resolved.properties.action);
+      if (isObject(action)) {
+        if (typeof action.const === "string") return action.const;
+        if (Array.isArray(action.enum)) return action.enum.map(String).join(" / ");
+      }
+    }
+  }
+  const type = schemaTypeLabel(document, value);
+  return type === "object" ? `结构 ${index + 1}` : type;
+}
+
+function schemaConstraintLabels(schema: Record<string, unknown>): string[] {
+  const labels: string[] = [];
+  if (Array.isArray(schema.enum)) labels.push(`可选：${schema.enum.map(schemaDisplayValue).join(" / ")}`);
+  if (schema.const !== undefined) labels.push(`固定：${schemaDisplayValue(schema.const)}`);
+  if (schema.default !== undefined) labels.push(`默认：${schemaDisplayValue(schema.default)}`);
+  if (schema.minimum !== undefined) labels.push(`最小：${String(schema.minimum)}`);
+  if (schema.maximum !== undefined) labels.push(`最大：${String(schema.maximum)}`);
+  if (schema.minLength !== undefined) labels.push(`最短：${String(schema.minLength)}`);
+  if (schema.maxLength !== undefined) labels.push(`最长：${String(schema.maxLength)}`);
+  if (schema.minItems !== undefined) labels.push(`最少 ${String(schema.minItems)} 项`);
+  if (schema.maxItems !== undefined) labels.push(`最多 ${String(schema.maxItems)} 项`);
+  if (typeof schema.pattern === "string") labels.push(`格式：${schema.pattern}`);
+  return labels;
+}
+
+function schemaDisplayValue(value: unknown) {
+  if (value === "") return "(空)";
+  if (value === null) return "null";
+  if (value === undefined) return "-";
+  return String(value);
+}
+
+function schemaHasChildren(document: unknown, value: unknown) {
+  const resolved = resolveOpenApiValue(document, value);
+  return isObject(resolved) && (
+    isObject(resolved.properties) ||
+    resolved.items !== undefined ||
+    Array.isArray(resolved.oneOf) ||
+    Array.isArray(resolved.anyOf) ||
+    Array.isArray(resolved.allOf)
+  );
+}
+
+function responseStatusTone(status: string) {
+  if (/^2/.test(status)) return "success";
+  if (/^4/.test(status)) return "client-error";
+  if (/^5/.test(status)) return "server-error";
+  return "default";
+}
+
+function parameterLocationLabel(value: unknown) {
+  if (value === "query") return "查询参数";
+  if (value === "path") return "路径参数";
+  if (value === "header") return "请求头";
+  if (value === "cookie") return "Cookie";
+  return String(value ?? "-");
+}
+
 function JsonPreview({ value, compact = false }: { value: unknown; compact?: boolean }) {
-  const [copied, setCopied] = useState(false);
+  const copyToClipboard = useCopyToClipboard();
   const serialized = JSON.stringify(value, null, 2) ?? String(value);
   return (
     <div className={`api-json${compact ? " compact" : ""}`}>
-      <button type="button" aria-label="复制 JSON" onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(serialized);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1200);
-        } catch {
-          setCopied(false);
-        }
-      }}>{copied ? <Check size={13} /> : <Clipboard size={13} />}</button>
+      <button type="button" aria-label="复制 JSON" onClick={() => void copyToClipboard(serialized)}>
+        <Clipboard size={13} />
+      </button>
       <pre><code>{serialized}</code></pre>
     </div>
   );
+}
+
+function useCopyToClipboard() {
+  const notify = useContext(DocsNotifyContext);
+  return useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      notify("success", "复制成功");
+    } catch {
+      notify("error", "复制失败，请手动复制");
+    }
+  }, [notify]);
 }
 
 function DocsPager({ currentSlug }: { currentSlug: string }) {

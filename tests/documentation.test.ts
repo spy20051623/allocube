@@ -11,7 +11,9 @@ import {
 import {
   listOpenApiOperations,
   mediaTypeDetails,
-  openApiOperationMatches
+  openApiOperationMatches,
+  buildOpenApiOperationUrl,
+  resolveOpenApiValue
 } from "../src/openapi-docs.js";
 import { resolveDocsRoute } from "../src/docs-routing.js";
 import { OPEN_API_DOCUMENT } from "../server/openapi-document.js";
@@ -208,4 +210,160 @@ describe("OpenAPI 文档展示模型", () => {
     expect(operations.some((operation) => openApiOperationMatches(operation, "POST prepareReservation"))).toBe(true);
     expect(operations.some((operation) => openApiOperationMatches(operation, "Resources 查询机器"))).toBe(true);
   });
+
+  it("使用当前站点地址生成可复制的完整接口 URL", () => {
+    expect(buildOpenApiOperationUrl("https://allocube.example.com", "/machines"))
+      .toBe("https://allocube.example.com/api/open/v1/machines");
+    expect(buildOpenApiOperationUrl("https://allocube.example.com/", "reservations/{id}"))
+      .toBe("https://allocube.example.com/api/open/v1/reservations/{id}");
+  });
+
+  it("以递归字段视图展示嵌套结构、响应头和原始 Schema", () => {
+    const pageSource = fs.readFileSync(
+      new URL("../src/DocumentationPage.tsx", import.meta.url),
+      "utf8"
+    );
+    expect(pageSource).toContain("function SchemaExplorer");
+    expect(pageSource).toContain("function ApiResponseHeaders");
+    expect(pageSource).toContain("查看原始 Schema");
+    expect(pageSource).not.toContain("requestBody.description");
+    expect(pageSource).toContain("className=\"api-endpoint-url-value\"");
+    expect(pageSource).toContain("点击复制完整 URL");
+    expect(pageSource).toContain("notify(\"success\", \"复制成功\")");
+    expect(pageSource).not.toContain("已复制");
+    expect(pageSource).toContain("if (value === \"\") return \"(空)\"");
+    expect(pageSource).toMatch(/<details className=\{`api-response/u);
+    expect(pageSource).not.toMatch(/<details className=\{`api-response[^>]+open=/u);
+  });
 });
+
+describe("OpenAPI 端点说明完整性", () => {
+  const operations = listOpenApiOperations(OPEN_API_DOCUMENT);
+
+  it("为每个端点说明参数、请求体、响应状态和通用故障", () => {
+    expect(operations).toHaveLength(8);
+    for (const operation of operations) {
+      for (const parameter of operation.parameters) {
+        expectNonEmptyDescription(parameter, `${operation.method} ${operation.path} 参数 ${String(parameter.name)}`);
+      }
+      if (operation.requestBody) {
+        expectNonEmptyDescription(operation.requestBody, `${operation.method} ${operation.path} 请求体`);
+      }
+      expect(operation.responses, `${operation.method} ${operation.path} 缺少 500 响应`).toHaveProperty("500");
+      for (const [status, rawResponse] of Object.entries(operation.responses)) {
+        const response = resolveOpenApiValue(OPEN_API_DOCUMENT, rawResponse);
+        expectRecord(response, `${operation.method} ${operation.path} 响应 ${status}`);
+        expectNonEmptyDescription(response, `${operation.method} ${operation.path} 响应 ${status}`);
+      }
+    }
+    const machines = operations.find((operation) => operation.method === "GET" && operation.path === "/machines");
+    expect(machines?.responses).toHaveProperty("400");
+  });
+
+  it("说明成功、限流响应头，并为所有返回字段提供含义", () => {
+    for (const operation of operations) {
+      const success = resolveOpenApiValue(OPEN_API_DOCUMENT, operation.responses["200"]);
+      expectRecord(success, `${operation.method} ${operation.path} 200 响应`);
+      expect(success.headers).toHaveProperty("X-Request-Id");
+      expect(success.headers).toHaveProperty("X-RateLimit-Limit");
+      assertSchemaPropertyDescriptions(
+        OPEN_API_DOCUMENT,
+        mediaTypeDetails(success)?.schema,
+        `${operation.method} ${operation.path} 200 响应体`
+      );
+
+      const rateLimited = resolveOpenApiValue(OPEN_API_DOCUMENT, operation.responses["429"]);
+      expectRecord(rateLimited, `${operation.method} ${operation.path} 429 响应`);
+      expect(rateLimited.headers).toHaveProperty("Retry-After");
+    }
+  });
+
+  it("完整展示四种占用操作的提交成功示例", () => {
+    const commit = operations.find((operation) => operation.operationId === "commitReservationOperation");
+    expect(commit).toBeTruthy();
+    const success = resolveOpenApiValue(OPEN_API_DOCUMENT, commit!.responses["200"]);
+    expectRecord(success, "commit 200 响应");
+    const examples = mediaTypeDetails(success)?.examples;
+    expectRecord(examples, "commit 200 examples");
+    expect(Object.keys(examples)).toEqual(["create", "update", "cancel", "end"]);
+    expect((examples.update as { summary?: string }).summary).toBe("UPDATE 提交成功");
+    expect((examples.end as { summary?: string }).summary).toBe("END 提交成功");
+  });
+
+  it("为请求字段和可复用模型中的每个属性提供含义", () => {
+    const components = resolveOpenApiValue(OPEN_API_DOCUMENT, OPEN_API_DOCUMENT.components);
+    expectRecord(components, "components");
+    expectRecord(components.schemas, "components.schemas");
+    for (const [name, schema] of Object.entries(components.schemas)) {
+      assertSchemaPropertyDescriptions(OPEN_API_DOCUMENT, schema, `components.schemas.${name}`);
+    }
+    for (const operation of operations) {
+      if (!operation.requestBody) continue;
+      assertSchemaPropertyDescriptions(
+        OPEN_API_DOCUMENT,
+        mediaTypeDetails(operation.requestBody)?.schema,
+        `${operation.method} ${operation.path} 请求体`
+      );
+    }
+  });
+});
+
+function expectRecord(value: unknown, context: string): asserts value is Record<string, unknown> {
+  expect(value, context).toBeTypeOf("object");
+  expect(value, context).not.toBeNull();
+  expect(Array.isArray(value), context).toBe(false);
+}
+
+function expectNonEmptyDescription(value: Record<string, unknown>, context: string) {
+  expect(value.description, `${context} 缺少说明`).toBeTypeOf("string");
+  expect(String(value.description).trim().length, `${context} 说明为空`).toBeGreaterThan(0);
+}
+
+function assertSchemaPropertyDescriptions(
+  document: unknown,
+  rawSchema: unknown,
+  context: string,
+  visitedReferences = new Set<string>()
+) {
+  if (rawSchema === undefined) throw new Error(`${context} 缺少 Schema`);
+  const reference = isRecord(rawSchema) && typeof rawSchema.$ref === "string" ? rawSchema.$ref : undefined;
+  if (reference && visitedReferences.has(reference)) return;
+  const nextVisited = reference ? new Set([...visitedReferences, reference]) : visitedReferences;
+  const schema = resolveOpenApiValue(document, rawSchema);
+  expectRecord(schema, context);
+
+  if (isRecord(schema.properties)) {
+    for (const [name, property] of Object.entries(schema.properties)) {
+      const resolvedProperty = resolveOpenApiValue(document, property);
+      expectRecord(resolvedProperty, `${context}.${name}`);
+      expectNonEmptyDescription(resolvedProperty, `${context}.${name}`);
+      if (schemaHasNestedShape(document, property)) {
+        assertSchemaPropertyDescriptions(document, property, `${context}.${name}`, nextVisited);
+      }
+    }
+  }
+  if (schema.items !== undefined) {
+    assertSchemaPropertyDescriptions(document, schema.items, `${context}[]`, nextVisited);
+  }
+  for (const keyword of ["oneOf", "anyOf", "allOf"] as const) {
+    if (!Array.isArray(schema[keyword])) continue;
+    schema[keyword].forEach((variant, index) => {
+      assertSchemaPropertyDescriptions(document, variant, `${context}.${keyword}[${index}]`, nextVisited);
+    });
+  }
+}
+
+function schemaHasNestedShape(document: unknown, value: unknown) {
+  const schema = resolveOpenApiValue(document, value);
+  return isRecord(schema) && (
+    isRecord(schema.properties) ||
+    schema.items !== undefined ||
+    Array.isArray(schema.oneOf) ||
+    Array.isArray(schema.anyOf) ||
+    Array.isArray(schema.allOf)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

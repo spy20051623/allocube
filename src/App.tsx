@@ -681,7 +681,12 @@ export function App() {
   }, [canonicalRedirect, routeNavigate]);
 
   if (docsRoute) {
-    return <DocumentationPage route={docsRoute} />;
+    return (
+      <>
+        <DocumentationPage route={docsRoute} notify={notify} />
+        {toast && <Toast {...toast} />}
+      </>
+    );
   }
 
   if (loading || canonicalRedirect) {

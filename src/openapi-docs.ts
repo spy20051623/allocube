@@ -1,4 +1,5 @@
 const HTTP_METHODS = ["get", "post", "put", "patch", "delete", "options", "head"] as const;
+const PUBLIC_OPEN_API_BASE_PATH = "/api/open/v1";
 
 type JsonObject = Record<string, unknown>;
 
@@ -59,6 +60,12 @@ export function openApiOperationMatches(operation: OpenApiOperation, query: stri
     operation.operationId
   ].join(" ").toLocaleLowerCase();
   return terms.every((term) => haystack.includes(term));
+}
+
+export function buildOpenApiOperationUrl(origin: string, path: string) {
+  const normalizedOrigin = origin.replace(/\/+$/u, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${normalizedOrigin}${PUBLIC_OPEN_API_BASE_PATH}${normalizedPath}`;
 }
 
 export function schemaForMediaType(container: JsonObject | undefined) {

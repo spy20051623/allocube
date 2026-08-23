@@ -14094,7 +14094,7 @@ function AnnouncementEditorModal({
   };
 
   return (
-    <Modal title={modalTitle} onClose={onClose} large>
+    <Modal title={modalTitle} onClose={onClose} large className="announcement-editor-modal">
       <form className="announcement-create-form" onSubmit={(event) => void submit(event)}>
         <div className="announcement-create-fields">
           <Field label="公告标题" error={fieldErrors.title}>
@@ -15153,12 +15153,14 @@ function Modal({
   onClose,
   wide,
   large,
+  className,
   children
 }: {
   title: string;
   onClose: () => void;
   wide?: boolean;
   large?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   const headingId = useId();
@@ -15217,7 +15219,7 @@ function Modal({
     }}>
       <section
         ref={dialogRef}
-        className={`modal ${large ? "large" : wide ? "wide" : ""}`}
+        className={`modal ${large ? "large" : wide ? "wide" : ""}${className ? ` ${className}` : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}

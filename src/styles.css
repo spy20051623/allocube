@@ -3407,13 +3407,39 @@ textarea::placeholder {
 }
 .announcement-admin-empty { padding: 30px; color: var(--muted); text-align: center; }
 
-.announcement-create-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .8fr); gap: 20px; }
-.announcement-create-fields textarea { min-height: 260px; resize: vertical; }
+.announcement-editor-modal {
+  height: min(720px, calc(100vh - 60px));
+  display: flex;
+  flex-direction: column;
+}
+.announcement-editor-modal > header { flex: 0 0 auto; }
+.announcement-create-form {
+  min-height: 0;
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, .8fr);
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 20px;
+}
+.announcement-create-fields {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+}
+.announcement-create-fields > .field:last-child { min-height: 0; }
+.announcement-create-fields textarea {
+  min-height: 0;
+  flex: 1 1 auto;
+  resize: none;
+  overflow: auto;
+}
 .announcement-create-fields .field > small { color: var(--muted); font-size: 11px; line-height: 1.65; }
 .announcement-create-fields .field > small code { margin: 0 4px; }
 .announcement-preview {
   min-width: 0;
-  min-height: 330px;
+  min-height: 0;
+  overflow: auto;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -3425,14 +3451,34 @@ textarea::placeholder {
 .announcement-create-form > .modal-actions { grid-column: 1 / -1; }
 
 @media (max-width: 820px) {
+  .modal-backdrop:has(.announcement-editor-modal) { padding: 12px; }
+  .announcement-editor-modal { height: calc(100vh - 24px); }
   .announcement-management-page .page-header { align-items: flex-start; }
   .announcement-page-actions { align-items: flex-end; flex-direction: column-reverse; }
   .announcement-admin-card > header { align-items: stretch; flex-direction: column; }
   .announcement-card-actions { justify-content: flex-end; }
-  .announcement-create-form { grid-template-columns: 1fr; }
+  .announcement-create-form {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .announcement-create-fields { flex: 0 0 auto; }
+  .announcement-create-fields textarea { min-height: 220px; }
   .announcement-editor-feedback { grid-column: auto; }
-  .announcement-create-form > .modal-actions { grid-column: auto; }
-  .announcement-preview { min-height: 180px; }
+  .announcement-create-form > .modal-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    flex: 0 0 auto;
+    grid-column: auto;
+    padding-top: 12px;
+    background: white;
+  }
+  .announcement-preview {
+    height: 220px;
+    min-height: 220px;
+    flex: 0 0 auto;
+  }
   .announcement-dialog-footer { align-items: stretch; flex-direction: column; }
   .announcement-dialog-footer .primary-button { width: 100%; margin-left: 0; }
 }

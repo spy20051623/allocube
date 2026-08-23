@@ -723,4 +723,13 @@ describe("角色化界面文案", () => {
     expect(editor).toContain('validationDetailFromApi(error, "bodyMarkdown")');
     expect(editor).toContain('error={fieldErrors.bodyMarkdown}');
   });
+
+  it("公告编辑弹窗保持固定高度并让编辑区和预览区独立滚动", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+    expect(source).toContain('large className="announcement-editor-modal"');
+    expect(styles).toMatch(/\.announcement-editor-modal\s*\{[^}]*height:\s*min\(720px,/s);
+    expect(styles).toMatch(/\.announcement-create-fields textarea\s*\{[^}]*overflow:\s*auto/s);
+    expect(styles).toMatch(/\.announcement-preview\s*\{[^}]*overflow:\s*auto/s);
+  });
 });

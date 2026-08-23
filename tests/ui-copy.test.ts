@@ -732,4 +732,11 @@ describe("角色化界面文案", () => {
     expect(styles).toMatch(/\.announcement-create-fields textarea\s*\{[^}]*overflow:\s*auto/s);
     expect(styles).toMatch(/\.announcement-preview\s*\{[^}]*overflow:\s*auto/s);
   });
+
+  it("管理员公告页在固定高度的后台内容区内独立滚动", () => {
+    const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+    expect(styles).toMatch(
+      /\.announcement-management-page,[\s\S]*?\{[^}]*height:\s*100%;[^}]*overflow-y:\s*auto/s
+    );
+  });
 });

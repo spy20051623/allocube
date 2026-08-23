@@ -6004,6 +6004,7 @@ textarea::placeholder {
 }
 
 .user-management-page,
+.announcement-management-page,
 .settings-management-page,
 .audit-management-page {
   min-height: 0;

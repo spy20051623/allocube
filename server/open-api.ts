@@ -445,9 +445,10 @@ export function registerOpenApiRoutes(
     });
 
     openApp.get("/api/open/docs", async (_request, reply) => {
-      reply.header("content-type", "text/html; charset=utf-8");
-      return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Allocube 官方 API</title><style>body{font:16px/1.6 system-ui;max-width:900px;margin:48px auto;padding:0 24px;color:#172033}code,pre{background:#f4f6f8;border-radius:6px}code{padding:2px 6px}pre{padding:16px;overflow:auto}a{color:#165dff}</style></head><body><h1>Allocube 官方 AI API v1</h1><p>面向 AI、CLI 和服务端自动化的 REST JSON API。所有数据接口使用 <code>Authorization: Bearer &lt;个人访问令牌&gt;</code>。</p><p><a href="${OPEN_API_PREFIX}/openapi.json">下载 OpenAPI 3.1 文档</a></p><h2>两阶段写入</h2><ol><li>调用 <code>POST ${OPEN_API_PREFIX}/reservation-operations/prepare</code>。</li><li>检查预检结果。</li><li>在五分钟内调用 <code>POST ${OPEN_API_PREFIX}/reservation-operations/commit</code>。</li></ol><pre>curl -H "Authorization: Bearer $ALLOCUBE_API_TOKEN" \
-  https://allocube.example/api/open/v1/me</pre><p>字段、错误码和完整示例以 OpenAPI 文档为准。</p></body></html>`;
+      return reply
+        .code(302)
+        .header("location", "/docs/api")
+        .send();
     });
 
     openApp.get(`${OPEN_API_PREFIX}/me`, async (request, reply) => {

@@ -182,7 +182,16 @@ beforeAll(async () => {
   await app.ready();
 });
 
-describe("官方 AI API", () => {
+describe("官方 API", () => {
+  it("把旧 API 文档入口重定向到统一文档中心", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/open/docs"
+    });
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe("/docs/api");
+  });
+
   it("公开 OpenAPI 3.1 文档并保持 operationId 唯一", async () => {
     const response = await app.inject({
       method: "GET",
@@ -199,6 +208,48 @@ describe("官方 AI API", () => {
     expect(new Set(operationIds).size).toBe(operationIds.length);
     expect(operationIds).toContain("prepareReservationOperation");
     expect(operationIds).toContain("commitReservationOperation");
+    expect(document.paths["/reservation-operations/commit"].post.responses[409].description)
+      .toContain("必须重新预检");
+    expect(
+      document.paths["/reservation-operations/commit"].post.requestBody.content[
+        "application/json"
+      ].examples.commit.value
+    ).toEqual({
+      confirmationToken: "<CONFIRMATION_TOKEN>"
+    });
+    expect(
+      Object.keys(
+        document.paths["/reservation-operations/prepare"].post.requestBody.content[
+          "application/json"
+        ].examples
+      )
+    ).toEqual(["create", "update", "cancel", "end"]);
+    expect(
+      document.paths["/reservation-operations/commit"].post.description
+    ).toContain("不需要再次传 action");
+    expect(document["x-placeholder-convention"].syntax).toBe(
+      "<UPPER_SNAKE_CASE>"
+    );
+    const serializedDocument = JSON.stringify(document);
+    expect(serializedDocument).not.toMatch(/REDACTED|your-company|allocube\.example/u);
+    expect(serializedDocument).not.toMatch(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu
+    );
+    for (const match of serializedDocument.matchAll(/<([^>]+)>/g)) {
+      expect(match[1]).toMatch(/^[A-Z][A-Z0-9_]*$/u);
+    }
+    expect(document.paths["/reservations/{id}"].get.responses[404].description)
+      .toContain("不属于当前用户");
+    for (const pathItem of Object.values(document.paths) as any[]) {
+      for (const operation of Object.values(pathItem) as any[]) {
+        if (!operation?.responses) continue;
+        for (const [status, responseSchema] of Object.entries(operation.responses) as any[]) {
+          if (Number(status) >= 400) {
+            expect(responseSchema.description).not.toBe("请求失败");
+          }
+        }
+      }
+    }
   });
 
   it("只接受 Bearer 令牌且不返回 CORS 许可头", async () => {

@@ -643,4 +643,12 @@ describe("角色化界面文案", () => {
     );
     expect(registerPage).toContain("withoutEmailConfirmed");
   });
+
+  it("只在认证页、用户菜单和个人资料提供统一文档入口", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    expect(source).toContain('className="auth-docs-link" href="/docs/getting-started"');
+    expect(source).toContain('<BookOpenText size={16} />文档中心');
+    expect(source).toContain('href="/docs/api"');
+    expect(source).not.toContain('href="/api/open/docs"');
+  });
 });

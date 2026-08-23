@@ -1,6 +1,7 @@
 import {
   Activity,
   Bell,
+  BookOpenText,
   Boxes,
   CalendarDays,
   Check,
@@ -56,6 +57,7 @@ import {
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { ApiError, api, jsonBody, setCsrfToken } from "./api";
+import { DocumentationPage } from "./DocumentationPage";
 import {
   appPath,
   machineAdminPath,
@@ -73,6 +75,7 @@ import {
   resolveAuthLocation,
   type AuthPath
 } from "./auth-routing";
+import { resolveDocsRoute } from "./docs-routing";
 import {
   readLoginPreference,
   rememberLoginMethod,
@@ -465,6 +468,10 @@ function ServerClockProvider({
 export function App() {
   const routeLocation = useLocation();
   const routeNavigate = useNavigate();
+  const docsRoute = useMemo(
+    () => resolveDocsRoute(routeLocation.pathname),
+    [routeLocation.pathname]
+  );
   const [bootstrap, setBootstrap] = useState<DashboardBootstrap | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<ToastState>(null);
@@ -507,8 +514,12 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (docsRoute) {
+      setLoading(false);
+      return;
+    }
     void loadSession();
-  }, [loadSession]);
+  }, [docsRoute, loadSession]);
 
   useEffect(() => {
     const ignoreNumberInputWheel = (event: WheelEvent) => {
@@ -531,7 +542,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!bootstrap || bootstrap.user.status !== "ACTIVE") return;
+    if (docsRoute || !bootstrap || bootstrap.user.status !== "ACTIVE") return;
     const events = new EventSource("/api/v1/events");
     events.addEventListener("revision", () => {
       void loadSession();
@@ -541,12 +552,13 @@ export function App() {
   }, [
     bootstrap?.user.id,
     bootstrap?.user.status,
+    docsRoute,
     loadSession,
     loadUnreadNotificationCount
   ]);
 
   useEffect(() => {
-    if (!bootstrap) {
+    if (docsRoute || !bootstrap) {
       setUnreadNotificationCount(0);
       return;
     }
@@ -561,10 +573,11 @@ export function App() {
       window.clearInterval(refresh);
       window.removeEventListener("focus", refreshOnFocus);
     };
-  }, [bootstrap?.user.id, loadUnreadNotificationCount]);
+  }, [bootstrap?.user.id, docsRoute, loadUnreadNotificationCount]);
 
   useEffect(() => {
     if (
+      docsRoute ||
       !bootstrap ||
       bootstrap.user.status === "ACTIVE"
     ) {
@@ -572,11 +585,12 @@ export function App() {
     }
     const refresh = window.setInterval(() => void loadSession(), 30_000);
     return () => window.clearInterval(refresh);
-  }, [bootstrap?.user.id, bootstrap?.user.status, loadSession]);
+  }, [bootstrap?.user.id, bootstrap?.user.status, docsRoute, loadSession]);
 
   const activeUser = bootstrap?.user.status === "ACTIVE";
   const currentRoute = resolveAppRoute(routeLocation.pathname);
   const canonicalRedirect = (() => {
+    if (docsRoute) return null;
     if (loading) return null;
     if (!bootstrap) {
       return resolveAuthLocation(
@@ -608,6 +622,10 @@ export function App() {
     if (!canonicalRedirect) return;
     void routeNavigate({ href: canonicalRedirect, replace: true });
   }, [canonicalRedirect, routeNavigate]);
+
+  if (docsRoute) {
+    return <DocumentationPage route={docsRoute} />;
+  }
 
   if (loading || canonicalRedirect) {
     return <LoadingScreen />;
@@ -966,6 +984,9 @@ function AuthLayout({
           </div>
           {children}
         </div>
+        <a className="auth-docs-link" href="/docs/getting-started">
+          <BookOpenText size={15} />帮助与文档
+        </a>
       </section>
     </div>
   );
@@ -3548,7 +3569,7 @@ function ApiTokenSection({
         <div className="profile-api-token-actions">
           <a
             className="secondary-button"
-            href="/api/open/docs"
+            href="/docs/api"
             target="_blank"
             rel="noreferrer"
           >
@@ -4733,6 +4754,13 @@ function Topbar({
                 </span>
               )}
             </button>
+            <a
+              href="/docs"
+              role="menuitem"
+              onClick={() => setUserMenuOpen(false)}
+            >
+              <BookOpenText size={16} />文档中心
+            </a>
             <button
               type="button"
               role="menuitem"

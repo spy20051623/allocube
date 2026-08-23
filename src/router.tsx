@@ -6,6 +6,7 @@ import {
 import { App } from "./App";
 import { appPaths } from "./app-routing";
 import { authPaths } from "./auth-routing";
+import { docsPaths } from "./docs-routing";
 
 const rootRoute = createRootRoute({
   component: App
@@ -14,6 +15,7 @@ const rootRoute = createRootRoute({
 const routePaths = [
   "/",
   ...authPaths,
+  ...docsPaths,
   ...appPaths,
   "/admin/machines/$machineId/$machineSection",
   "$"

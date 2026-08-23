@@ -84,6 +84,22 @@ async function main() {
       throw new Error(`登录页检查失败：HTTP ${page.status}`);
     }
 
+    for (const docsPath of ["/docs", "/docs/api", "/docs/troubleshooting/"]) {
+      const docsPage = await fetch(`${origin}${docsPath}`);
+      const docsHtml = await docsPage.text();
+      if (docsPage.status !== 200 || !docsHtml.includes('<div id="root"></div>')) {
+        throw new Error(`公开文档页不可用：${docsPath} HTTP ${docsPage.status}`);
+      }
+      if (docsPage.headers.has("access-control-allow-origin")) {
+        throw new Error(`公开文档页意外开放了 CORS：${docsPath}`);
+      }
+    }
+
+    const legacyDocs = await fetch(`${origin}/api/open/docs`, { redirect: "manual" });
+    if (legacyDocs.status !== 302 || legacyDocs.headers.get("location") !== "/docs/api") {
+      throw new Error("旧 API 文档入口没有重定向到统一文档中心");
+    }
+
     const login = await fetch(`${origin}/api/v1/auth/login`, {
       method: "POST",
       headers: {
@@ -194,6 +210,9 @@ async function main() {
     if (openApiDocument.status !== 200 || (await openApiDocument.json()).openapi !== "3.1.0") {
       throw new Error("OpenAPI 3.1 文档不可用");
     }
+    if (openApiDocument.headers.has("access-control-allow-origin")) {
+      throw new Error("OpenAPI 文档意外开放了 CORS");
+    }
 
     const logout = await fetch(`${origin}/api/v1/auth/logout`, {
       method: "POST",
@@ -233,6 +252,8 @@ async function main() {
       JSON.stringify({
         health: 200,
         page: page.status,
+        docs: 200,
+        legacyDocsRedirect: legacyDocs.status,
         login: login.status,
         session: session.status,
         tokenCreation: tokenCreation.status,

@@ -1,21 +1,41 @@
-const errorResponse = {
-  description: "请求失败",
-  content: {
-    "application/json": {
-      schema: { $ref: "#/components/schemas/ErrorResponse" }
+function errorResponse(description: string) {
+  return {
+    description,
+    content: {
+      "application/json": {
+        schema: { $ref: "#/components/schemas/ErrorResponse" }
+      }
     }
-  }
-};
+  };
+}
+
+const unauthenticatedResponse = errorResponse(
+  "缺少 Bearer 令牌，或令牌无效、已到期、已吊销，或所属账号已停用"
+);
+const readRateLimitedResponse = errorResponse(
+  "令牌超过每分钟 120 次的整体请求限制；按 Retry-After 等待后重试"
+);
+const operationRateLimitedResponse = errorResponse(
+  "令牌超过每分钟 120 次的整体请求限制，或预检与提交合计超过每分钟 30 次；按 Retry-After 等待后重试"
+);
+const writeScopeResponse = errorResponse(
+  "令牌不是 READ_WRITE，或当前用户不再具备执行该写操作所需的权限"
+);
 
 const bearerSecurity = [{ bearerAuth: [] }];
 
 export const OPEN_API_DOCUMENT = {
   openapi: "3.1.0",
   info: {
-    title: "Allocube 官方 AI API",
+    title: "Allocube 官方 API",
     version: "1.0.0",
     description:
-      "供 AI、CLI 与服务端自动化查询计算资源并管理本人占用。所有写入都必须先预检，再使用五分钟内有效的确认令牌提交。"
+      "供 AI、CLI 与服务端自动化查询计算资源并管理本人占用。所有写入都必须先预检，再使用 5 分钟内有效的确认令牌提交。示例中形如 <UPPER_SNAKE_CASE> 的字符串是必须替换的占位符，尖括号不能原样提交。"
+  },
+  "x-placeholder-convention": {
+    syntax: "<UPPER_SNAKE_CASE>",
+    description:
+      "占位符必须整体替换为当前环境或前序响应中的真实值；OpenAPI 路径中的 {id} 仍遵循标准路径模板语法。"
   },
   servers: [{ url: "/api/open/v1" }],
   tags: [
@@ -56,8 +76,8 @@ export const OPEN_API_DOCUMENT = {
               }
             }
           },
-          "401": errorResponse,
-          "429": errorResponse
+          "401": unauthenticatedResponse,
+          "429": readRateLimitedResponse
         }
       }
     },
@@ -96,8 +116,8 @@ export const OPEN_API_DOCUMENT = {
               }
             }
           },
-          "401": errorResponse,
-          "429": errorResponse
+          "401": unauthenticatedResponse,
+          "429": readRateLimitedResponse
         }
       }
     },
@@ -137,10 +157,10 @@ export const OPEN_API_DOCUMENT = {
               }
             }
           },
-          "400": errorResponse,
-          "401": errorResponse,
-          "403": errorResponse,
-          "429": errorResponse
+          "400": errorResponse("机器 ID、分页大小或游标格式不正确，或游标已经失效"),
+          "401": unauthenticatedResponse,
+          "403": errorResponse("当前用户没有目标机器的有效使用权"),
+          "429": readRateLimitedResponse
         }
       }
     },
@@ -150,7 +170,7 @@ export const OPEN_API_DOCUMENT = {
         tags: ["Resources"],
         summary: "查询可访问机器在指定时间范围内的排期",
         description:
-          "时间范围必须大于零且不超过八天。machineIds 使用逗号分隔，最多 100 个；省略时查询全部可访问机器。",
+          "时间范围必须大于零且不超过 8 天。machineIds 使用英文逗号分隔，最多 100 个；省略时查询全部可访问机器。",
         security: bearerSecurity,
         parameters: [
           {
@@ -170,7 +190,7 @@ export const OPEN_API_DOCUMENT = {
             in: "query",
             required: false,
             schema: { type: "string", maxLength: 5000 },
-            example: "0f69c7c0-6548-4200-978f-4989b787f5f6"
+            example: "<MACHINE_IDS>"
           }
         ],
         responses: {
@@ -198,10 +218,10 @@ export const OPEN_API_DOCUMENT = {
               }
             }
           },
-          "400": errorResponse,
-          "401": errorResponse,
-          "403": errorResponse,
-          "429": errorResponse
+          "400": errorResponse("时间格式或范围不正确、机器 ID 列表无效，或查询机器超过 100 台、时间超过 8 天"),
+          "401": unauthenticatedResponse,
+          "403": errorResponse("machineIds 中包含当前用户无权使用的机器"),
+          "429": readRateLimitedResponse
         }
       }
     },
@@ -209,7 +229,7 @@ export const OPEN_API_DOCUMENT = {
       get: {
         operationId: "listMyReservations",
         tags: ["Reservations"],
-        summary: "分页查询当前用户自己的占用",
+        summary: "分页查询本人占用",
         security: bearerSecurity,
         parameters: [
           { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
@@ -250,9 +270,9 @@ export const OPEN_API_DOCUMENT = {
               }
             }
           },
-          "400": errorResponse,
-          "401": errorResponse,
-          "429": errorResponse
+          "400": errorResponse("时间、状态、分页大小或游标格式不正确，游标失效，或 to 不晚于 from"),
+          "401": unauthenticatedResponse,
+          "429": readRateLimitedResponse
         }
       }
     },
@@ -260,7 +280,7 @@ export const OPEN_API_DOCUMENT = {
       get: {
         operationId: "getMyReservation",
         tags: ["Reservations"],
-        summary: "查询当前用户自己的一条占用",
+        summary: "查询本人单条占用",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/ReservationId" }],
         responses: {
@@ -285,10 +305,10 @@ export const OPEN_API_DOCUMENT = {
               }
             }
           },
-          "400": errorResponse,
-          "401": errorResponse,
-          "404": errorResponse,
-          "429": errorResponse
+          "400": errorResponse("占用 ID 不是有效 UUID"),
+          "401": unauthenticatedResponse,
+          "404": errorResponse("占用不存在，或该占用不属于当前用户"),
+          "429": readRateLimitedResponse
         }
       }
     },
@@ -296,9 +316,9 @@ export const OPEN_API_DOCUMENT = {
       post: {
         operationId: "prepareReservationOperation",
         tags: ["Reservations"],
-        summary: "预检占用写操作并获取五分钟确认令牌",
+        summary: "预检 CREATE、UPDATE、CANCEL 或 END 并获取确认令牌",
         description:
-          "READ_WRITE 令牌必需。BLOCKED 响应不包含 confirmationToken，调用方不得继续提交。",
+          "四种业务动作共用此预检端点。READ_WRITE 令牌必需；BLOCKED 响应不包含 confirmationToken，调用方不得继续提交。",
         security: bearerSecurity,
         requestBody: {
           required: true,
@@ -313,22 +333,46 @@ export const OPEN_API_DOCUMENT = {
                     segments: [
                       {
                         scope: "RESOURCE_GROUP",
-                        resourceGroupId: "89f7ab38-93b5-4563-9280-b3c71ec81144",
+                        resourceGroupId: "<RESOURCE_GROUP_ID>",
                         startMode: "SCHEDULED",
-                        startAt: "2026-08-24T01:00:00.000Z",
-                        endAt: "2026-08-24T03:00:00.000Z",
+                        startAt: "<START_AT_RFC3339>",
+                        endAt: "<END_AT_RFC3339>",
                         title: "模型训练",
                         purpose: "验证新模型"
                       }
                     ]
                   }
                 },
+                update: {
+                  summary: "修改本人占用的时间和说明",
+                  value: {
+                    action: "UPDATE",
+                    reservationId: "<RESERVATION_ID>",
+                    segment: {
+                      scope: "RESOURCE_GROUP",
+                      resourceGroupId: "<RESOURCE_GROUP_ID>",
+                      startMode: "SCHEDULED",
+                      startAt: "<START_AT_RFC3339>",
+                      endAt: "<END_AT_RFC3339>",
+                      title: "调整后的模型训练",
+                      purpose: "验证新模型"
+                    }
+                  }
+                },
                 cancel: {
                   summary: "取消本人未来占用",
                   value: {
                     action: "CANCEL",
-                    reservationId: "3fc55c75-893b-4a9c-a4f2-252b26be58a2",
+                    reservationId: "<RESERVATION_ID>",
                     reason: "任务取消"
+                  }
+                },
+                end: {
+                  summary: "提前结束本人进行中的占用",
+                  value: {
+                    action: "END",
+                    reservationId: "<RESERVATION_ID>",
+                    reason: "任务提前完成"
                   }
                 }
               }
@@ -344,12 +388,12 @@ export const OPEN_API_DOCUMENT = {
               }
             }
           },
-          "400": errorResponse,
-          "401": errorResponse,
-          "403": errorResponse,
-          "404": errorResponse,
-          "409": errorResponse,
-          "429": errorResponse
+          "400": errorResponse("请求体、时间、占用片段或未知字段不符合约束"),
+          "401": unauthenticatedResponse,
+          "403": writeScopeResponse,
+          "404": errorResponse("目标占用、机器或资源组不存在，或不属于当前用户的可操作范围"),
+          "409": errorResponse("占用状态或资源配置不允许当前操作；刷新数据后重新预检"),
+          "429": operationRateLimitedResponse
         }
       }
     },
@@ -359,7 +403,7 @@ export const OPEN_API_DOCUMENT = {
         tags: ["Reservations"],
         summary: "提交已成功预检的占用写操作",
         description:
-          "确认令牌绑定签发它的用户和个人访问令牌。成功提交可在 24 小时内安全重试，不会重复执行。",
+          "此端点通用于 CREATE、UPDATE、CANCEL 和 END。确认令牌已经绑定 prepare 中的动作，提交时不需要再次传 action。令牌同时绑定签发它的用户和个人访问令牌；成功提交可在 24 小时内安全重试，不会重复执行。",
         security: bearerSecurity,
         requestBody: {
           required: true,
@@ -372,8 +416,17 @@ export const OPEN_API_DOCUMENT = {
                 properties: {
                   confirmationToken: {
                     type: "string",
-                    description: "prepare 返回的一次性确认令牌",
-                    example: "allocube_confirm_REDACTED"
+                    description:
+                      "prepare 返回的一次性确认令牌；必须原样传入该次预检响应中的真实值",
+                    example: "<CONFIRMATION_TOKEN>"
+                  }
+                }
+              },
+              examples: {
+                commit: {
+                  summary: "提交预检返回的确认令牌",
+                  value: {
+                    confirmationToken: "<CONFIRMATION_TOKEN>"
                   }
                 }
               }
@@ -389,13 +442,13 @@ export const OPEN_API_DOCUMENT = {
               }
             }
           },
-          "400": errorResponse,
-          "401": errorResponse,
-          "403": errorResponse,
-          "404": errorResponse,
-          "409": errorResponse,
-          "410": errorResponse,
-          "429": errorResponse
+          "400": errorResponse("confirmationToken 缺失、格式不正确或请求包含未知字段"),
+          "401": unauthenticatedResponse,
+          "403": writeScopeResponse,
+          "404": errorResponse("确认令牌不存在，或它属于其他用户或其他 API 令牌"),
+          "409": errorResponse("预检后权限、资源或占用状态发生变化，或该预检操作已失效；必须重新预检"),
+          "410": errorResponse("确认令牌已超过 5 分钟有效期；必须重新预检"),
+          "429": operationRateLimitedResponse
         }
       }
     }

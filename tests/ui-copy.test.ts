@@ -259,6 +259,15 @@ describe("角色化界面文案", () => {
     expect(source).not.toContain('"我的 · "');
   });
 
+  it("资源日历详情展示占用说明和调整信息", () => {
+    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    expect(source).toContain("<dt>原始时间</dt>");
+    expect(source).toContain("{item.title && <div><span>标题</span>");
+    expect(source).toContain("{item.purpose && <div><span>用途</span>");
+    expect(source).toContain("{item.note && <div><span>备注</span>");
+    expect(source).toContain("{item.adjustmentReason && <div><span>调整原因</span>");
+  });
+
   it("占用详情空状态提示用户在时间轴拖动添加", () => {
     const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("暂无占用时段");

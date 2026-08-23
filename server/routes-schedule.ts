@@ -452,8 +452,6 @@ export function registerScheduleRoutes(
     );
     const reservations = reservationRows
       .map((row) => {
-        const maySeeDetails =
-          row.user_id === auth.user.id || managerMap.get(String(row.machine_id));
         return {
           id: row.id,
           scope: row.scope,
@@ -466,16 +464,12 @@ export function registerScheduleRoutes(
           status: row.status,
           adjustmentType: row.adjustment_type,
           mine: row.user_id === auth.user.id,
-          ...(maySeeDetails
-            ? {
-                title: row.title,
-                purpose: row.purpose,
-                note: row.note,
-                initialStartAt: row.initial_start_at,
-                initialEndAt: row.initial_end_at,
-                adjustmentReason: row.adjustment_reason
-              }
-            : {})
+          title: row.title,
+          purpose: row.purpose,
+          note: row.note,
+          initialStartAt: row.initial_start_at,
+          initialEndAt: row.initial_end_at,
+          adjustmentReason: row.adjustment_reason
         };
       });
     const unavailability = db

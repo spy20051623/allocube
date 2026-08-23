@@ -170,7 +170,7 @@ export const OPEN_API_DOCUMENT = {
         tags: ["Resources"],
         summary: "查询可访问机器在指定时间范围内的排期",
         description:
-          "时间范围必须大于零且不超过 8 天。machineIds 使用英文逗号分隔，最多 100 个；省略时查询全部可访问机器。",
+          "时间范围必须大于零且不超过 8 天。machineIds 使用英文逗号分隔，最多 100 个；省略时查询全部可访问机器。返回的占用详情对拥有对应机器使用权的用户完整可见。",
         security: bearerSecurity,
         parameters: [
           {
@@ -610,7 +610,7 @@ export const OPEN_API_DOCUMENT = {
       },
       ScheduleReservation: {
         type: "object",
-        required: ["id", "scope", "machineId", "resourceGroupId", "applicantName", "applicantEmployeeNumber", "startAt", "endAt", "status", "mine"],
+        required: ["id", "scope", "machineId", "resourceGroupId", "applicantName", "applicantEmployeeNumber", "startAt", "endAt", "status", "mine", "title", "purpose", "note", "initialStartAt", "initialEndAt", "adjustmentType", "adjustmentReason"],
         properties: {
           id: { type: "string", format: "uuid" },
           scope: { type: "string", enum: ["RESOURCE_GROUP", "MACHINE"] },

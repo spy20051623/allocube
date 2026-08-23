@@ -444,6 +444,60 @@ describe("机器使用权与管理员专用信息", () => {
     expect(forbiddenEdit.statusCode).toBe(403);
   });
 
+  it("普通机器使用者可以查看日历中的完整占用详情", async () => {
+    const initialStartAt = futureIso(190);
+    const adjustedStartAt = futureIso(205);
+    const initialEndAt = futureIso(250);
+    const reservation = scheduling.commitReservationBatch(managerId, [
+      {
+        resourceGroupId: groupId,
+        startAt: initialStartAt,
+        endAt: initialEndAt,
+        title: "共享的编译任务",
+        purpose: "验证工具链",
+        note: "需要完整机器信息"
+      }
+    ]).reservations[0];
+    dbModule.db
+      .prepare(
+        `UPDATE reservations
+         SET start_at = ?, adjustment_type = 'TRIM_START', adjustment_reason = ?
+         WHERE id = ?`
+      )
+      .run(adjustedStartAt, "维护窗口调整", reservation.id);
+
+    const timeline = await app.inject({
+      method: "GET",
+      url: `/api/v1/timeline?from=${encodeURIComponent(
+        futureIso(180)
+      )}&to=${encodeURIComponent(futureIso(270))}&machineIds=${machineId}`,
+      headers: { cookie: memberCookie }
+    });
+    expect(timeline.statusCode).toBe(200);
+    expect(
+      timeline.json().reservations.find(
+        (item: { id: string }) => item.id === reservation.id
+      )
+    ).toMatchObject({
+      applicantName: "机器管理员",
+      applicantEmployeeNumber: "10004001",
+      mine: false,
+      title: "共享的编译任务",
+      purpose: "验证工具链",
+      note: "需要完整机器信息",
+      startAt: adjustedStartAt,
+      endAt: initialEndAt,
+      initialStartAt,
+      initialEndAt,
+      adjustmentType: "TRIM_START",
+      adjustmentReason: "维护窗口调整"
+    });
+
+    dbModule.db
+      .prepare("UPDATE reservations SET status = 'CANCELLED' WHERE id = ?")
+      .run(reservation.id);
+  });
+
   it("管理员邀请立即加入，不生成待接受邀请", async () => {
     const invited = await app.inject({
       method: "POST",

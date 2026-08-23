@@ -128,9 +128,9 @@ function insertOtherReservation() {
       endAt,
       startAt,
       endAt,
-      "他人的机密标题",
-      "他人的机密用途",
-      "他人的机密备注",
+      "共享的任务标题",
+      "共享的任务用途",
+      "共享的补充备注",
       "默认资源组",
       now,
       now
@@ -240,6 +240,17 @@ describe("官方 API", () => {
     }
     expect(document.paths["/reservations/{id}"].get.responses[404].description)
       .toContain("不属于当前用户");
+    expect(document.components.schemas.ScheduleReservation.required).toEqual(
+      expect.arrayContaining([
+        "title",
+        "purpose",
+        "note",
+        "initialStartAt",
+        "initialEndAt",
+        "adjustmentType",
+        "adjustmentReason"
+      ])
+    );
     for (const pathItem of Object.values(document.paths) as any[]) {
       for (const operation of Object.values(pathItem) as any[]) {
         if (!operation?.responses) continue;
@@ -306,7 +317,7 @@ describe("官方 API", () => {
     expect(reservations.json().data.reservations).toEqual([]);
   });
 
-  it("排期沿用网页身份与详情裁剪规则", async () => {
+  it("排期向机器使用者返回完整占用详情", async () => {
     const schedule = await app.inject({
       method: "GET",
       url: `/api/open/v1/schedule?from=${encodeURIComponent(minuteIso(0))}&to=${encodeURIComponent(minuteIso(240))}&machineIds=${machineId}`,
@@ -318,11 +329,15 @@ describe("官方 API", () => {
     );
     expect(other).toMatchObject({
       applicantEmployeeNumber: "API0002",
-      mine: false
+      mine: false,
+      title: "共享的任务标题",
+      purpose: "共享的任务用途",
+      note: "共享的补充备注",
+      adjustmentType: null,
+      adjustmentReason: ""
     });
-    expect(other).not.toHaveProperty("title");
-    expect(other).not.toHaveProperty("purpose");
-    expect(other).not.toHaveProperty("note");
+    expect(other.initialStartAt).toBe(other.startAt);
+    expect(other.initialEndAt).toBe(other.endAt);
   });
 
   it("拒绝只读令牌和未知字段执行写入预检", async () => {

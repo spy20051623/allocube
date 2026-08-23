@@ -159,14 +159,14 @@ export interface TimelineReservation {
   applicantEmployeeNumber: string | null;
   startAt: string;
   endAt: string;
-  title?: string;
-  purpose?: string;
-  note?: string;
+  title: string;
+  purpose: string;
+  note: string;
   status: "CONFIRMED" | "CANCELLED" | "CANCELLED_UNAVAILABILITY";
-  initialStartAt?: string;
-  initialEndAt?: string;
-  adjustmentType?: "CANCEL" | "TRIM_START" | "TRIM_END" | "SPLIT" | null;
-  adjustmentReason?: string;
+  initialStartAt: string;
+  initialEndAt: string;
+  adjustmentType: "CANCEL" | "TRIM_START" | "TRIM_END" | "SPLIT" | null;
+  adjustmentReason: string;
   mine: boolean;
 }
 

@@ -9083,12 +9083,35 @@ function CalendarReservationPopover({
               })}
             </dd>
           </div>
+          {item.adjustmentType && (
+            <div>
+              <dt>原始时间</dt>
+              <dd>
+                {formatChina(item.initialStartAt, {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit"
+                })}
+                <span className="reservation-popover-time-separator">至</span>
+                {formatChina(item.initialEndAt, {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit"
+                })}
+              </dd>
+            </div>
+          )}
         </dl>
-        {(item.title || item.purpose || item.note) && (
+        {(item.title || item.purpose || item.note || item.adjustmentReason) && (
           <div className="reservation-popover-content">
             {item.title && <div><span>标题</span><p>{item.title}</p></div>}
             {item.purpose && <div><span>用途</span><p>{item.purpose}</p></div>}
             {item.note && <div><span>备注</span><p>{item.note}</p></div>}
+            {item.adjustmentReason && <div><span>调整原因</span><p>{item.adjustmentReason}</p></div>}
           </div>
         )}
       </article>

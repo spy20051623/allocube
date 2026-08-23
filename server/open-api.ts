@@ -594,12 +594,6 @@ export function registerOpenApiRoutes(
            ORDER BY machine_id, sort_order, name`
         )
         .all(...selectedIds) as Array<Record<string, unknown>>;
-      const managerMap = new Map(
-        selectedIds.map((id) => [
-          id,
-          canManageMachine(auth.user.id, auth.user.role, id)
-        ])
-      );
       const reservations = (
         db
           .prepare(
@@ -615,7 +609,6 @@ export function registerOpenApiRoutes(
           .all(...selectedIds, query.to, query.from) as Array<Record<string, unknown>>
       ).map((row) => {
         const mine = row.user_id === auth.user.id;
-        const maySeeDetails = mine || managerMap.get(String(row.machine_id));
         return {
           id: row.id,
           scope: row.scope,
@@ -628,16 +621,12 @@ export function registerOpenApiRoutes(
           status: row.status,
           adjustmentType: row.adjustment_type,
           mine,
-          ...(maySeeDetails
-            ? {
-                title: row.title,
-                purpose: row.purpose,
-                note: row.note,
-                initialStartAt: row.initial_start_at,
-                initialEndAt: row.initial_end_at,
-                adjustmentReason: row.adjustment_reason
-              }
-            : {})
+          title: row.title,
+          purpose: row.purpose,
+          note: row.note,
+          initialStartAt: row.initial_start_at,
+          initialEndAt: row.initial_end_at,
+          adjustmentReason: row.adjustment_reason
         };
       });
       const unavailability = (

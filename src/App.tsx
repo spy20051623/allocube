@@ -3323,6 +3323,8 @@ function AccountProfilePage({
             </div>
           </div>
 
+          <ApiTokenSection notify={notify} />
+
           {registrationConfig?.emailEnabled && user.email && (
           <div className="profile-section profile-email-preferences">
             <div className="profile-section-head">
@@ -3444,6 +3446,339 @@ function AccountProfilePage({
         />
       )}
     </>
+  );
+}
+
+type PersonalApiToken = {
+  id: string;
+  name: string;
+  prefix: string;
+  accessLevel: "READ_ONLY" | "READ_WRITE";
+  createdAt: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  revokedReason: string;
+};
+
+function ApiTokenSection({
+  notify
+}: {
+  notify: (kind: "success" | "error", message: string) => void;
+}) {
+  const dialog = useAppDialog();
+  const [tokens, setTokens] = useState<PersonalApiToken[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const loadTokens = useCallback(async () => {
+    try {
+      const result = await api<{
+        tokens: PersonalApiToken[];
+        maxActiveTokens: number;
+      }>("/auth/api-tokens");
+      setTokens(result.tokens);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "令牌列表加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }, [notify]);
+  useEffect(() => {
+    void loadTokens();
+  }, [loadTokens]);
+
+  const tokenState = (token: PersonalApiToken) => {
+    if (token.revokedAt) return { label: "已吊销", className: "retiring" };
+    if (token.expiresAt && token.expiresAt <= new Date().toISOString()) {
+      return { label: "已到期", className: "retiring" };
+    }
+    return { label: "有效", className: "active" };
+  };
+
+  const revoke = async (token: PersonalApiToken) => {
+    const confirmed = await dialog.confirm({
+      title: "吊销个人访问令牌",
+      message: `吊销“${token.name}”后，使用它的 AI 或脚本会立即失去访问权限。`,
+      confirmLabel: "吊销令牌",
+      tone: "danger"
+    });
+    if (!confirmed) return;
+    try {
+      await api(`/auth/api-tokens/${token.id}`, { method: "DELETE" });
+      notify("success", "个人访问令牌已吊销");
+      await loadTokens();
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "令牌吊销失败");
+    }
+  };
+
+  const revokeAll = async () => {
+    const confirmed = await dialog.confirm({
+      title: "吊销全部个人访问令牌",
+      message: "所有 AI、CLI 和自动化脚本都会立即失去访问权限。此操作无法撤销。",
+      confirmLabel: "全部吊销",
+      tone: "danger"
+    });
+    if (!confirmed) return;
+    try {
+      const result = await api<{ revokedCount: number }>(
+        "/auth/api-tokens/revoke-all",
+        { method: "POST", body: jsonBody({}) }
+      );
+      notify("success", `已吊销 ${result.revokedCount} 个令牌`);
+      await loadTokens();
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "令牌吊销失败");
+    }
+  };
+
+  const activeCount = tokens.filter((token) => tokenState(token).label === "有效").length;
+  return (
+    <div className="profile-section profile-api-tokens">
+      <div className="profile-section-head">
+        <div className="profile-section-title">
+          <span className="profile-section-icon api-token">
+            <KeyRound size={16} />
+          </span>
+          <div>
+            <h2>个人访问令牌</h2>
+            <small>供 AI、CLI 和服务端自动化调用官方 API</small>
+          </div>
+        </div>
+        <div className="profile-api-token-actions">
+          <a
+            className="secondary-button"
+            href="/api/open/docs"
+            target="_blank"
+            rel="noreferrer"
+          >
+            API 文档
+          </a>
+          {activeCount > 0 && (
+            <button type="button" className="text-action danger" onClick={() => void revokeAll()}>
+              全部吊销
+            </button>
+          )}
+          <button
+            type="button"
+            className="primary-button"
+            disabled={activeCount >= 10}
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus size={14} />
+            创建令牌
+          </button>
+        </div>
+      </div>
+      {loading ? (
+        <div className="mini-empty">正在加载令牌…</div>
+      ) : tokens.length ? (
+        <div className="profile-api-token-list">
+          {tokens.map((token) => {
+            const state = tokenState(token);
+            return (
+              <div className="profile-api-token-row" key={token.id}>
+                <div className="profile-api-token-main">
+                  <div>
+                    <strong>{token.name}</strong>
+                    <span className={`state-chip ${state.className}`}>{state.label}</span>
+                    <span className="state-chip">
+                      {token.accessLevel === "READ_WRITE" ? "读写" : "只读"}
+                    </span>
+                  </div>
+                  <code>{token.prefix}…</code>
+                </div>
+                <div className="profile-api-token-meta">
+                  <span>创建 {formatChinaFullMinute(token.createdAt)}</span>
+                  <span>
+                    {token.lastUsedAt
+                      ? `最近使用 ${formatChinaFullMinute(token.lastUsedAt)}`
+                      : "尚未使用"}
+                  </span>
+                  <span>
+                    {token.expiresAt
+                      ? `到期 ${formatChinaFullMinute(token.expiresAt)}`
+                      : "永不过期"}
+                  </span>
+                </div>
+                {!token.revokedAt && state.label === "有效" && (
+                  <button
+                    type="button"
+                    className="icon-button danger"
+                    title="吊销令牌"
+                    aria-label={`吊销令牌 ${token.name}`}
+                    onClick={() => void revoke(token)}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mini-empty">尚未创建个人访问令牌</div>
+      )}
+      {createOpen && (
+        <ApiTokenCreateModal
+          onClose={() => setCreateOpen(false)}
+          onCreated={async () => {
+            await loadTokens();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ApiTokenCreateModal({
+  onClose,
+  onCreated
+}: {
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [accessLevel, setAccessLevel] = useState<"READ_ONLY" | "READ_WRITE">(
+    "READ_ONLY"
+  );
+  const [expiry, setExpiry] = useState<"NEVER" | "30" | "90" | "365">("NEVER");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [secret, setSecret] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      setError("请输入令牌名称");
+      return;
+    }
+    if (!currentPassword) {
+      setError("请输入当前密码");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api<{ token: PersonalApiToken; secret: string }>(
+        "/auth/api-tokens",
+        {
+          method: "POST",
+          body: jsonBody({
+            name: normalizedName,
+            accessLevel,
+            expiresInDays: expiry === "NEVER" ? null : Number(expiry),
+            currentPassword
+          })
+        }
+      );
+      setCurrentPassword("");
+      setSecret(result.secret);
+      await onCreated();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "令牌创建失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (secret) {
+    return (
+      <Modal title="保存个人访问令牌" onClose={onClose}>
+        <div className="api-token-secret-view">
+          <div className="context-notice warning">
+            <CircleAlert size={15} />
+            <span>这是令牌明文唯一一次显示。关闭窗口后无法再次查看，请立即保存到可信的密钥管理工具。</span>
+          </div>
+          <code>{secret}</code>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(secret);
+                } catch {
+                  setError("复制失败，请手动选择令牌");
+                }
+              }}
+            >
+              <Copy size={14} />
+              复制令牌
+            </button>
+            <button type="button" className="primary-button" onClick={onClose}>
+              我已保存
+            </button>
+          </div>
+          {error && <AuthFeedback tone="error">{error}</AuthFeedback>}
+        </div>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal title="创建个人访问令牌" onClose={onClose}>
+      <form className="stack-form api-token-create-form" onSubmit={submit}>
+        <Field label="令牌名称">
+          <input
+            autoFocus
+            value={name}
+            maxLength={80}
+            placeholder="例如：AI 排期助手"
+            onChange={(event) => {
+              setName(event.target.value);
+              setError("");
+            }}
+          />
+        </Field>
+        <Field label="访问权限">
+          <select
+            value={accessLevel}
+            onChange={(event) =>
+              setAccessLevel(event.target.value as "READ_ONLY" | "READ_WRITE")
+            }
+          >
+            <option value="READ_ONLY">只读：查询资源和本人占用</option>
+            <option value="READ_WRITE">读写：可预检并提交本人占用操作</option>
+          </select>
+        </Field>
+        <Field label="有效期">
+          <select
+            value={expiry}
+            onChange={(event) =>
+              setExpiry(event.target.value as "NEVER" | "30" | "90" | "365")
+            }
+          >
+            <option value="NEVER">永不过期</option>
+            <option value="30">30 天</option>
+            <option value="90">90 天</option>
+            <option value="365">365 天</option>
+          </select>
+        </Field>
+        <Field label="当前密码">
+          <PasswordInput
+            autoComplete="current-password"
+            value={currentPassword}
+            maxLength={256}
+            onChange={(event) => {
+              setCurrentPassword(event.target.value);
+              setError("");
+            }}
+          />
+        </Field>
+        {error && <AuthFeedback tone="error" anchored={false}>{error}</AuthFeedback>}
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>
+            取消
+          </button>
+          <button className="primary-button" disabled={busy}>
+            <BusyButtonContent busy={busy}>创建令牌</BusyButtonContent>
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -14005,7 +14340,7 @@ function AuditPanel({
         {logs.map((log) => (
           <div className="audit-row" key={log.id}>
             <span className="audit-dot" />
-            <div><strong>{auditActionLabel(log.action)}</strong><p>{log.actorName} · {log.entityName ?? log.entityType} · {log.entityId.slice(0, 8)}</p></div>
+            <div><strong>{auditActionLabel(log.action)}</strong><p>{log.actorName}{log.apiTokenName ? ` · API：${log.apiTokenName}` : ""} · {log.entityName ?? log.entityType} · {log.entityId.slice(0, 8)}</p></div>
             <time>{formatChina(log.createdAt, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}</time>
           </div>
         ))}

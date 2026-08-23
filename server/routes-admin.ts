@@ -40,6 +40,7 @@ import {
   ensureUsernameAvailable
 } from "./identity.js";
 import { BusinessError } from "./business-error.js";
+import { revokeApiTokensForUser } from "./api-tokens.js";
 import {
   grantMachineAccess,
   removeMachineMembership
@@ -749,6 +750,7 @@ export function registerAdminRoutes(
         throw new BusinessError("用户信息已更新，请刷新后重试", 409);
       }
       db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
+      revokeApiTokensForUser(id, "账号已停用", now);
       db.prepare(
         `UPDATE profile_change_requests
          SET status = 'CANCELLED', version = version + 1,
@@ -3445,6 +3447,7 @@ export function registerAdminRoutes(
     const rows = db
       .prepare(
         `SELECT a.*, u.display_name AS actor_name,
+          api_token.name AS token_name,
           CASE
             WHEN a.entity_type = 'user' THEN COALESCE(
               (SELECT CASE WHEN dut.user_id IS NOT NULL
@@ -3501,7 +3504,9 @@ export function registerAdminRoutes(
             )
             ELSE 0
           END AS entity_deleted
-         FROM audit_logs a LEFT JOIN users u ON u.id = a.actor_user_id
+         FROM audit_logs a
+         LEFT JOIN users u ON u.id = a.actor_user_id
+         LEFT JOIN api_tokens api_token ON api_token.id = a.actor_api_token_id
          ORDER BY a.created_at DESC LIMIT 300`
       )
       .all() as Array<Record<string, unknown>>;
@@ -3511,6 +3516,9 @@ export function registerAdminRoutes(
         return {
           id: row.id,
           actorName: row.actor_name ?? "系统",
+          apiTokenId: row.actor_api_token_id,
+          apiTokenName: row.token_name,
+          apiOperationId: row.api_operation_id,
           entityName: row.entity_name,
           action: row.action,
           entityType: row.entity_type,
@@ -3826,6 +3834,7 @@ function deleteUserRecords(
   counts: ReturnType<typeof userDeleteImpact>
 ) {
   const now = nowIso();
+  revokeApiTokensForUser(userId, "账号已删除", now);
   db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
   db.prepare("DELETE FROM auth_tokens WHERE user_id = ?").run(userId);
   db.prepare("DELETE FROM email_verification_challenges WHERE user_id = ?").run(userId);

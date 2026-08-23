@@ -143,6 +143,26 @@ SMTP 引导配置只有在服务器、账号、密码和发件邮箱全部提供
 
 健康检查地址为 `/health`，内部 JSON API 统一使用 `/api/v1`。
 
+## 官方 AI API
+
+系统同时提供独立、稳定的 `/api/open/v1` REST API，供 AI、CLI、脚本和服务端工具以用户本人身份查询资源并管理本人占用。它与网页使用的内部 `/api/v1` 接口相互独立。
+
+- OpenAPI 3.1：`/api/open/v1/openapi.json`
+- API 使用说明：`/api/open/docs`
+- 鉴权：`Authorization: Bearer <个人访问令牌>`
+- 权限：只读或读写；令牌始终受账号状态和机器使用权约束。
+- 浏览器跨域：不开放 CORS，个人令牌不应保存在第三方网页中。
+
+个人访问令牌在“用户信息 → 个人访问令牌”中创建。令牌明文只显示一次，默认永不过期，也可选择 30、90 或 365 天；不再使用时应立即吊销。密码修改或重置不会自动吊销个人访问令牌，账号停用或删除则会使其立即失效。
+
+所有占用写操作都采用两阶段流程：
+
+1. 调用 `POST /api/open/v1/reservation-operations/prepare` 预检。
+2. 检查返回的 `READY` 或 `BLOCKED` 状态。
+3. 在五分钟内将 `confirmationToken` 传给 `POST /api/open/v1/reservation-operations/commit`。
+
+成功提交的确认令牌可在 24 小时内安全重试，重复请求会返回首次结果而不会产生重复占用。具体字段、错误码、分页和示例以 OpenAPI 文档为准。
+
 ## 数据文件
 
 数据库默认位于 `data/allocube.sqlite`，采用 WAL 模式。SQLite 文件必须放在服务器本机持久磁盘，不得放在 NFS、SMB 等网络文件系统中。

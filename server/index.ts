@@ -12,6 +12,10 @@ import {
   hashToken,
   requireAuth
 } from "./auth.js";
+import {
+  apiTokenFromAuthorization,
+  registerApiTokenManagementRoutes
+} from "./api-tokens.js";
 import { config, validateRuntimeConfig } from "./config.js";
 import { requestOriginMatches } from "./request-origin.js";
 import {
@@ -26,6 +30,7 @@ import { processEmailOutbox } from "./mailer.js";
 import { registerAdminRoutes } from "./routes-admin.js";
 import { registerAuthRoutes } from "./routes-auth.js";
 import { registerScheduleRoutes } from "./routes-schedule.js";
+import { registerOpenApiRoutes } from "./open-api.js";
 import {
   SourceRateLimiter,
   type SourceRateLimitPolicy
@@ -81,6 +86,8 @@ await app.register(rateLimit, {
   timeWindow: "1 minute",
   hook: "preHandler",
   keyGenerator(request) {
+    const apiToken = apiTokenFromAuthorization(request);
+    if (apiToken) return `api-token:${hashToken(apiToken)}`;
     const sessionToken = request.cookies[SESSION_COOKIE];
     if (sessionToken) return `session:${hashToken(sessionToken)}`;
     const pathname = request.url.split("?")[0];
@@ -166,6 +173,7 @@ const publicMutationPaths = new Set([
 app.addHook("onRequest", async (request, reply) => {
   if (!request.url.startsWith("/api/")) return;
   if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
+  if (request.url.split("?")[0].startsWith("/api/open/v1/")) return;
   if (request.headers["sec-fetch-site"] === "cross-site") {
     return reply.code(403).send({ error: "请求来源不受信任" });
   }
@@ -244,8 +252,10 @@ function publishRevision(revision: number) {
 }
 
 registerAuthRoutes(app);
+registerApiTokenManagementRoutes(app);
 registerScheduleRoutes(app, publishRevision);
 registerAdminRoutes(app, publishRevision);
+registerOpenApiRoutes(app, publishRevision);
 
 app.get("/api/v1/events", async (request, reply) => {
   const auth = requireAuth(request, reply);

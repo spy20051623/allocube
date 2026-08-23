@@ -46,6 +46,8 @@ describe("最终数据库结构", () => {
     expect(tables).toContain("deleted_resource_group_tombstones");
     expect(tables).toContain("deleted_resource_pool_tombstones");
     expect(tables).toContain("user_email_preferences");
+    expect(tables).toContain("api_tokens");
+    expect(tables).toContain("prepared_api_operations");
     expect(tables).toContain("schema_migrations");
     expect(tables).not.toContain("availability_watches");
     expect(tables).not.toContain("employee_number_requests");
@@ -109,6 +111,9 @@ describe("最终数据库结构", () => {
         "end_at",
         "status"
       ])
+    );
+    expect(columns("audit_logs")).toEqual(
+      expect.arrayContaining(["actor_api_token_id", "api_operation_id"])
     );
     const unavailabilitySchema = dbModule.db
       .prepare(

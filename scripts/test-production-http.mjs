@@ -119,6 +119,82 @@ async function main() {
       throw new Error(`会话读取失败：HTTP ${session.status}`);
     }
 
+    const tokenCreation = await fetch(`${origin}/api/v1/auth/api-tokens`, {
+      method: "POST",
+      headers: {
+        cookie,
+        origin,
+        "content-type": "application/json",
+        "x-csrf-token": loginBody.csrfToken
+      },
+      body: JSON.stringify({
+        name: "生产 HTTP 验收",
+        accessLevel: "READ_WRITE",
+        expiresInDays: null,
+        currentPassword: TEST_PASSWORD
+      })
+    });
+    const tokenBody = await tokenCreation.json();
+    if (
+      tokenCreation.status !== 201 ||
+      typeof tokenBody.secret !== "string" ||
+      !tokenBody.secret.startsWith("allocube_pat_")
+    ) {
+      throw new Error(
+        `个人访问令牌创建失败：HTTP ${tokenCreation.status} ${JSON.stringify(tokenBody)}`
+      );
+    }
+
+    const openIdentity = await fetch(`${origin}/api/open/v1/me`, {
+      headers: { authorization: `Bearer ${tokenBody.secret}` }
+    });
+    const openIdentityBody = await openIdentity.json();
+    if (
+      openIdentity.status !== 200 ||
+      openIdentityBody.data?.token?.accessLevel !== "READ_WRITE"
+    ) {
+      throw new Error(`官方 API Bearer 鉴权失败：HTTP ${openIdentity.status}`);
+    }
+    if (openIdentity.headers.has("access-control-allow-origin")) {
+      throw new Error("官方 API 意外开放了 CORS");
+    }
+
+    const cookieOnlyOpenApi = await fetch(`${origin}/api/open/v1/me`, {
+      headers: { cookie }
+    });
+    if (cookieOnlyOpenApi.status !== 401) {
+      throw new Error("官方 API 错误接受了 Cookie 会话");
+    }
+
+    const bearerMutationWithoutBrowserHeaders = await fetch(
+      `${origin}/api/open/v1/reservation-operations/prepare`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${tokenBody.secret}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          action: "CANCEL",
+          reservationId: "00000000-0000-4000-8000-000000000001"
+        })
+      }
+    );
+    const mutationBody = await bearerMutationWithoutBrowserHeaders.json();
+    if (
+      bearerMutationWithoutBrowserHeaders.status !== 404 ||
+      mutationBody.error?.code !== "NOT_FOUND"
+    ) {
+      throw new Error(
+        `Bearer 写请求未越过浏览器 CSRF 边界：HTTP ${bearerMutationWithoutBrowserHeaders.status}`
+      );
+    }
+
+    const openApiDocument = await fetch(`${origin}/api/open/v1/openapi.json`);
+    if (openApiDocument.status !== 200 || (await openApiDocument.json()).openapi !== "3.1.0") {
+      throw new Error("OpenAPI 3.1 文档不可用");
+    }
+
     const logout = await fetch(`${origin}/api/v1/auth/logout`, {
       method: "POST",
       headers: {
@@ -159,6 +235,9 @@ async function main() {
         page: page.status,
         login: login.status,
         session: session.status,
+        tokenCreation: tokenCreation.status,
+        openApiIdentity: openIdentity.status,
+        openApiBearerMutation: bearerMutationWithoutBrowserHeaders.status,
         logout: logout.status,
         httpCookieSecure: false,
         httpsCookieSecure: true,

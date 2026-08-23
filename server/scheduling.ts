@@ -54,6 +54,11 @@ type BusyInterval = {
   label: string;
 };
 
+export type ApiAuditContext = {
+  apiTokenId?: string;
+  apiOperationId?: string;
+};
+
 function getGroup(resourceGroupId: string) {
   return db
     .prepare(
@@ -346,6 +351,116 @@ export function assertUserCanAccessSegments(userId: string, rawSegments: unknown
   }
 }
 
+export function previewReservationBatch(userId: string, rawSegments: unknown[]) {
+  if (!rawSegments.length || rawSegments.length > 100) {
+    throw new BusinessError("一次最多提交 100 条占用");
+  }
+  const serverMinute = currentMinuteIso();
+  const segments = rawSegments.map((item) =>
+    normalizeSegmentStart(segmentSchema.parse(item), serverMinute)
+  );
+  validateSingleReservationScope(segments);
+  segments.forEach((segment) => validateSegmentTimes(segment, serverMinute));
+  validateNoInternalOverlap(segments);
+  assertUserCanAccessSegments(userId, segments);
+  return {
+    segments,
+    items: previewSegments(segments, undefined, serverMinute),
+    serverNow: nowIso()
+  };
+}
+
+function getOwnedConfirmedReservation(reservationId: string, userId: string) {
+  const row = db
+    .prepare("SELECT * FROM reservations WHERE id = ?")
+    .get(reservationId) as Record<string, unknown> | undefined;
+  if (!row || row.status !== "CONFIRMED") {
+    throw new BusinessError("占用记录不存在或已不可操作", 404);
+  }
+  if (row.user_id !== userId) {
+    throw new BusinessError("只能操作自己的占用", 403);
+  }
+  if (!userCanAccessMachine(userId, String(row.machine_id))) {
+    throw new BusinessError("你没有这台机器的使用权限", 403);
+  }
+  return row;
+}
+
+function reservationOperationSummary(row: Record<string, unknown>) {
+  return {
+    id: String(row.id),
+    scope: row.scope,
+    machineId: row.machine_id,
+    resourceGroupId: row.resource_group_id,
+    startAt: row.start_at,
+    endAt: row.end_at,
+    title: row.title,
+    purpose: row.purpose,
+    note: row.note,
+    status: row.status
+  };
+}
+
+export function previewReservationUpdate(
+  userId: string,
+  reservationId: string,
+  rawSegment: unknown
+) {
+  const segment = segmentSchema.parse(rawSegment);
+  const existing = getOwnedConfirmedReservation(reservationId, userId);
+  if (segment.resourceGroupId !== existing.resource_group_id) {
+    throw new BusinessError("修改时间时不能更换资源组，请取消后重新占用");
+  }
+  if (segment.scope !== existing.scope) {
+    throw new BusinessError("修改时间时不能改变占用范围，请取消后重新占用");
+  }
+  const current = nowIso();
+  if (String(existing.end_at) <= current) {
+    throw new BusinessError("已结束的占用不能修改");
+  }
+  const started = String(existing.start_at) <= current;
+  const timeChanged =
+    segment.startAt !== existing.start_at || segment.endAt !== existing.end_at;
+  if (started && timeChanged) {
+    throw new BusinessError("已经开始的占用不能修改时间");
+  }
+  const item = started
+    ? { input: segment, available: true, conflicts: [], splitSegments: [] }
+    : previewSegments([segment], reservationId)[0];
+  return {
+    reservation: reservationOperationSummary(existing),
+    segment,
+    item,
+    serverNow: nowIso()
+  };
+}
+
+export function previewOwnReservationAction(
+  userId: string,
+  reservationId: string,
+  action: "CANCEL" | "END"
+) {
+  const existing = getOwnedConfirmedReservation(reservationId, userId);
+  const current = nowIso();
+  if (action === "CANCEL") {
+    if (String(existing.end_at) <= current) {
+      throw new BusinessError("已结束的占用不能取消");
+    }
+    if (String(existing.start_at) <= current) {
+      throw new BusinessError("进行中的占用请使用提前结束");
+    }
+  } else if (
+    String(existing.start_at) > current ||
+    String(existing.end_at) <= current
+  ) {
+    throw new BusinessError("只有进行中的占用可以提前结束");
+  }
+  return {
+    reservation: reservationOperationSummary(existing),
+    serverNow: current
+  };
+}
+
 function getReplaceableReservation(reservationId: string, userId: string) {
   const existing = db
     .prepare("SELECT * FROM reservations WHERE id = ?")
@@ -436,7 +551,8 @@ function validateSingleReservationScope(
 function insertReservationBatch(
   userId: string,
   segments: ReservationSegmentInput[],
-  parentReservationId?: string
+  parentReservationId?: string,
+  auditContext?: ApiAuditContext
 ) {
   const batchId = randomUUID();
   const createdAt = nowIso();
@@ -475,18 +591,30 @@ function insertReservationBatch(
       createdAt,
       createdAt
     );
-    addAudit(userId, "RESERVATION_CREATE", "reservation", id, undefined, {
-      ...segment,
-      ...(parentReservationId
-        ? { replacesReservationId: parentReservationId }
-        : {})
-    });
+    addAudit(
+      userId,
+      "RESERVATION_CREATE",
+      "reservation",
+      id,
+      undefined,
+      {
+        ...segment,
+        ...(parentReservationId
+          ? { replacesReservationId: parentReservationId }
+          : {})
+      },
+      auditContext
+    );
     return { id, ...segment, machineId: group.machine_id };
   });
   return { batchId, reservations };
 }
 
-export function commitReservationBatch(userId: string, rawSegments: unknown[]) {
+export function commitReservationBatch(
+  userId: string,
+  rawSegments: unknown[],
+  auditContext?: ApiAuditContext
+) {
   if (!rawSegments.length || rawSegments.length > 100) {
     throw new BusinessError("一次最多提交 100 条占用");
   }
@@ -507,7 +635,12 @@ export function commitReservationBatch(userId: string, rawSegments: unknown[]) {
     if (preview.some((item) => !item.available)) {
       throw new BusinessError("资源可用情况已更新，请根据最新结果重新确认", 409, preview);
     }
-    const { batchId, reservations } = insertReservationBatch(userId, segments);
+    const { batchId, reservations } = insertReservationBatch(
+      userId,
+      segments,
+      undefined,
+      auditContext
+    );
     const revision = bumpScheduleRevision();
     return { batchId, reservations, revision, serverNow: nowIso() };
   });
@@ -619,7 +752,8 @@ export function replaceReservationBatch(
 export function updateReservation(
   reservationId: string,
   actorUserId: string,
-  rawSegment: unknown
+  rawSegment: unknown,
+  auditContext?: ApiAuditContext
 ) {
   const segment = segmentSchema.parse(rawSegment);
   const result = withImmediateTransaction(() => {
@@ -672,7 +806,15 @@ export function updateReservation(
       nowIso(),
       reservationId
     );
-    addAudit(actorUserId, "RESERVATION_UPDATE", "reservation", reservationId, existing, segment);
+    addAudit(
+      actorUserId,
+      "RESERVATION_UPDATE",
+      "reservation",
+      reservationId,
+      existing,
+      segment,
+      auditContext
+    );
     const revision = bumpScheduleRevision();
     return { id: reservationId, revision };
   });
@@ -683,7 +825,8 @@ export function cancelReservation(
   reservationId: string,
   actorUserId: string,
   canManage: boolean,
-  reason = ""
+  reason = "",
+  auditContext?: ApiAuditContext
 ) {
   withImmediateTransaction(() => {
     const existing = db
@@ -717,9 +860,15 @@ export function cancelReservation(
         "/reservations"
       );
     }
-    addAudit(actorUserId, "RESERVATION_CANCEL", "reservation", reservationId, existing, {
-      reason
-    });
+    addAudit(
+      actorUserId,
+      "RESERVATION_CANCEL",
+      "reservation",
+      reservationId,
+      existing,
+      { reason },
+      auditContext
+    );
     bumpScheduleRevision();
   });
 }
@@ -728,7 +877,8 @@ export function endReservationEarly(
   reservationId: string,
   actorUserId: string,
   canManage = false,
-  reason = ""
+  reason = "",
+  auditContext?: ApiAuditContext
 ) {
   const result = withImmediateTransaction(() => {
     const existing = db
@@ -764,7 +914,8 @@ export function endReservationEarly(
           removedWithinFirstMinute: true,
           releasedByManager,
           reason
-        }
+        },
+        auditContext
       );
       db.prepare("DELETE FROM reservations WHERE id = ?").run(reservationId);
       db.prepare(
@@ -787,7 +938,8 @@ export function endReservationEarly(
         "reservation",
         reservationId,
         existing,
-        { endAt, releasedByManager, reason }
+        { endAt, releasedByManager, reason },
+        auditContext
       );
     }
     if (releasedByManager) {

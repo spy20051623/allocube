@@ -90,7 +90,10 @@ export function auditActionLabel(action: string) {
       SMTP_SETTINGS_ENABLE: "启用邮件发送",
       SMTP_SETTINGS_DISABLE: "停用邮件发送",
       SMTP_PASSWORD_CLEAR: "清除邮件登录密码",
-      SMTP_SETTINGS_TEST: "测试邮件配置"
+      SMTP_SETTINGS_TEST: "测试邮件配置",
+      API_TOKEN_CREATE: "创建个人访问令牌",
+      API_TOKEN_REVOKE: "吊销个人访问令牌",
+      API_TOKEN_REVOKE_ALL: "吊销全部个人访问令牌"
     } as Record<string, string>
   )[action] ?? "其他系统操作";
 }

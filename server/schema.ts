@@ -1,4 +1,4 @@
-export const FINAL_SCHEMA_VERSION = 13;
+export const FINAL_SCHEMA_VERSION = 14;
 
 export const FINAL_SCHEMA_SQL = `
   CREATE TABLE schema_migrations (
@@ -43,6 +43,45 @@ export const FINAL_SCHEMA_SQL = `
   );
   CREATE INDEX sessions_user_idx ON sessions(user_id);
   CREATE INDEX sessions_expiry_idx ON sessions(expires_at);
+
+  CREATE TABLE api_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    token_prefix TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    access_level TEXT NOT NULL CHECK(access_level IN ('READ_ONLY', 'READ_WRITE')),
+    expires_at TEXT,
+    last_used_at TEXT,
+    revoked_at TEXT,
+    revoked_reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX api_tokens_user_idx
+    ON api_tokens(user_id, created_at DESC);
+  CREATE INDEX api_tokens_active_idx
+    ON api_tokens(token_hash, revoked_at, expires_at);
+
+  CREATE TABLE prepared_api_operations (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    api_token_id TEXT NOT NULL REFERENCES api_tokens(id) ON DELETE CASCADE,
+    confirmation_token_hash TEXT NOT NULL UNIQUE,
+    action TEXT NOT NULL CHECK(action IN ('CREATE', 'UPDATE', 'CANCEL', 'END')),
+    request_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING'
+      CHECK(status IN ('PENDING', 'COMMITTED', 'REJECTED')),
+    result_json TEXT,
+    rejection_code TEXT,
+    expires_at TEXT NOT NULL,
+    retain_until TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    committed_at TEXT
+  );
+  CREATE INDEX prepared_api_operations_owner_idx
+    ON prepared_api_operations(api_token_id, user_id, status, expires_at);
+  CREATE INDEX prepared_api_operations_cleanup_idx
+    ON prepared_api_operations(retain_until);
 
   CREATE TABLE auth_tokens (
     id TEXT PRIMARY KEY,
@@ -489,6 +528,8 @@ export const FINAL_SCHEMA_SQL = `
     entity_id TEXT NOT NULL,
     before_json TEXT,
     after_json TEXT,
+    actor_api_token_id TEXT REFERENCES api_tokens(id) ON DELETE SET NULL,
+    api_operation_id TEXT,
     created_at TEXT NOT NULL
   );
   CREATE INDEX audit_created_idx ON audit_logs(created_at DESC);

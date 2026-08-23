@@ -22,6 +22,8 @@ const REQUIRED_TABLES = [
   "schema_migrations",
   "users",
   "sessions",
+  "api_tokens",
+  "prepared_api_operations",
   "auth_tokens",
   "email_verification_challenges",
   "employee_numbers",
@@ -302,6 +304,63 @@ export async function initializeDatabase() {
       throw error;
     }
   }
+  if (schemaVersion.version === 13 && FINAL_SCHEMA_VERSION >= 14) {
+    db.exec("BEGIN EXCLUSIVE");
+    try {
+      db.exec(`
+        CREATE TABLE api_tokens (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          token_prefix TEXT NOT NULL,
+          token_hash TEXT NOT NULL UNIQUE,
+          access_level TEXT NOT NULL CHECK(access_level IN ('READ_ONLY', 'READ_WRITE')),
+          expires_at TEXT,
+          last_used_at TEXT,
+          revoked_at TEXT,
+          revoked_reason TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX api_tokens_user_idx
+          ON api_tokens(user_id, created_at DESC);
+        CREATE INDEX api_tokens_active_idx
+          ON api_tokens(token_hash, revoked_at, expires_at);
+
+        CREATE TABLE prepared_api_operations (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          api_token_id TEXT NOT NULL REFERENCES api_tokens(id) ON DELETE CASCADE,
+          confirmation_token_hash TEXT NOT NULL UNIQUE,
+          action TEXT NOT NULL CHECK(action IN ('CREATE', 'UPDATE', 'CANCEL', 'END')),
+          request_json TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'PENDING'
+            CHECK(status IN ('PENDING', 'COMMITTED', 'REJECTED')),
+          result_json TEXT,
+          rejection_code TEXT,
+          expires_at TEXT NOT NULL,
+          retain_until TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          committed_at TEXT
+        );
+        CREATE INDEX prepared_api_operations_owner_idx
+          ON prepared_api_operations(api_token_id, user_id, status, expires_at);
+        CREATE INDEX prepared_api_operations_cleanup_idx
+          ON prepared_api_operations(retain_until);
+
+        ALTER TABLE audit_logs ADD COLUMN actor_api_token_id TEXT
+          REFERENCES api_tokens(id) ON DELETE SET NULL;
+        ALTER TABLE audit_logs ADD COLUMN api_operation_id TEXT;
+      `);
+      db.prepare(
+        "INSERT INTO schema_migrations(version, applied_at) VALUES(14, ?)"
+      ).run(nowIso());
+      db.exec("COMMIT");
+      schemaVersion = { version: 14 };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
   if (schemaVersion.version !== FINAL_SCHEMA_VERSION) {
     throw new Error(
       `数据库结构版本不匹配：当前 ${schemaVersion.version ?? 0}，需要 ${FINAL_SCHEMA_VERSION}。开发阶段请先重置数据库。`
@@ -565,6 +624,9 @@ export function cleanupExpiredSecurityRecords(at = nowIso()) {
         `DELETE FROM email_verification_challenges
          WHERE expires_at <= ? OR used_at IS NOT NULL`
       )
+      .run(at).changes,
+    preparedApiOperations: db
+      .prepare("DELETE FROM prepared_api_operations WHERE retain_until <= ?")
       .run(at).changes
   }));
 }
@@ -667,7 +729,23 @@ export function getAdminSettings() {
   };
 }
 
+let transactionSavepointSequence = 0;
+
 export function withImmediateTransaction<T>(action: () => T): T {
+  if (db.inTransaction) {
+    transactionSavepointSequence += 1;
+    const savepoint = `allocube_nested_${transactionSavepointSequence}`;
+    db.exec(`SAVEPOINT ${savepoint}`);
+    try {
+      const result = action();
+      db.exec(`RELEASE SAVEPOINT ${savepoint}`);
+      return result;
+    } catch (error) {
+      db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+      db.exec(`RELEASE SAVEPOINT ${savepoint}`);
+      throw error;
+    }
+  }
   db.exec("BEGIN IMMEDIATE");
   try {
     const result = action();
@@ -685,13 +763,17 @@ export function addAudit(
   entityType: string,
   entityId: string | null,
   before?: unknown,
-  after?: unknown
+  after?: unknown,
+  apiContext?: {
+    apiTokenId?: string;
+    apiOperationId?: string;
+  }
 ) {
   db.prepare(
     `INSERT INTO audit_logs(
       id, actor_user_id, action, entity_type, entity_id,
-      before_json, after_json, created_at
-    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`
+      before_json, after_json, actor_api_token_id, api_operation_id, created_at
+    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     randomUUID(),
     actorUserId,
@@ -700,6 +782,8 @@ export function addAudit(
     entityId,
     before === undefined ? null : JSON.stringify(before),
     after === undefined ? null : JSON.stringify(after),
+    apiContext?.apiTokenId ?? null,
+    apiContext?.apiOperationId ?? null,
     nowIso()
   );
 }

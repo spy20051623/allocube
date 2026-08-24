@@ -461,6 +461,199 @@ describe("用户身份与审批生命周期", () => {
     expect(restored.statusCode).toBe(200);
   });
 
+  it("系统管理员可以配置或清除首页ICP备案号", async () => {
+    const publicBefore = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/site-config"
+    });
+    expect(publicBefore.statusCode).toBe(200);
+    expect(publicBefore.json().icpFilingNumber).toBe("");
+
+    const adminCookie = await loginCookie("Administrator", "Admin12#$");
+    const before = await app.inject({
+      method: "GET",
+      url: "/api/v1/admin/settings",
+      headers: { cookie: adminCookie }
+    });
+    const invalid = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/icp-filing",
+      headers: { cookie: adminCookie },
+      payload: {
+        icpFilingNumber: "浙ICP备12345678号",
+        expectedVersion: before.json().version
+      }
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json().code).toBe("ICP_FILING_VALIDATION_FAILED");
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/icp-filing",
+      headers: { cookie: adminCookie },
+      payload: {
+        icpFilingNumber: "  浙ICP备12345678号-1  ",
+        expectedVersion: before.json().version
+      }
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().settings.icpFilingNumber).toBe(
+      "浙ICP备12345678号-1"
+    );
+
+    const publicAfter = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/site-config"
+    });
+    expect(publicAfter.json().icpFilingNumber).toBe(
+      "浙ICP备12345678号-1"
+    );
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/icp-filing",
+      headers: { cookie: adminCookie },
+      payload: {
+        icpFilingNumber: "",
+        expectedVersion: updated.json().settings.version
+      }
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().settings.icpFilingNumber).toBe("");
+  });
+
+  it("系统管理员可以配置或清除首页公安备案号", async () => {
+    const publicBefore = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/site-config"
+    });
+    expect(publicBefore.statusCode).toBe(200);
+    expect(publicBefore.json().publicSecurityFilingNumber).toBe("");
+
+    const adminCookie = await loginCookie("Administrator", "Admin12#$");
+    const before = await app.inject({
+      method: "GET",
+      url: "/api/v1/admin/settings",
+      headers: { cookie: adminCookie }
+    });
+    const invalid = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/public-security-filing",
+      headers: { cookie: adminCookie },
+      payload: {
+        publicSecurityFilingNumber: "京公网安备 123号",
+        expectedVersion: before.json().version
+      }
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json().code).toBe(
+      "PUBLIC_SECURITY_FILING_VALIDATION_FAILED"
+    );
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/public-security-filing",
+      headers: { cookie: adminCookie },
+      payload: {
+        publicSecurityFilingNumber: " 京公网安备 11000000000000号 ",
+        expectedVersion: before.json().version
+      }
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().settings.publicSecurityFilingNumber).toBe(
+      "京公网安备 11000000000000号"
+    );
+
+    const publicAfter = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/site-config"
+    });
+    expect(publicAfter.json().publicSecurityFilingNumber).toBe(
+      "京公网安备 11000000000000号"
+    );
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/public-security-filing",
+      headers: { cookie: adminCookie },
+      payload: {
+        publicSecurityFilingNumber: "",
+        expectedVersion: updated.json().settings.version
+      }
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().settings.publicSecurityFilingNumber).toBe("");
+  });
+
+  it("系统管理员可以原子更新站点地址和两项备案信息", async () => {
+    const adminCookie = await loginCookie("Administrator", "Admin12#$");
+    const before = await app.inject({
+      method: "GET",
+      url: "/api/v1/admin/settings",
+      headers: { cookie: adminCookie }
+    });
+
+    const invalid = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/site-profile",
+      headers: { cookie: adminCookie },
+      payload: {
+        siteOrigin: "https://allocube.company.test",
+        icpFilingNumber: "浙ICP备12345678号",
+        publicSecurityFilingNumber: "",
+        expectedVersion: before.json().version
+      }
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json().code).toBe("SITE_PROFILE_VALIDATION_FAILED");
+    expect(invalid.json().fieldErrors.icpFilingNumber).toBeTruthy();
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/site-profile",
+      headers: { cookie: adminCookie },
+      payload: {
+        siteOrigin: "https://allocube.company.test/",
+        icpFilingNumber: "沪ICP备12345678号-2",
+        publicSecurityFilingNumber: "沪公网安备 31000000000000号",
+        expectedVersion: before.json().version
+      }
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().settings).toMatchObject({
+      siteOrigin: "https://allocube.company.test",
+      icpFilingNumber: "沪ICP备12345678号-2",
+      publicSecurityFilingNumber: "沪公网安备 31000000000000号"
+    });
+
+    const stale = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/site-profile",
+      headers: { cookie: adminCookie },
+      payload: {
+        siteOrigin: "https://stale.company.test",
+        icpFilingNumber: "",
+        publicSecurityFilingNumber: "",
+        expectedVersion: before.json().version
+      }
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().code).toBe("SETTINGS_VERSION_CONFLICT");
+
+    const restored = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/admin/settings/site-profile",
+      headers: { cookie: adminCookie },
+      payload: {
+        siteOrigin: "http://localhost:5173",
+        icpFilingNumber: "",
+        publicSecurityFilingNumber: "",
+        expectedVersion: updated.json().settings.version
+      }
+    });
+    expect(restored.statusCode).toBe(200);
+  });
+
   it("登录标识中的 SQL 片段只会被当作普通文本", async () => {
     for (const [identifierType, identifier] of [
       ["USERNAME", "Administrator' OR 1=1 --"],

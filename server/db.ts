@@ -649,6 +649,8 @@ async function initializePersistentConfiguration() {
       advance_days: String(bootstrap.advanceDays),
       timezone: "Asia/Shanghai",
       public_site_origin: siteOrigin,
+      icp_filing_number: "",
+      public_security_filing_number: "",
       allowed_email_domains: JSON.stringify(allowedEmailDomains),
       allow_registration_without_email: "1",
       registration_config_revision: "1",
@@ -712,6 +714,8 @@ function adoptExistingPersistentConfiguration() {
       public_site_origin: config.isProduction
         ? ""
         : "http://localhost:5173",
+      icp_filing_number: "",
+      public_security_filing_number: "",
       allowed_email_domains: "[]",
       allow_registration_without_email: "1",
       registration_config_revision: "1",
@@ -889,12 +893,30 @@ export function getPublicSiteOrigin() {
   return normalizeSiteOrigin(value);
 }
 
+export function getIcpFilingNumber() {
+  const row = db
+    .prepare("SELECT value FROM settings WHERE key = 'icp_filing_number'")
+    .get() as { value: string } | undefined;
+  return row?.value.trim() ?? "";
+}
+
+export function getPublicSecurityFilingNumber() {
+  const row = db
+    .prepare(
+      "SELECT value FROM settings WHERE key = 'public_security_filing_number'"
+    )
+    .get() as { value: string } | undefined;
+  return row?.value.trim() ?? "";
+}
+
 export function getAdminSettings() {
   return {
     ...getSettings(),
     allowedEmailDomains: getAllowedEmailDomains(),
     allowRegistrationWithoutEmail: getAllowRegistrationWithoutEmail(),
     siteOrigin: getPublicSiteOrigin(),
+    icpFilingNumber: getIcpFilingNumber(),
+    publicSecurityFilingNumber: getPublicSecurityFilingNumber(),
     version: getSettingNumber("settings_version", 1)
   };
 }

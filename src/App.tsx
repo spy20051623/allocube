@@ -135,6 +135,11 @@ import {
   normalizeSiteOrigin,
   siteOriginValidationError
 } from "./shared/site-origin";
+import { icpFilingValidationError } from "./shared/icp-filing";
+import {
+  publicSecurityFilingUrl,
+  publicSecurityFilingValidationError
+} from "./shared/public-security-filing";
 import {
   announcementSeenStorageKey,
   hasSeenAnnouncementVersion,
@@ -330,7 +335,14 @@ type AdminSettingsPayload = {
   allowedEmailDomains: string[];
   allowRegistrationWithoutEmail: boolean;
   siteOrigin: string;
+  icpFilingNumber: string;
+  publicSecurityFilingNumber: string;
   version: number;
+};
+
+type PublicSiteConfigPayload = {
+  icpFilingNumber: string;
+  publicSecurityFilingNumber: string;
 };
 
 type ToastState = { kind: "success" | "error"; message: string } | null;
@@ -1118,6 +1130,28 @@ function AuthLayout({
   wide?: boolean;
   children: React.ReactNode;
 }) {
+  const [siteConfig, setSiteConfig] = useState<PublicSiteConfigPayload | null>(
+    null
+  );
+
+  useEffect(() => {
+    let active = true;
+    void api<PublicSiteConfigPayload>("/auth/site-config")
+      .then((value) => {
+        if (active) setSiteConfig(value);
+      })
+      .catch(() => {
+        if (active) setSiteConfig(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const publicSecurityFilingHref = publicSecurityFilingUrl(
+    siteConfig?.publicSecurityFilingNumber ?? ""
+  );
+
   return (
     <div className="auth-page">
       <section className="auth-story">
@@ -1129,6 +1163,39 @@ function AuthLayout({
           <h1>计算资源占用系统</h1>
           <p>统一安排机器、设备与共享资源的占用时间，减少多人协作中的冲突。</p>
         </div>
+        {(siteConfig?.icpFilingNumber ||
+          (siteConfig?.publicSecurityFilingNumber &&
+            publicSecurityFilingHref)) && (
+          <div className="auth-filings">
+            {siteConfig?.icpFilingNumber && (
+              <a
+                className="auth-icp-link"
+                href="http://beian.miit.gov.cn/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {siteConfig.icpFilingNumber}
+              </a>
+            )}
+            {siteConfig?.publicSecurityFilingNumber &&
+              publicSecurityFilingHref && (
+                <a
+                  className="auth-public-security-link"
+                  href={publicSecurityFilingHref}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <img
+                    src="/public-security-filing.png"
+                    alt=""
+                    width={20}
+                    height={20}
+                  />
+                  {siteConfig.publicSecurityFilingNumber}
+                </a>
+              )}
+          </div>
+        )}
       </section>
       <section className="auth-panel">
         <div className={`auth-card${wide ? " auth-card-wide" : ""}`}>
@@ -14899,10 +14966,16 @@ function SettingsPanel({
   const [emailDomainError, setEmailDomainError] = useState("");
   const [siteOrigin, setSiteOrigin] = useState("");
   const [siteOriginError, setSiteOriginError] = useState("");
+  const [icpFilingNumber, setIcpFilingNumber] = useState("");
+  const [icpFilingError, setIcpFilingError] = useState("");
+  const [publicSecurityFilingNumber, setPublicSecurityFilingNumber] =
+    useState("");
+  const [publicSecurityFilingError, setPublicSecurityFilingError] =
+    useState("");
   const [savingBooking, setSavingBooking] = useState(false);
   const [savingEmailDomains, setSavingEmailDomains] = useState(false);
   const [togglingEmptyEmail, setTogglingEmptyEmail] = useState(false);
-  const [savingSiteOrigin, setSavingSiteOrigin] = useState(false);
+  const [savingSiteProfile, setSavingSiteProfile] = useState(false);
   const [smtp, setSmtp] = useState<SmtpSettingsPayload | null>(null);
   const [smtpForm, setSmtpForm] = useState({
     enabled: false,
@@ -14950,7 +15023,11 @@ function SettingsPanel({
     });
     setAllowedEmailDomains(value.allowedEmailDomains);
     setSiteOrigin(value.siteOrigin);
+    setIcpFilingNumber(value.icpFilingNumber);
+    setPublicSecurityFilingNumber(value.publicSecurityFilingNumber);
     setSiteOriginError("");
+    setIcpFilingError("");
+    setPublicSecurityFilingError("");
     setEmailDomainInput("");
     setEmailDomainError("");
   }, []);
@@ -15056,40 +15133,57 @@ function SettingsPanel({
     }
   };
 
-  const saveSiteOrigin = async () => {
-    if (!adminSettings || savingSiteOrigin) return;
-    const issue = siteOriginValidationError(siteOrigin);
-    if (issue) {
-      setSiteOriginError(issue);
-      return;
-    }
-    setSavingSiteOrigin(true);
+  const saveSiteProfile = async () => {
+    if (!adminSettings || savingSiteProfile) return;
+    const normalizedSiteOrigin = siteOrigin.trim();
+    const normalizedIcpFiling = icpFilingNumber.trim();
+    const normalizedPublicSecurityFiling =
+      publicSecurityFilingNumber.trim();
+    const originIssue = siteOriginValidationError(normalizedSiteOrigin);
+    const icpIssue = icpFilingValidationError(normalizedIcpFiling);
+    const publicSecurityIssue = publicSecurityFilingValidationError(
+      normalizedPublicSecurityFiling
+    );
+    setSiteOriginError(originIssue ?? "");
+    setIcpFilingError(icpIssue ?? "");
+    setPublicSecurityFilingError(publicSecurityIssue ?? "");
+    if (originIssue || icpIssue || publicSecurityIssue) return;
+
+    setSavingSiteProfile(true);
     try {
-      const normalized = normalizeSiteOrigin(siteOrigin);
       const result = await api<{ settings: AdminSettingsPayload }>(
-        "/admin/settings/site-origin",
+        "/admin/settings/site-profile",
         {
           method: "PATCH",
           body: jsonBody({
-            siteOrigin: normalized,
+            siteOrigin: normalizeSiteOrigin(normalizedSiteOrigin),
+            icpFilingNumber: normalizedIcpFiling,
+            publicSecurityFilingNumber:
+              normalizedPublicSecurityFiling,
             expectedVersion: adminSettings.version
           })
         }
       );
       setAdminSettings(result.settings);
       setSiteOrigin(result.settings.siteOrigin);
+      setIcpFilingNumber(result.settings.icpFilingNumber);
+      setPublicSecurityFilingNumber(
+        result.settings.publicSecurityFilingNumber
+      );
       setSiteOriginError("");
-      notify("success", "站点地址已更新");
+      setIcpFilingError("");
+      setPublicSecurityFilingError("");
+      notify("success", "站点信息已更新");
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         await loadAdminSettings();
       }
-      const message =
-        error instanceof Error ? error.message : "保存站点地址失败";
-      setSiteOriginError(message);
-      notify("error", message);
+      notify(
+        "error",
+        error instanceof Error ? error.message : "保存站点信息失败"
+      );
     } finally {
-      setSavingSiteOrigin(false);
+      setSavingSiteProfile(false);
     }
   };
 
@@ -15145,8 +15239,12 @@ function SettingsPanel({
         bookingForm.maxBookingMinutes !== adminSettings.maxBookingMinutes ||
         bookingForm.advanceDays !== adminSettings.advanceDays)
   );
-  const siteOriginDirty = Boolean(
-    adminSettings && siteOrigin.trim() !== adminSettings.siteOrigin
+  const siteProfileDirty = Boolean(
+    adminSettings &&
+      (siteOrigin.trim() !== adminSettings.siteOrigin ||
+        icpFilingNumber.trim() !== adminSettings.icpFilingNumber ||
+        publicSecurityFilingNumber.trim() !==
+          adminSettings.publicSecurityFilingNumber)
   );
 
   const toggleSmtp = async (enabled: boolean) => {
@@ -15237,39 +15335,27 @@ function SettingsPanel({
         </div>
       </section>
       <section
-        className="settings-card site-origin-settings-card card"
-        aria-labelledby="site-origin-settings-title"
+        className="settings-card site-profile-settings-card card"
+        aria-labelledby="site-profile-settings-title"
       >
         <SectionHeader
-          id="site-origin-settings-title"
-          title="站点地址"
+          id="site-profile-settings-title"
+          title="站点信息"
           leadingIcon={Globe2}
           className="settings-intro"
-          actions={
-            <span
-              className={`email-domain-policy-badge${
-                adminSettings?.siteOrigin ? " is-restricted" : ""
-              }`}
-            >
-              {adminSettings?.siteOrigin ? "已配置" : "未配置"}
-            </span>
-          }
         />
-        <div className="site-origin-settings">
-          <div
-            className={`site-origin-entry${
-              siteOriginError ? " is-invalid" : ""
+        <div className="site-profile-fields">
+          <label
+            className={`field site-profile-field site-profile-origin${
+              siteOriginError ? " has-error" : ""
             }`}
           >
+            <span>站点地址</span>
             <input
               name="site-origin"
-              aria-label="站点地址"
               placeholder="https://allocube.your-company.com"
               value={siteOrigin}
               aria-invalid={Boolean(siteOriginError)}
-              aria-describedby={
-                siteOriginError ? "site-origin-error" : undefined
-              }
               onChange={(event) => {
                 setSiteOrigin(event.target.value);
                 setSiteOriginError("");
@@ -15282,29 +15368,87 @@ function SettingsPanel({
                   return;
                 }
                 event.preventDefault();
-                void saveSiteOrigin();
+                void saveSiteProfile();
               }}
             />
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={
-                !adminSettings || savingSiteOrigin || !siteOriginDirty
-              }
-              onClick={() => void saveSiteOrigin()}
-            >
-              {savingSiteOrigin ? "保存中" : "保存"}
-            </button>
-          </div>
-          {siteOriginError && (
-            <div
-              id="site-origin-error"
-              className="email-domain-error"
-              role="alert"
-            >
+            {siteOriginError && (
+              <small className="field-inline-error" role="alert">
               {siteOriginError}
-            </div>
-          )}
+              </small>
+            )}
+          </label>
+          <label
+            className={`field site-profile-field${
+              icpFilingError ? " has-error" : ""
+            }`}
+          >
+            <span>ICP备案号（选填）</span>
+            <input
+              name="icp-filing-number"
+              placeholder="省ICP备12345678号-1"
+              maxLength={100}
+              value={icpFilingNumber}
+              aria-invalid={Boolean(icpFilingError)}
+              onChange={(event) => {
+                setIcpFilingNumber(event.target.value);
+                setIcpFilingError("");
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || event.nativeEvent.isComposing) {
+                  return;
+                }
+                event.preventDefault();
+                void saveSiteProfile();
+              }}
+            />
+            {icpFilingError && (
+              <small className="field-inline-error" role="alert">
+              {icpFilingError}
+              </small>
+            )}
+          </label>
+          <label
+            className={`field site-profile-field${
+              publicSecurityFilingError ? " has-error" : ""
+            }`}
+          >
+            <span>公安备案号（选填）</span>
+            <input
+              name="public-security-filing-number"
+              placeholder="省公网安备 11000000000000号"
+              maxLength={100}
+              value={publicSecurityFilingNumber}
+              aria-invalid={Boolean(publicSecurityFilingError)}
+              onChange={(event) => {
+                setPublicSecurityFilingNumber(event.target.value);
+                setPublicSecurityFilingError("");
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || event.nativeEvent.isComposing) {
+                  return;
+                }
+                event.preventDefault();
+                void saveSiteProfile();
+              }}
+            />
+            {publicSecurityFilingError && (
+              <small className="field-inline-error" role="alert">
+              {publicSecurityFilingError}
+              </small>
+            )}
+          </label>
+        </div>
+        <div className="settings-card-footer site-profile-footer">
+          <button
+            type="button"
+            className="primary-button"
+            disabled={
+              !adminSettings || savingSiteProfile || !siteProfileDirty
+            }
+            onClick={() => void saveSiteProfile()}
+          >
+            {savingSiteProfile ? "保存中" : "保存站点信息"}
+          </button>
         </div>
       </section>
       <section

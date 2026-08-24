@@ -25,7 +25,9 @@ import {
   db,
   getAllowRegistrationWithoutEmail,
   getAllowedEmailDomains,
+  getIcpFilingNumber,
   getPublicSiteOrigin,
+  getPublicSecurityFilingNumber,
   getRegistrationConfigRevision,
   getSettings,
   nowIso,
@@ -370,6 +372,11 @@ function notifyUpdatedRegistration(name: string) {
 }
 
 export function registerAuthRoutes(app: FastifyInstance) {
+  app.get("/api/v1/auth/site-config", async () => ({
+    icpFilingNumber: getIcpFilingNumber(),
+    publicSecurityFilingNumber: getPublicSecurityFilingNumber()
+  }));
+
   app.get("/api/v1/auth/registration-config", async () =>
     registrationConfigPayload()
   );

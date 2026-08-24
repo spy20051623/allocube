@@ -35,6 +35,7 @@ import {
   slugifyDocsHeading
 } from "./docs-content";
 import type { ResolvedDocsRoute } from "./docs-routing";
+import { copyTextToClipboard } from "./clipboard";
 import {
   isObject,
   buildOpenApiOperationUrl,
@@ -766,7 +767,7 @@ function useCopyToClipboard() {
   const notify = useContext(DocsNotifyContext);
   return useCallback(async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      await copyTextToClipboard(text);
       notify("success", "复制成功");
     } catch {
       notify("error", "复制失败，请手动复制");

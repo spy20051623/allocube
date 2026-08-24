@@ -60,6 +60,7 @@ import {
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { ApiError, api, jsonBody, setCsrfToken } from "./api";
+import { copyTextToClipboard } from "./clipboard";
 import { DocumentationPage } from "./DocumentationPage";
 import { AnnouncementMarkdown } from "./AnnouncementMarkdown";
 import {
@@ -3399,7 +3400,7 @@ function AccountProfilePage({
                     aria-label="复制账号 ID"
                     onClick={async () => {
                       try {
-                        await navigator.clipboard.writeText(user.id);
+                        await copyTextToClipboard(user.id);
                         notify("success", "账号 ID 已复制");
                       } catch {
                         notify("error", "复制失败，请手动选择账号 ID");
@@ -3726,6 +3727,7 @@ function ApiTokenSection({
       )}
       {createOpen && (
         <ApiTokenCreateModal
+          notify={notify}
           onClose={() => setCreateOpen(false)}
           onCreated={async () => {
             await loadTokens();
@@ -3737,9 +3739,11 @@ function ApiTokenSection({
 }
 
 function ApiTokenCreateModal({
+  notify,
   onClose,
   onCreated
 }: {
+  notify: (kind: "success" | "error", message: string) => void;
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
@@ -3804,9 +3808,10 @@ function ApiTokenCreateModal({
               className="secondary-button"
               onClick={async () => {
                 try {
-                  await navigator.clipboard.writeText(secret);
+                  await copyTextToClipboard(secret);
+                  notify("success", "复制成功");
                 } catch {
-                  setError("复制失败，请手动选择令牌");
+                  notify("error", "复制失败，请手动选择令牌");
                 }
               }}
             >
@@ -14396,9 +14401,7 @@ function UserAdminPanel({
                   className="secondary-button"
                   onClick={async () => {
                     try {
-                      await navigator.clipboard.writeText(
-                        passwordResetLink.resetUrl
-                      );
+                      await copyTextToClipboard(passwordResetLink.resetUrl);
                       notify("success", "重置链接已复制");
                     } catch {
                       notify("error", "复制失败，请手动复制链接");

@@ -61,6 +61,11 @@ import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { ApiError, api, jsonBody, setCsrfToken } from "./api";
 import { copyTextToClipboard } from "./clipboard";
+import {
+  subscribeRealtimeConnection,
+  subscribeRealtimeEvent,
+  type RealtimeConnectionState
+} from "./realtime";
 import { DocumentationPage } from "./DocumentationPage";
 import { AnnouncementMarkdown } from "./AnnouncementMarkdown";
 import {
@@ -593,19 +598,22 @@ export function App() {
 
   useEffect(() => {
     if (docsRoute || !bootstrap || bootstrap.user.status !== "ACTIVE") return;
-    const events = new EventSource("/api/v1/events");
-    events.addEventListener("revision", () => {
+    const unsubscribeRevision = subscribeRealtimeEvent("revision", () => {
       void loadSession();
       void loadUnreadNotificationCount();
     });
-    events.addEventListener("announcement", () => {
+    const unsubscribeAnnouncement = subscribeRealtimeEvent("announcement", () => {
       setAnnouncementRefreshToken((current) => current + 1);
     });
-    events.addEventListener("feedback", () => {
+    const unsubscribeFeedback = subscribeRealtimeEvent("feedback", () => {
       setFeedbackRefreshToken((current) => current + 1);
       void loadUnreadNotificationCount();
     });
-    return () => events.close();
+    return () => {
+      unsubscribeRevision();
+      unsubscribeAnnouncement();
+      unsubscribeFeedback();
+    };
   }, [
     bootstrap?.user.id,
     bootstrap?.user.status,
@@ -979,9 +987,7 @@ function AnnouncementListPage() {
 
   useEffect(() => {
     void load();
-    const events = new EventSource("/api/v1/events");
-    events.addEventListener("announcement", () => void load());
-    return () => events.close();
+    return subscribeRealtimeEvent("announcement", () => void load());
   }, [load]);
 
   return (
@@ -5239,9 +5245,7 @@ function ResourceCatalogPage({
 
   useEffect(() => {
     void load();
-    const events = new EventSource("/api/v1/events");
-    events.addEventListener("revision", () => void load());
-    return () => events.close();
+    return subscribeRealtimeEvent("revision", () => void load());
   }, [load]);
 
   return (
@@ -5507,9 +5511,9 @@ function CalendarPage({
   }));
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [connectionState, setConnectionState] = useState<
-    "CONNECTING" | "CONNECTED" | "DISCONNECTED"
-  >("CONNECTING");
+  const [connectionState, setConnectionState] = useState<RealtimeConnectionState>(
+    "CONNECTING"
+  );
   const [reservationMode, setReservationMode] = useState<
     "RESOURCE_GROUP" | "MACHINE"
   >(initialCalendarPreference.reservationMode);
@@ -5954,17 +5958,15 @@ function CalendarPage({
   }, [reservationDetail, timeline]);
 
   useEffect(() => {
-    const events = new EventSource("/api/v1/events");
-    events.onopen = () => setConnectionState("CONNECTED");
-    events.onerror = () => setConnectionState("DISCONNECTED");
     const reload = () => {
       loadTimelineRef.current(true);
       void loadMachineOptions();
     };
-    events.addEventListener("revision", reload);
+    const unsubscribeConnection = subscribeRealtimeConnection(setConnectionState);
+    const unsubscribeRevision = subscribeRealtimeEvent("revision", reload);
     return () => {
-      events.removeEventListener("revision", reload);
-      events.close();
+      unsubscribeConnection();
+      unsubscribeRevision();
     };
   }, [loadMachineOptions]);
 
@@ -10745,9 +10747,7 @@ function AdminPage({
 
   useEffect(() => {
     if (visibleTab !== "machines") return;
-    const events = new EventSource("/api/v1/events");
-    events.addEventListener("revision", () => void loadMachines());
-    return () => events.close();
+    return subscribeRealtimeEvent("revision", () => void loadMachines());
   }, [loadMachines, visibleTab]);
 
   useEffect(() => {
@@ -11138,9 +11138,7 @@ function MachineInfoSection({
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    const events = new EventSource("/api/v1/events");
-    events.addEventListener("revision", () => void load());
-    return () => events.close();
+    return subscribeRealtimeEvent("revision", () => void load());
   }, [load]);
 
   const openMaintenance = () => {
@@ -11893,9 +11891,7 @@ function MachineResourcesSection({
     void load();
   }, [load]);
   useEffect(() => {
-    const events = new EventSource("/api/v1/events");
-    events.addEventListener("revision", () => void load());
-    return () => events.close();
+    return subscribeRealtimeEvent("revision", () => void load());
   }, [load]);
 
   const disableGroup = async (group: ResourceGroup) => {
@@ -12105,9 +12101,7 @@ function MachineUsersSection({
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    const events = new EventSource("/api/v1/events");
-    events.addEventListener("revision", () => void load());
-    return () => events.close();
+    return subscribeRealtimeEvent("revision", () => void load());
   }, [load]);
 
   const refresh = async () => {
@@ -14559,9 +14553,7 @@ function AnnouncementAdminPanel({
 
   useEffect(() => {
     void load();
-    const events = new EventSource("/api/v1/events");
-    events.addEventListener("announcement", () => void load());
-    return () => events.close();
+    return subscribeRealtimeEvent("announcement", () => void load());
   }, [load]);
 
   const withdraw = async (announcement: SystemAnnouncement) => {

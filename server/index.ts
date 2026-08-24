@@ -226,26 +226,17 @@ function removeEventClient(client: NodeJS.WritableStream) {
 function eventSessionIsActive(sessionId: string) {
   const row = db
     .prepare(
-      `SELECT s.expires_at, s.last_seen_at, u.status, u.auto_logout_minutes
+      `SELECT s.expires_at, u.status
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.id = ?`
     )
     .get(sessionId) as
     | {
         expires_at: string;
-        last_seen_at: string;
         status: string;
-        auto_logout_minutes: number;
       }
     | undefined;
-  if (!row || row.status !== "ACTIVE" || row.expires_at <= nowIso()) {
-    return false;
-  }
-  return (
-    row.auto_logout_minutes === 0 ||
-    new Date(row.last_seen_at).getTime() >
-      Date.now() - row.auto_logout_minutes * 60_000
-  );
+  return Boolean(row && row.status === "ACTIVE" && row.expires_at > nowIso());
 }
 
 function publishRevision(revision: number) {

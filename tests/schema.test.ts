@@ -94,6 +94,13 @@ describe("最终数据库结构", () => {
         "disable_reason"
       ])
     );
+    const autoLogoutColumn = (
+      dbModule.db.prepare("PRAGMA table_info(users)").all() as Array<{
+        name: string;
+        dflt_value: string | null;
+      }>
+    ).find((column) => column.name === "auto_logout_minutes");
+    expect(autoLogoutColumn?.dflt_value).toBe("0");
     expect(columns("employee_numbers")).not.toContain("is_primary");
     expect(columns("machines")).not.toEqual(
       expect.arrayContaining(["logical_core_count", "cpu_model"])

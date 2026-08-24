@@ -23,7 +23,6 @@ export interface AuthUser {
   passwordChangeRecommended: boolean;
   lastLoginAt: string | null;
   lastLoginIp: string;
-  autoLogoutMinutes: 0 | 15 | 60 | 240 | 1440;
   emailPreferences: EmailPreferences;
   pendingProfileChange: {
     id: string;

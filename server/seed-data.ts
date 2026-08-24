@@ -64,9 +64,10 @@ async function seedAdministrator(
   db.prepare(
     `INSERT INTO users(
       id, username, username_normalized, email, display_name, password_hash,
-      role, status, password_change_recommended, approved_at, created_at, updated_at
+      role, status, password_change_recommended, auto_logout_minutes,
+      approved_at, created_at, updated_at
     ) VALUES(?, 'Administrator', 'administrator', NULL, ?, ?,
-      'SYSTEM_ADMIN', 'ACTIVE', 1, ?, ?, ?)`
+      'SYSTEM_ADMIN', 'ACTIVE', 1, 0, ?, ?, ?)`
   ).run(
     id,
     bootstrap.adminName,
@@ -97,8 +98,8 @@ async function seedDemoData(db: Database.Database, nowIso: Now) {
   const insertUser = db.prepare(
     `INSERT INTO users(
       id, username, username_normalized, email, display_name, password_hash,
-      role, status, approved_at, approved_by, created_at, updated_at
-    ) VALUES(?, ?, ?, ?, ?, ?, 'USER', 'ACTIVE', ?, ?, ?, ?)`
+      role, status, auto_logout_minutes, approved_at, approved_by, created_at, updated_at
+    ) VALUES(?, ?, ?, ?, ?, ?, 'USER', 'ACTIVE', 0, ?, ?, ?, ?)`
   );
   const insertEmployeeNumber = db.prepare(
     `INSERT INTO employee_numbers(

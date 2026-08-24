@@ -57,13 +57,6 @@ const passwordSchema = z.string().max(256).superRefine((value, context) => {
   if (message) context.addIssue({ code: "custom", message });
 });
 const emailSchema = z.string().trim().email().max(254).transform(normalizeEmail);
-const autoLogoutMinutesSchema = z.union([
-  z.literal(0),
-  z.literal(15),
-  z.literal(60),
-  z.literal(240),
-  z.literal(1440)
-]);
 const emailPreferencesSchema = z.object({
   reservationUpdates: z.boolean(),
   machineAccessUpdates: z.boolean(),
@@ -224,7 +217,7 @@ function userSelect(where: string) {
     SELECT
       u.id, u.username, u.email, u.display_name, u.password_hash, u.role, u.status,
       u.password_change_recommended, u.application_revision, u.username_changed_at,
-      u.last_login_at, u.last_login_ip, u.auto_logout_minutes,
+      u.last_login_at, u.last_login_ip,
       COALESCE((SELECT ep.reservation_updates FROM user_email_preferences ep
         WHERE ep.user_id = u.id), 1) AS email_reservation_updates,
       COALESCE((SELECT ep.machine_access_updates FROM user_email_preferences ep
@@ -630,8 +623,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
           db.prepare(
             `INSERT INTO users(
               id, username, username_normalized, email, display_name, password_hash,
-              role, status, application_revision, created_at, updated_at
-            ) VALUES(?, ?, ?, ?, ?, ?, 'USER', 'PENDING_APPROVAL', 1, ?, ?)`
+              role, status, auto_logout_minutes, application_revision, created_at, updated_at
+            ) VALUES(?, ?, ?, ?, ?, ?, 'USER', 'PENDING_APPROVAL', 0, 1, ?, ?)`
           ).run(
             userId,
             validUsername.display,
@@ -772,32 +765,6 @@ export function registerAuthRoutes(app: FastifyInstance) {
         auth.user.status === "ACTIVE"
           ? getManagedMachineIds(auth.user.id, auth.user.role)
           : []
-    };
-  });
-
-  app.patch("/api/v1/auth/security-preferences", async (request, reply) => {
-    const auth = requireSession(request, reply);
-    if (!auth) return;
-    const { autoLogoutMinutes } = z
-      .object({
-        autoLogoutMinutes: autoLogoutMinutesSchema
-      })
-      .parse(request.body);
-    db.prepare(
-      `UPDATE users SET auto_logout_minutes = ?,
-        version = version + 1, updated_at = ? WHERE id = ?`
-    ).run(autoLogoutMinutes, nowIso(), auth.user.id);
-    addAudit(
-      auth.user.id,
-      "SECURITY_PREFERENCES_UPDATE",
-      "user",
-      auth.user.id,
-      { autoLogoutMinutes: auth.user.autoLogoutMinutes },
-      { autoLogoutMinutes }
-    );
-    return {
-      message: "自动登出设置已更新",
-      autoLogoutMinutes
     };
   });
 

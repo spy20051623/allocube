@@ -25,7 +25,6 @@ export type UserRow = {
   username_changed_at: string | null;
   last_login_at: string | null;
   last_login_ip: string;
-  auto_logout_minutes: AuthUser["autoLogoutMinutes"];
   email_reservation_updates: number;
   email_machine_access_updates: number;
   email_approval_updates: number;
@@ -49,7 +48,6 @@ export function publicUser(row: UserRow): AuthUser {
     passwordChangeRecommended: Boolean(row.password_change_recommended),
     lastLoginAt: row.last_login_at,
     lastLoginIp: row.last_login_ip,
-    autoLogoutMinutes: row.auto_logout_minutes,
     emailPreferences: {
       reservationUpdates: Boolean(row.email_reservation_updates),
       machineAccessUpdates: Boolean(row.email_machine_access_updates),
@@ -122,7 +120,7 @@ const sessionUserSelect = `
   SELECT
     u.id, u.username, u.email, u.display_name, u.password_hash, u.role, u.status,
     u.password_change_recommended, u.application_revision, u.username_changed_at,
-    u.last_login_at, u.last_login_ip, u.auto_logout_minutes,
+    u.last_login_at, u.last_login_ip,
     COALESCE((SELECT ep.reservation_updates FROM user_email_preferences ep
       WHERE ep.user_id = u.id), 1) AS email_reservation_updates,
     COALESCE((SELECT ep.machine_access_updates FROM user_email_preferences ep
@@ -171,17 +169,10 @@ export function getSessionAuth(request: FastifyRequest) {
       })
     | undefined;
   const now = nowIso();
-  const idleCutoff =
-    row && row.auto_logout_minutes > 0
-      ? new Date(
-          Date.now() - row.auto_logout_minutes * MINUTE_IN_MS
-        ).toISOString()
-      : null;
   if (
     !row ||
     row.expires_at <= now ||
-    row.status === "DISABLED" ||
-    (idleCutoff !== null && row.last_seen_at <= idleCutoff)
+    row.status === "DISABLED"
   ) {
     if (row) db.prepare("DELETE FROM sessions WHERE id = ?").run(row.session_id);
     return null;

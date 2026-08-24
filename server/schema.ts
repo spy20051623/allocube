@@ -23,7 +23,7 @@ export const FINAL_SCHEMA_SQL = `
     username_changed_at TEXT,
     last_login_at TEXT,
     last_login_ip TEXT NOT NULL DEFAULT '',
-    auto_logout_minutes INTEGER NOT NULL DEFAULT 60
+    auto_logout_minutes INTEGER NOT NULL DEFAULT 0
       CHECK(auto_logout_minutes IN (0, 15, 60, 240, 1440)),
     application_revision INTEGER NOT NULL DEFAULT 1,
     approved_at TEXT,

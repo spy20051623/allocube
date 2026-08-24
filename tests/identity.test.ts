@@ -571,17 +571,20 @@ describe("用户身份与审批生命周期", () => {
     expect(created.json().message).toBe("注册申请已提交，请等待管理员审核。");
     const user = dbModule.db
       .prepare(
-        "SELECT status, username_normalized, email FROM users WHERE id = ?"
+        `SELECT status, username_normalized, email, auto_logout_minutes
+         FROM users WHERE id = ?`
       )
       .get(created.json().userId) as {
         status: string;
         username_normalized: string;
         email: string;
+        auto_logout_minutes: number;
       };
     expect(user).toEqual({
       status: "PENDING_APPROVAL",
       username_normalized: "待审用户",
-      email: "pending@example.com"
+      email: "pending@example.com",
+      auto_logout_minutes: 0
     });
     expect(
       dbModule.db
@@ -1202,7 +1205,7 @@ describe("用户身份与审批生命周期", () => {
     ).toEqual({ count: 2 });
   });
 
-  it("记录最近登录信息并按个人设置执行无操作自动登出", async () => {
+  it("记录最近登录信息且不再按无操作时长结束会话", async () => {
     const login = await app.inject({
       method: "POST",
       url: "/api/v1/auth/login",
@@ -1216,54 +1219,50 @@ describe("用户身份与审批生命周期", () => {
     expect(login.statusCode).toBe(200);
     expect(login.json().user).toMatchObject({
       lastLoginAt: expect.any(String),
-      lastLoginIp: "203.0.113.24",
-      autoLogoutMinutes: 60
+      lastLoginIp: "203.0.113.24"
     });
+    expect(login.json().user).not.toHaveProperty("autoLogoutMinutes");
     const cookie = login.cookies
       .map((item) => `${item.name}=${item.value}`)
       .join("; ");
-    const updated = await app.inject({
-      method: "PATCH",
-      url: "/api/v1/auth/security-preferences",
-      headers: { cookie },
-      payload: { autoLogoutMinutes: 1440 }
-    });
-    expect(updated.statusCode).toBe(200);
-
+    const administrator = dbModule.db
+      .prepare("SELECT id FROM users WHERE username_normalized = 'administrator'")
+      .get() as { id: string };
+    dbModule.db
+      .prepare("UPDATE users SET auto_logout_minutes = 15 WHERE id = ?")
+      .run(administrator.id);
+    dbModule.db
+      .prepare("UPDATE sessions SET last_seen_at = ? WHERE user_id = ?")
+      .run(
+        new Date(Date.now() - 24 * 60 * 60_000).toISOString(),
+        administrator.id
+      );
+    const sessionsBeforeRequest = (
+      dbModule.db
+        .prepare("SELECT COUNT(*) AS count FROM sessions WHERE user_id = ?")
+        .get(administrator.id) as { count: number }
+    ).count;
     const me = await app.inject({
       method: "GET",
       url: "/api/v1/auth/me",
       headers: { cookie }
     });
     expect(me.statusCode).toBe(200);
-    expect(me.json().user.autoLogoutMinutes).toBe(1440);
     expect(me.json().user.lastLoginIp).toBe("203.0.113.24");
-
-    const administrator = dbModule.db
-      .prepare("SELECT id FROM users WHERE username_normalized = 'administrator'")
-      .get() as { id: string };
-    dbModule.db
-      .prepare("UPDATE sessions SET last_seen_at = ? WHERE user_id = ?")
-      .run(
-        new Date(Date.now() - 1441 * 60_000).toISOString(),
-        administrator.id
-      );
-    const sessionsBeforeExpiry = (
-      dbModule.db
-        .prepare("SELECT COUNT(*) AS count FROM sessions WHERE user_id = ?")
-        .get(administrator.id) as { count: number }
-    ).count;
-    const expired = await app.inject({
-      method: "GET",
-      url: "/api/v1/auth/me",
-      headers: { cookie }
-    });
-    expect(expired.statusCode).toBe(401);
+    expect(me.json().user).not.toHaveProperty("autoLogoutMinutes");
     expect(
       dbModule.db
         .prepare("SELECT COUNT(*) AS count FROM sessions WHERE user_id = ?")
         .get(administrator.id)
-    ).toEqual({ count: sessionsBeforeExpiry - 1 });
+    ).toEqual({ count: sessionsBeforeRequest });
+
+    const removedPreferenceRoute = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/auth/security-preferences",
+      headers: { cookie },
+      payload: { autoLogoutMinutes: 1440 }
+    });
+    expect(removedPreferenceRoute.statusCode).toBe(404);
   });
 
   it("管理员审核列表提供最近提交时间，并把并发令牌留作隐藏字段", async () => {

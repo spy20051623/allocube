@@ -767,13 +767,6 @@ export function App() {
     <ServerClockProvider initialServerNow={bootstrap.serverNow}>
       <DialogProvider>
         <div className={`app-frame${showPasswordReminder ? " has-password-banner" : ""}${visiblePage === "admin" && adminTab === "feedback" && currentRoute?.feedbackId ? " feedback-admin-detail-frame" : ""}`}>
-        <AutoLogoutGuard
-          userId={bootstrap.user.id}
-          minutes={bootstrap.user.autoLogoutMinutes}
-          onTimeout={() => {
-            void logout("由于长时间没有操作，你已自动退出。");
-          }}
-        />
         <Topbar
           user={bootstrap.user}
           restricted={!activeUser}
@@ -1039,90 +1032,6 @@ function LoadingScreen() {
       <p>正在载入机器资源与占用日历…</p>
     </main>
   );
-}
-
-const AUTO_LOGOUT_ACTIVITY_KEY = "allocube.last-activity.v1";
-
-function AutoLogoutGuard({
-  userId,
-  minutes,
-  onTimeout
-}: {
-  userId: string;
-  minutes: AuthUser["autoLogoutMinutes"];
-  onTimeout: () => void;
-}) {
-  const onTimeoutRef = useRef(onTimeout);
-  onTimeoutRef.current = onTimeout;
-
-  useEffect(() => {
-    if (minutes === 0) return;
-    let lastWrittenAt = 0;
-    let timedOut = false;
-    const writeActivity = (at: number) => {
-      lastWrittenAt = at;
-      try {
-        window.localStorage.setItem(
-          AUTO_LOGOUT_ACTIVITY_KEY,
-          JSON.stringify({ at })
-        );
-      } catch {
-        // 本机存储不可用时仍按当前标签页的活动时间计算。
-      }
-    };
-    const readActivity = () => {
-      try {
-        const value = JSON.parse(
-          window.localStorage.getItem(AUTO_LOGOUT_ACTIVITY_KEY) ?? "null"
-        ) as { at?: unknown } | null;
-        if (
-          typeof value?.at === "number" &&
-          Number.isFinite(value.at)
-        ) {
-          return value.at;
-        }
-      } catch {
-        // 损坏的本机状态按当前标签页重新计算。
-      }
-      return lastWrittenAt;
-    };
-    const markActivity = () => {
-      const now = Date.now();
-      if (now - lastWrittenAt >= 5_000) writeActivity(now);
-    };
-    writeActivity(Date.now());
-    const timer = window.setInterval(() => {
-      if (
-        !timedOut &&
-        Date.now() - readActivity() >= minutes * 60_000
-      ) {
-        timedOut = true;
-        onTimeoutRef.current();
-      }
-    }, 1_000);
-    const events: Array<keyof WindowEventMap> = [
-      "pointerdown",
-      "keydown",
-      "wheel",
-      "touchstart"
-    ];
-    for (const eventName of events) {
-      window.addEventListener(eventName, markActivity, { passive: true });
-    }
-    const markVisible = () => {
-      if (document.visibilityState === "visible") markActivity();
-    };
-    document.addEventListener("visibilitychange", markVisible);
-    return () => {
-      window.clearInterval(timer);
-      for (const eventName of events) {
-        window.removeEventListener(eventName, markActivity);
-      }
-      document.removeEventListener("visibilitychange", markVisible);
-    };
-  }, [minutes, userId]);
-
-  return null;
 }
 
 type AuthFlash = {
@@ -3217,7 +3126,6 @@ function AccountProfilePage({
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [registrationConfig, setRegistrationConfig] =
     useState<RegistrationConfigPayload | null>(null);
-  const [autoLogoutSaving, setAutoLogoutSaving] = useState(false);
   const [emailPreferences, setEmailPreferences] = useState(
     bootstrap.user.emailPreferences
   );
@@ -3528,43 +3436,6 @@ function AccountProfilePage({
                 {user.lastLoginIp && (
                   <span className="profile-field-meta">IP {user.lastLoginIp}</span>
                 )}
-              </div>
-              <div className="profile-field">
-                <div className="profile-field-head">
-                  <label htmlFor="auto-logout-minutes">自动登出</label>
-                </div>
-                <select
-                  id="auto-logout-minutes"
-                  className="profile-auto-logout-select"
-                  value={user.autoLogoutMinutes}
-                  disabled={autoLogoutSaving}
-                  onChange={async (event) => {
-                    const autoLogoutMinutes = Number(event.target.value) as
-                      AuthUser["autoLogoutMinutes"];
-                    setAutoLogoutSaving(true);
-                    try {
-                      await api("/auth/security-preferences", {
-                        method: "PATCH",
-                        body: jsonBody({ autoLogoutMinutes })
-                      });
-                      notify("success", "自动登出设置已更新");
-                      await reload();
-                    } catch (error) {
-                      notify(
-                        "error",
-                        error instanceof Error ? error.message : "设置更新失败"
-                      );
-                    } finally {
-                      setAutoLogoutSaving(false);
-                    }
-                  }}
-                >
-                  <option value={15}>15分钟无操作</option>
-                  <option value={60}>1小时无操作</option>
-                  <option value={240}>4小时无操作</option>
-                  <option value={1440}>1天无操作</option>
-                  <option value={0}>不限制</option>
-                </select>
               </div>
               <div className="profile-field">
                 <div className="profile-field-head">

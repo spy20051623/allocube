@@ -3878,7 +3878,7 @@ function deleteUserRecords(
      SET username = ?, username_normalized = ?, email = NULL,
        display_name = '用户已删除', password_hash = ?,
        password_change_recommended = 0, username_changed_at = NULL,
-       last_login_at = NULL, last_login_ip = '', auto_logout_minutes = 60,
+       last_login_at = NULL, last_login_ip = '', auto_logout_minutes = 0,
        approved_at = NULL, approved_by = NULL,
        version = version + 1, disabled_at = NULL, disabled_by = NULL,
        disable_reason = '', updated_at = ?

@@ -274,19 +274,4 @@ export function registerApiTokenManagementRoutes(app: FastifyInstance) {
     return { revoked: true, revokedAt };
   });
 
-  app.post("/api/v1/auth/api-tokens/revoke-all", async (request, reply) => {
-    const auth = requireAuth(request, reply);
-    if (!auth) return;
-    const revokedAt = nowIso();
-    const revokedCount = withImmediateTransaction(() => {
-      const count = revokeApiTokensForUser(auth.user.id, "用户主动全部吊销", revokedAt);
-      if (count) {
-        addAudit(auth.user.id, "API_TOKEN_REVOKE_ALL", "user", auth.user.id, undefined, {
-          revokedCount: count
-        });
-      }
-      return count;
-    });
-    return { revokedCount, revokedAt };
-  });
 }

@@ -3642,26 +3642,6 @@ function ApiTokenSection({
     }
   };
 
-  const revokeAll = async () => {
-    const confirmed = await dialog.confirm({
-      title: "吊销全部个人访问令牌",
-      message: "所有 AI、CLI 和自动化脚本都会立即失去访问权限。此操作无法撤销。",
-      confirmLabel: "全部吊销",
-      tone: "danger"
-    });
-    if (!confirmed) return;
-    try {
-      const result = await api<{ revokedCount: number }>(
-        "/auth/api-tokens/revoke-all",
-        { method: "POST", body: jsonBody({}) }
-      );
-      notify("success", `已吊销 ${result.revokedCount} 个令牌`);
-      await loadTokens();
-    } catch (error) {
-      notify("error", error instanceof Error ? error.message : "令牌吊销失败");
-    }
-  };
-
   const activeCount = tokens.filter((token) => tokenState(token).label === "有效").length;
   return (
     <div className="profile-section profile-api-tokens">
@@ -3684,11 +3664,6 @@ function ApiTokenSection({
           >
             API 文档
           </a>
-          {activeCount > 0 && (
-            <button type="button" className="text-action danger" onClick={() => void revokeAll()}>
-              全部吊销
-            </button>
-          )}
           <button
             type="button"
             className="primary-button"

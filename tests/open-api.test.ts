@@ -760,7 +760,7 @@ describe("官方 API", () => {
     ).toBe(0);
   });
 
-  it("网页端创建令牌时只存储哈希且明文只在响应出现", async () => {
+  it("网页端令牌只存储哈希、明文只返回一次且只能逐个吊销", async () => {
     const login = await app.inject({
       method: "POST",
       url: "/api/v1/auth/login",
@@ -798,5 +798,21 @@ describe("官方 API", () => {
       headers: { cookie: cookieHeader }
     });
     expect(JSON.stringify(listed.json())).not.toContain(secret);
+
+    const bulkRevoke = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/api-tokens/revoke-all",
+      headers: { cookie: cookieHeader },
+      payload: {}
+    });
+    expect(bulkRevoke.statusCode).toBe(404);
+
+    const revoked = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/auth/api-tokens/${created.json().token.id}`,
+      headers: { cookie: cookieHeader }
+    });
+    expect(revoked.statusCode).toBe(200);
+    expect(revoked.json()).toMatchObject({ revoked: true });
   });
 });

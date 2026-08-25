@@ -8324,6 +8324,9 @@ function CalendarWeekDayCell({
     (sum, item) => sum + minuteDifference(item.startAt, item.endAt),
     0
   );
+  const machineReservationCount = reservations.filter(
+    (item) => item.scope === "MACHINE"
+  ).length;
   const summary = occupiedMinutes
     ? `${(occupiedMinutes / 60).toFixed(1)}小时 · ${reservations.length}段`
     : unavailable.length
@@ -8333,10 +8336,11 @@ function CalendarWeekDayCell({
     ...reservations.map((item) => ({
       id: item.id,
       kind: item.mine ? "mine" as const : "reservation" as const,
+      machineScope: item.scope === "MACHINE",
       startAt: item.startAt,
       endAt: item.endAt,
       persistent: false,
-      label: `${item.applicantName}${
+      label: `${item.scope === "MACHINE" ? "整机 · " : ""}${item.applicantName}${
         item.applicantEmployeeNumber
           ? ` · ${item.applicantEmployeeNumber}`
           : ""
@@ -8348,6 +8352,7 @@ function CalendarWeekDayCell({
         item.kind === "LONG_TERM"
           ? "disabled" as const
           : "unavailable" as const,
+      machineScope: false,
       startAt: item.startAt,
       endAt: item.endAt,
       persistent: item.kind === "LONG_TERM" && item.endAt >= dayEnd,
@@ -8418,7 +8423,11 @@ function CalendarWeekDayCell({
           className={`${day === today ? "today" : ""}${
             occupiedMinutes ? " occupied" : ""
           }${unavailable.length ? " unavailable" : ""}`}
-          aria-label={`${day} ${groupName}，${summary}，点击查看日视图`}
+          aria-label={`${day} ${groupName}，${summary}${
+            machineReservationCount
+              ? `，其中${machineReservationCount}段整机占用`
+              : ""
+          }，点击查看日视图`}
           aria-describedby={
             popoverOpen && details.length ? tooltipId : undefined
           }
@@ -8442,7 +8451,9 @@ function CalendarWeekDayCell({
             {reservations.map((item) => (
               <i
                 key={`reservation-${item.id}`}
-                className={item.mine ? "mine" : ""}
+                className={`${item.mine ? "mine" : ""}${
+                  item.scope === "MACHINE" ? " machine-scope" : ""
+                }`.trim()}
                 style={rangeStyle(item.startAt, item.endAt)}
               />
             ))}
@@ -8464,7 +8475,11 @@ function CalendarWeekDayCell({
             <strong>{day} · {groupName}</strong>
             {details.map((item) => (
               <div key={`${item.kind}-${item.id}`}>
-                <span className={item.kind} />
+                <span
+                  className={`${item.kind}${
+                    item.machineScope ? " machine-scope" : ""
+                  }`}
+                />
                 <time>
                   {formatWeekDayDetailPeriod({
                     startAt: item.startAt,

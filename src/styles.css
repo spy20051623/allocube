@@ -1961,6 +1961,14 @@ textarea::placeholder {
   background: #3564ca;
 }
 
+.week-mini-track i.machine-scope {
+  background: #a99bdc;
+}
+
+.week-mini-track i.machine-scope.mine {
+  background: #806bc8;
+}
+
 .week-mini-track i.unavailable {
   background: repeating-linear-gradient(
     -45deg,
@@ -2022,6 +2030,14 @@ textarea::placeholder {
 
 .week-day-popover > div > span.mine {
   background: #3564ca;
+}
+
+.week-day-popover > div > span.machine-scope {
+  background: #a99bdc;
+}
+
+.week-day-popover > div > span.machine-scope.mine {
+  background: #806bc8;
 }
 
 .week-day-popover > div > span.unavailable {

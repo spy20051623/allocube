@@ -259,6 +259,28 @@ describe("角色化界面文案", () => {
     expect(source).not.toContain('"我的 · "');
   });
 
+  it("周视图沿用单日视图的紫色体系区分整机占用", () => {
+    const source = fs.readFileSync(
+      new URL("../src/App.tsx", import.meta.url),
+      "utf8"
+    );
+    const styles = fs.readFileSync(
+      new URL("../src/styles.css", import.meta.url),
+      "utf8"
+    );
+    const machineScopeRule = styles.slice(
+      styles.indexOf(".week-mini-track i.machine-scope {"),
+      styles.indexOf(".week-mini-track i.unavailable {")
+    );
+
+    expect(source).toContain('item.scope === "MACHINE" ? " machine-scope" : ""');
+    expect(source).toContain('item.scope === "MACHINE" ? "整机 · " : ""');
+    expect(source).toContain("machineReservationCount");
+    expect(machineScopeRule).toContain("background: #a99bdc");
+    expect(machineScopeRule).toContain("background: #806bc8");
+    expect(machineScopeRule).not.toContain("repeating-linear-gradient");
+  });
+
   it("资源日历详情展示占用说明和调整信息", () => {
     const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("<dt>原始时间</dt>");

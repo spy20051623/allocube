@@ -1012,7 +1012,6 @@ export function registerAdminRoutes(
       .prepare(
         `SELECT
           m.*,
-          GROUP_CONCAT(u.display_name || '|' || u.id, ';;') AS managers,
           (
             SELECT COUNT(*)
             FROM machine_access_requests mar
@@ -1025,14 +1024,38 @@ export function registerAdminRoutes(
               AND ru.start_at <= ? AND ru.end_at > ?
           ) AS planned_unavailable_now
          FROM machines m
-         LEFT JOIN machine_admins ma ON ma.machine_id = m.id
-         LEFT JOIN users u ON u.id = ma.user_id AND u.status = 'ACTIVE'
          WHERE NOT EXISTS (
            SELECT 1 FROM deleted_machine_tombstones dmt WHERE dmt.machine_id = m.id
          )
-         GROUP BY m.id ORDER BY m.name`
+         ORDER BY m.name`
       )
       .all(nowIso(), nowIso()) as Array<Record<string, unknown>>;
+    const managerRows = db
+      .prepare(
+        `SELECT ma.machine_id, u.id, u.display_name
+         FROM machine_admins ma
+         JOIN machines m ON m.id = ma.machine_id
+         JOIN users u ON u.id = ma.user_id AND u.status = 'ACTIVE'
+         WHERE NOT EXISTS (
+           SELECT 1 FROM deleted_machine_tombstones dmt
+           WHERE dmt.machine_id = m.id
+         )
+         ORDER BY u.display_name COLLATE NOCASE, u.id`
+      )
+      .all() as Array<{
+      machine_id: string;
+      id: string;
+      display_name: string;
+    }>;
+    const managersByMachine = new Map<
+      string,
+      Array<{ id: string; displayName: string }>
+    >();
+    for (const manager of managerRows) {
+      const managers = managersByMachine.get(manager.machine_id) ?? [];
+      managers.push({ id: manager.id, displayName: manager.display_name });
+      managersByMachine.set(manager.machine_id, managers);
+    }
     return {
       machines: rows
         .filter((row) =>
@@ -1056,14 +1079,12 @@ export function registerAdminRoutes(
                 : Number(row.planned_unavailable_now)
                   ? "PLANNED"
                   : "ACTIVE",
-            managers: row.managers
-              ? String(row.managers)
-                  .split(";;")
-                  .map((item) => {
-                    const [displayName, id] = item.split("|");
-                    return canManage ? { id, displayName } : { displayName };
-                  })
-              : [],
+            managers: (managersByMachine.get(String(row.id)) ?? []).map(
+              (manager) =>
+                canManage
+                  ? manager
+                  : { displayName: manager.displayName }
+            ),
             canManage,
             ...(canManage
               ? {

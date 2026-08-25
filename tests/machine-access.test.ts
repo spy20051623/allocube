@@ -213,6 +213,32 @@ describe("机器使用权与管理员专用信息", () => {
     expect(notes.statusCode).toBe(403);
   });
 
+  it("管理员姓名包含旧分隔符时仍返回完整的结构化信息", async () => {
+    const displayName = "管理|员;;特殊";
+    dbModule.db.prepare("UPDATE users SET display_name = ? WHERE id = ?").run(
+      displayName,
+      managerId
+    );
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/admin/machines",
+        headers: { cookie: adminCookie }
+      });
+      expect(response.statusCode).toBe(200);
+      const machine = response
+        .json()
+        .machines.find((item: any) => item.id === machineId);
+      expect(machine.managers).toEqual([{ id: managerId, displayName }]);
+    } finally {
+      dbModule.db.prepare("UPDATE users SET display_name = ? WHERE id = ?").run(
+        "机器管理员",
+        managerId
+      );
+    }
+  });
+
   it("申请只能审批一次，过期审批返回冲突", async () => {
     const created = await app.inject({
       method: "POST",

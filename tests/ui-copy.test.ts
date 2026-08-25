@@ -254,6 +254,30 @@ describe("角色化界面文案", () => {
     expect(unavailableRule).not.toContain("bottom: 0");
   });
 
+  it("时间轴使用真实时长，仅为亚像素短占用保留细线", () => {
+    const source = fs.readFileSync(
+      new URL("../src/App.tsx", import.meta.url),
+      "utf8"
+    );
+    const styles = fs.readFileSync(
+      new URL("../src/styles.css", import.meta.url),
+      "utf8"
+    );
+    const weekTrackRule = styles.slice(
+      styles.indexOf(".week-mini-track i {"),
+      styles.indexOf(".week-mini-track i.mine {")
+    );
+    const timelineVisualRule = styles.slice(
+      styles.indexOf(".timeline-bar-visual {"),
+      styles.indexOf(".timeline-bar-content {")
+    );
+
+    expect(source).not.toContain("Math.max(1.2,");
+    expect(source).not.toContain("Math.max(0.5,");
+    expect(weekTrackRule).toContain("min-width: 1px");
+    expect(timelineVisualRule).toContain("width: max(100%, 2px)");
+  });
+
   it("周视图占用详情不重复标注我的占用", () => {
     const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).not.toContain('"我的 · "');

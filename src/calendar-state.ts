@@ -28,6 +28,11 @@ export type CalendarTimeRange = {
   endAt: string;
 };
 
+export type TimelineNearbyHitResult = {
+  directIndex: number | null;
+  nearbyIndexes: number[];
+};
+
 export type CalendarBookingRules = {
   minBookingMinutes: number;
   maxBookingMinutes: number;
@@ -40,6 +45,68 @@ export type CalendarDraftFieldIssues = {
 };
 
 export const DAY_ZOOM_LEVELS = [6, 12, 24] as const;
+
+export function timelineNearbyHitIndexes({
+  items,
+  rangeStart,
+  rangeEnd,
+  trackWidth,
+  pointerX,
+  smallItemWidth = 5,
+  nearbyDistance = 12
+}: {
+  items: CalendarTimeRange[];
+  rangeStart: string;
+  rangeEnd: string;
+  trackWidth: number;
+  pointerX: number;
+  smallItemWidth?: number;
+  nearbyDistance?: number;
+}): TimelineNearbyHitResult {
+  const from = new Date(rangeStart).getTime();
+  const to = new Date(rangeEnd).getTime();
+  if (
+    !Number.isFinite(from) ||
+    !Number.isFinite(to) ||
+    to <= from ||
+    !Number.isFinite(trackWidth) ||
+    trackWidth <= 0 ||
+    !Number.isFinite(pointerX) ||
+    pointerX < 0 ||
+    pointerX > trackWidth ||
+    !Number.isFinite(smallItemWidth) ||
+    smallItemWidth <= 0 ||
+    !Number.isFinite(nearbyDistance) ||
+    nearbyDistance < 0
+  ) {
+    return { directIndex: null, nearbyIndexes: [] };
+  }
+
+  const projected = items.flatMap((item, index) => {
+    const start = Math.max(from, new Date(item.startAt).getTime());
+    const end = Math.min(to, new Date(item.endAt).getTime());
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      return [];
+    }
+    const left = ((start - from) / (to - from)) * trackWidth;
+    const right = ((end - from) / (to - from)) * trackWidth;
+    return [{ index, left, right, width: right - left }];
+  });
+  const nearbyIndexes = projected
+    .filter((item) => {
+      const exact = pointerX >= item.left && pointerX <= item.right;
+      if (exact) return true;
+      const distance =
+        pointerX < item.left
+          ? item.left - pointerX
+          : pointerX - item.right;
+      return item.width < smallItemWidth && distance <= nearbyDistance;
+    })
+    .map((item) => item.index);
+  const directIndex =
+    nearbyIndexes.length === 1 ? nearbyIndexes[0] : null;
+  return { directIndex, nearbyIndexes };
+}
 
 export function calendarDragAction(input: {
   button: number;

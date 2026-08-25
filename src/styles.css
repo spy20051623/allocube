@@ -1952,7 +1952,7 @@ textarea::placeholder {
   position: absolute;
   top: 1px;
   bottom: 1px;
-  min-width: 2px;
+  min-width: 1px;
   border-radius: 2px;
   background: #91a8dd;
 }
@@ -2523,28 +2523,67 @@ textarea::placeholder {
   transform: translateX(-50%);
 }
 
-.booking-bar,
-.unavailability-bar,
-.draft-timeline-bar,
-.drag-blocked-bar,
-.drag-erase-bar {
+.timeline-bar-anchor {
   position: absolute;
   z-index: 2;
   top: 10px;
   height: 37px;
-  min-width: 4px;
+  min-width: 0;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
+.timeline-bar-anchor.passive {
+  pointer-events: none;
+}
+
+.timeline-bar-anchor.unavailability-bar {
+  z-index: 1;
+}
+
+.timeline-bar-anchor.unavailability-bar.disable-history-bar {
+  z-index: 2;
+}
+
+.timeline-bar-anchor.booking-bar,
+.timeline-bar-anchor.unavailability-bar {
+  cursor: pointer;
+}
+
+.timeline-bar-anchor.draft-timeline-bar,
+.timeline-bar-anchor.drag-blocked-bar,
+.timeline-bar-anchor.drag-erase-bar {
+  z-index: 4;
+}
+
+.timeline-bar-visual {
+  position: absolute;
+  inset: 0 auto 0 50%;
+  width: max(100%, 2px);
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 5px;
+  white-space: nowrap;
+  font-size: 10px;
+  transform: translateX(-50%);
+}
+
+.timeline-bar-content {
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   padding: 0 8px;
   display: flex;
   align-items: center;
   gap: 6px;
-  border-radius: 5px;
-  white-space: nowrap;
-  font-size: 10px;
 }
 
-.booking-bar {
-  overflow: visible;
+.timeline-bar-visual.booking-bar {
+  overflow: hidden;
   border: 1px solid #c5d2f3;
   color: #345390;
   background: #eaf0ff;
@@ -2553,15 +2592,16 @@ textarea::placeholder {
   cursor: pointer;
 }
 
-.booking-bar:hover,
-.booking-bar:focus-visible {
+.timeline-bar-anchor.booking-bar:hover > .timeline-bar-visual,
+.timeline-bar-anchor.booking-bar:focus-visible > .timeline-bar-visual {
   border-color: #9eb3e5;
   background: #e4ecff;
   outline: none;
   box-shadow: 0 2px 7px rgb(49 82 151 / 14%);
 }
 
-.booking-bar::after {
+.timeline-bar-anchor.booking-bar::after,
+.timeline-bar-anchor.unavailability-bar::after {
   position: absolute;
   top: -5px;
   bottom: -5px;
@@ -2571,45 +2611,45 @@ textarea::placeholder {
   transform: translateX(-50%);
 }
 
-.booking-bar > * {
+.timeline-bar-content > * {
   position: relative;
   z-index: 1;
 }
 
-.booking-bar.mine {
+.timeline-bar-visual.booking-bar.mine {
   border-color: #7296e8;
   color: #173d9c;
   background: #d6e1ff;
   box-shadow: 0 2px 6px rgb(57 94 174 / 14%);
 }
 
-.booking-bar.mine:hover,
-.booking-bar.mine:focus-visible {
+.timeline-bar-anchor.booking-bar.mine:hover > .timeline-bar-visual,
+.timeline-bar-anchor.booking-bar.mine:focus-visible > .timeline-bar-visual {
   border-color: #5f85da;
   background: #cfdcff;
   box-shadow: 0 3px 8px rgb(57 94 174 / 18%);
 }
 
-.booking-bar.machine-scope {
+.timeline-bar-visual.booking-bar.machine-scope {
   border-color: #a99bdc;
   color: #4c3a88;
   background: #f0edff;
 }
 
-.booking-bar.machine-scope.mine {
+.timeline-bar-visual.booking-bar.machine-scope.mine {
   border-color: #806bc8;
   color: #3f287f;
   background: #ded7fa;
   box-shadow: 0 2px 6px rgb(91 65 169 / 14%);
 }
 
-.booking-bar.machine-scope.mine:hover,
-.booking-bar.machine-scope.mine:focus-visible {
+.timeline-bar-anchor.booking-bar.machine-scope.mine:hover > .timeline-bar-visual,
+.timeline-bar-anchor.booking-bar.machine-scope.mine:focus-visible > .timeline-bar-visual {
   border-color: #725db9;
   background: #d7cff6;
 }
 
-.booking-bar.editing-history {
+.timeline-bar-visual.booking-bar.editing-history {
   border-color: #aeb7c6;
   color: #657083;
   background: #eef0f3;
@@ -2668,8 +2708,7 @@ textarea::placeholder {
   box-shadow: none;
 }
 
-.unavailability-bar {
-  z-index: 1;
+.timeline-bar-visual.unavailability-bar {
   border: 1px solid #e0a36e;
   color: #9b541d;
   background: repeating-linear-gradient(-45deg, #fff0e2, #fff0e2 6px, #fff7ef 6px, #fff7ef 12px);
@@ -2679,8 +2718,8 @@ textarea::placeholder {
   cursor: pointer;
 }
 
-.unavailability-bar:hover,
-.unavailability-bar:focus-visible {
+.timeline-bar-anchor.unavailability-bar:hover > .timeline-bar-visual,
+.timeline-bar-anchor.unavailability-bar:focus-visible > .timeline-bar-visual {
   border-color: #cf8548;
   background: repeating-linear-gradient(-45deg, #ffead7, #ffead7 6px, #fff4e8 6px, #fff4e8 12px);
   outline: none;
@@ -2696,8 +2735,7 @@ textarea::placeholder {
   opacity: .72;
 }
 
-.unavailability-bar.disable-history-bar {
-  z-index: 2;
+.timeline-bar-visual.unavailability-bar.disable-history-bar {
   border-color: #d5656a;
   color: #9f3038;
   background: repeating-linear-gradient(
@@ -2710,8 +2748,8 @@ textarea::placeholder {
   box-shadow: 0 2px 6px rgb(159 48 56 / 12%);
 }
 
-.unavailability-bar.disable-history-bar:hover,
-.unavailability-bar.disable-history-bar:focus-visible {
+.timeline-bar-anchor.unavailability-bar.disable-history-bar:hover > .timeline-bar-visual,
+.timeline-bar-anchor.unavailability-bar.disable-history-bar:focus-visible > .timeline-bar-visual {
   border-color: #c34850;
   background: repeating-linear-gradient(
     -45deg,
@@ -2723,30 +2761,21 @@ textarea::placeholder {
   box-shadow: 0 2px 8px rgb(159 48 56 / 20%);
 }
 
-.draft-timeline-bar,
-.drag-blocked-bar,
-.drag-erase-bar {
-  z-index: 4;
-  top: 10px;
-  height: 37px;
-  pointer-events: none;
-}
-
-.draft-timeline-bar {
+.timeline-bar-visual.draft-timeline-bar {
   border: 1px dashed #7296e8;
   color: #173d9c;
   background: rgba(214, 225, 255, .97);
   box-shadow: 0 2px 6px rgb(57 94 174 / 14%);
 }
 
-.draft-timeline-bar.machine-scope {
+.timeline-bar-visual.draft-timeline-bar.machine-scope {
   border-color: #806bc8;
   color: #3f287f;
   background: rgba(222, 215, 250, .97);
   box-shadow: 0 2px 6px rgb(91 65 169 / 14%);
 }
 
-.drag-blocked-bar {
+.timeline-bar-visual.drag-blocked-bar {
   border: 1px solid #d77b7b;
   border-radius: 5px;
   color: #a13f3f;
@@ -2759,7 +2788,7 @@ textarea::placeholder {
   );
 }
 
-.drag-erase-bar {
+.timeline-bar-visual.drag-erase-bar {
   border: 1px solid #e05252;
   color: #a92f2f;
   background: rgb(255 230 230 / 88%);
@@ -3302,6 +3331,101 @@ textarea::placeholder {
 .reservation-popover-action:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+.nearby-reservations-popover {
+  width: 340px;
+}
+
+.nearby-reservations-hint {
+  margin: 7px 0 0;
+  color: #7a8596;
+  font-size: 11px;
+}
+
+.nearby-reservations-list {
+  max-height: 342px;
+  margin-top: 11px;
+  display: grid;
+  gap: 5px;
+  overflow-y: auto;
+}
+
+.nearby-reservations-list > button {
+  width: 100%;
+  min-height: 52px;
+  padding: 7px 8px;
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  color: #667185;
+  background: #fafbfc;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nearby-reservations-list > button:hover,
+.nearby-reservations-list > button:focus-visible {
+  border-color: #b9c9eb;
+  background: #f2f6ff;
+  outline: none;
+}
+
+.nearby-reservation-marker {
+  width: 7px;
+  height: 28px;
+  border-radius: 3px;
+  background: #91a8dd;
+}
+
+.nearby-reservation-marker.mine {
+  background: #3564ca;
+}
+
+.nearby-reservation-marker.machine-scope {
+  background: #a99bdc;
+}
+
+.nearby-reservation-marker.machine-scope.mine {
+  background: #806bc8;
+}
+
+.nearby-reservation-copy {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 9px;
+  align-items: baseline;
+}
+
+.nearby-reservation-copy time {
+  color: #53627a;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.nearby-reservation-copy strong,
+.nearby-reservation-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nearby-reservation-copy strong {
+  color: #354156;
+  font-size: 11px;
+}
+
+.nearby-reservation-copy small {
+  grid-column: 1 / -1;
+  color: #7f8999;
+  font-size: 10px;
 }
 
 .reservation-popover-details {

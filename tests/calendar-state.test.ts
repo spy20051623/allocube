@@ -24,12 +24,71 @@ import {
   subtractBusyTimeRanges,
   splitDrafts,
   timelineDragAutoScrollDelta,
+  timelineNearbyHitIndexes,
   timelineWheelAction,
   advanceCalendarDrafts,
   type CalendarDraft
 } from "../src/calendar-state";
 
 describe("资源日历状态", () => {
+  it("日视图在精确命中附近存在小占用时返回选择候选", () => {
+    const items = [
+      { startAt: "2026-08-25T01:00:00.000Z", endAt: "2026-08-25T01:01:00.000Z" },
+      { startAt: "2026-08-25T01:02:00.000Z", endAt: "2026-08-25T01:03:00.000Z" },
+      { startAt: "2026-08-25T04:00:00.000Z", endAt: "2026-08-25T05:00:00.000Z" }
+    ];
+    const input = {
+      items,
+      rangeStart: "2026-08-25T00:00:00.000Z",
+      rangeEnd: "2026-08-26T00:00:00.000Z",
+      trackWidth: 1_440
+    };
+
+    expect(timelineNearbyHitIndexes({ ...input, pointerX: 60.5 })).toEqual({
+      directIndex: null,
+      nearbyIndexes: [0, 1]
+    });
+    expect(timelineNearbyHitIndexes({ ...input, pointerX: 61.5 })).toEqual({
+      directIndex: null,
+      nearbyIndexes: [0, 1]
+    });
+    expect(timelineNearbyHitIndexes({ ...input, pointerX: 270 })).toEqual({
+      directIndex: 2,
+      nearbyIndexes: [2]
+    });
+
+    expect(
+      timelineNearbyHitIndexes({
+        ...input,
+        items: [
+          items[0],
+          {
+            startAt: "2026-08-25T01:02:00.000Z",
+            endAt: "2026-08-25T01:22:00.000Z"
+          }
+        ],
+        pointerX: 70
+      })
+    ).toEqual({ directIndex: null, nearbyIndexes: [0, 1] });
+
+    expect(
+      timelineNearbyHitIndexes({
+        ...input,
+        items: [
+          {
+            startAt: "2026-08-25T01:00:00.000Z",
+            endAt: "2026-08-25T01:20:00.000Z"
+          },
+          {
+            startAt: "2026-08-25T01:22:00.000Z",
+            endAt: "2026-08-25T01:42:00.000Z"
+          }
+        ],
+        pointerX: 79
+      })
+    ).toEqual({ directIndex: 0, nearbyIndexes: [0] });
+  });
+
   it("左键新增，右键或 Ctrl 加左键删除草稿", () => {
     expect(calendarDragAction({ button: 0, ctrlKey: false })).toBe("ADD");
     expect(calendarDragAction({ button: 0, ctrlKey: true })).toBe("ERASE");

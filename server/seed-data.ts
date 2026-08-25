@@ -215,6 +215,25 @@ async function seedDemoData(db: Database.Database, nowIso: Now) {
   insertReservation(db, users[0].id, atlas, gpuA, atHour(bookingDay, 9), atHour(bookingDay, 11, 30), "训练实验", now);
   insertReservation(db, users[1].id, atlas, gpuB, atHour(bookingDay, 13), atHour(bookingDay, 17), "推理验证", now);
   insertReservation(db, users[2].id, kunpeng, arm, atHour(bookingDay, 10, 30), atHour(bookingDay, 15), "编译验证", now);
+  [
+    [12, 30, 12, 31, "一分钟冒烟测试"],
+    [12, 32, 12, 33, "快速配置检查"],
+    [12, 34, 12, 36, "短时编译验证"],
+    [12, 37, 12, 38, "驱动探测"],
+    [12, 39, 12, 40, "环境确认"],
+    [12, 42, 12, 44, "密集短占用样例"]
+  ].forEach(([startHour, startMinute, endHour, endMinute, title]) => {
+    insertReservation(
+      db,
+      users[1].id,
+      nova,
+      quick,
+      atHour(bookingDay, Number(startHour), Number(startMinute)),
+      atHour(bookingDay, Number(endHour), Number(endMinute)),
+      String(title),
+      now
+    );
+  });
   insertReservation(db, users[1].id, nova, quick, atHour(bookingDay, 15), atHour(bookingDay, 18), "快速测试", now);
 }
 

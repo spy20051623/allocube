@@ -208,6 +208,7 @@ import {
   subtractBusyTimeRanges,
   splitDrafts,
   timelineDragAutoScrollDelta,
+  timelineNearbyHitIndexes,
   timelineWheelAction,
   advanceCalendarDrafts,
   type CalendarDraft,
@@ -278,6 +279,18 @@ type CalendarReservationTarget = {
   scope: "RESOURCE_GROUP" | "MACHINE";
   machineId: string;
   resourceGroupId: string;
+};
+
+type CalendarReservationDetail = {
+  item: TimelineReservation;
+  machineName: string;
+  groupName: string;
+  anchor: DOMRect;
+};
+
+type CalendarNearbyReservations = {
+  items: CalendarReservationDetail[];
+  anchor: DOMRect;
 };
 
 type CalendarDragState = {
@@ -5618,12 +5631,10 @@ function CalendarPage({
     at: string;
   } | null>(null);
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
-  const [reservationDetail, setReservationDetail] = useState<{
-    item: TimelineReservation;
-    machineName: string;
-    groupName: string;
-    anchor: DOMRect;
-  } | null>(null);
+  const [reservationDetail, setReservationDetail] =
+    useState<CalendarReservationDetail | null>(null);
+  const [nearbyReservations, setNearbyReservations] =
+    useState<CalendarNearbyReservations | null>(null);
   const [unavailabilityDetail, setUnavailabilityDetail] = useState<{
     item: ProjectedUnavailability;
     machineName: string;
@@ -6879,6 +6890,67 @@ function CalendarPage({
     writeCalendarRoute({ view: nextView, date: nextDate });
   };
 
+  const openTimelineReservation = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    clickedItem: TimelineReservation,
+    rowReservations: TimelineReservation[],
+    machineName: string,
+    resourceGroupName: string
+  ) => {
+    event.stopPropagation();
+    setUnavailabilityDetail(null);
+    const buttonRect = event.currentTarget.getBoundingClientRect();
+    const anchor =
+      event.detail === 0
+        ? buttonRect
+        : new DOMRect(event.clientX, event.clientY, 0, 0);
+    const detailFor = (item: TimelineReservation): CalendarReservationDetail => ({
+      item,
+      machineName,
+      groupName:
+        item.scope === "MACHINE"
+          ? `${machineName} · 整机`
+          : resourceGroupName,
+      anchor
+    });
+    if (event.detail === 0) {
+      setNearbyReservations(null);
+      setReservationDetail(detailFor(clickedItem));
+      return;
+    }
+
+    const track = event.currentTarget.closest<HTMLElement>(".time-track");
+    const trackRect = track?.getBoundingClientRect();
+    const candidates = rowReservations
+      .filter((item) => item.id !== editingReservation?.id)
+      .sort((left, right) => left.startAt.localeCompare(right.startAt));
+    if (!trackRect || trackRect.width <= 0) {
+      setNearbyReservations(null);
+      setReservationDetail(detailFor(clickedItem));
+      return;
+    }
+    const hit = timelineNearbyHitIndexes({
+      items: candidates,
+      rangeStart: range.from,
+      rangeEnd: range.to,
+      trackWidth: trackRect.width,
+      pointerX: event.clientX - trackRect.left
+    });
+    if (hit.directIndex !== null) {
+      setNearbyReservations(null);
+      setReservationDetail(detailFor(candidates[hit.directIndex]));
+      return;
+    }
+    const nearby = hit.nearbyIndexes.map((index) => detailFor(candidates[index]));
+    if (nearby.length > 1) {
+      setReservationDetail(null);
+      setNearbyReservations({ items: nearby, anchor });
+      return;
+    }
+    setNearbyReservations(null);
+    setReservationDetail(detailFor(nearby[0]?.item ?? clickedItem));
+  };
+
   const syncLabel = refreshing
     ? "正在更新"
     : connectionState === "CONNECTED"
@@ -7509,6 +7581,7 @@ function CalendarPage({
                             onClick={(event) => {
                               event.stopPropagation();
                               setReservationDetail(null);
+                              setNearbyReservations(null);
                               setUnavailabilityDetail({
                                 item,
                                 machineName: machine.name,
@@ -7545,20 +7618,14 @@ function CalendarPage({
                                   longTermDisabled ||
                                   item.id === editingReservation?.id
                                 ? undefined
-                                : (event) => {
-                                    event.stopPropagation();
-                                    setUnavailabilityDetail(null);
-                                    setReservationDetail({
+                                : (event) =>
+                                    openTimelineReservation(
+                                      event,
                                       item,
-                                      machineName: machine.name,
-                                      groupName:
-                                        item.scope === "MACHINE"
-                                          ? `${machine.name} · 整机`
-                                          : group.name,
-                                      anchor:
-                                        event.currentTarget.getBoundingClientRect()
-                                    });
-                                  }
+                                      visibleReservations,
+                                      machine.name,
+                                      group.name
+                                    )
                             }
                           >
                             <span className="booking-dot" />
@@ -7872,6 +7939,18 @@ function CalendarPage({
             onEdit={() =>
               void requestEditingReservation(reservationDetail.item)
             }
+          />,
+          document.body
+        )}
+      {nearbyReservations &&
+        createPortal(
+          <CalendarNearbyReservationsPopover
+            nearby={nearbyReservations}
+            onClose={() => setNearbyReservations(null)}
+            onSelect={(detail) => {
+              setNearbyReservations(null);
+              setReservationDetail(detail);
+            }}
           />,
           document.body
         )}
@@ -8365,7 +8444,7 @@ function CalendarWeekDayCell({
     const end = Math.min(to, new Date(endAt).getTime());
     return {
       left: `${((start - from) / (to - from)) * 100}%`,
-      width: `${Math.max(1.2, ((end - start) / (to - from)) * 100)}%`
+      width: `${Math.max(0, ((end - start) / (to - from)) * 100)}%`
     };
   };
 
@@ -8910,22 +8989,31 @@ function TimelineBar({
   const right = ((Math.min(to, endTime) - from) / (to - from)) * 100;
   const style = {
     left: `${left}%`,
-    width: `${Math.max(0.5, right - left)}%`
+    width: `${Math.max(0, right - left)}%`
   };
+  const visual = (
+    <span className={`timeline-bar-visual ${className}`}>
+      <span className="timeline-bar-content">{children}</span>
+    </span>
+  );
   if (onClick) {
     return (
       <button
         type="button"
-        className={className}
+        className={`timeline-bar-anchor ${className}`}
         style={style}
         onClick={onClick}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        {children}
+        {visual}
       </button>
     );
   }
-  return <div className={className} style={style}>{children}</div>;
+  return (
+    <div className={`timeline-bar-anchor passive ${className}`} style={style}>
+      {visual}
+    </div>
+  );
 }
 
 function formatTimelineDayPeriod(
@@ -9052,6 +9140,128 @@ function CalendarReservationMetadataFields({
   );
 }
 
+function CalendarNearbyReservationsPopover({
+  nearby,
+  onClose,
+  onSelect
+}: {
+  nearby: CalendarNearbyReservations;
+  onClose: () => void;
+  onSelect: (detail: CalendarReservationDetail) => void;
+}) {
+  const popoverRef = useRef<HTMLElement | null>(null);
+  const popoverWidth = 340;
+  const viewportPadding = 12;
+  const anchorGap = 8;
+  const estimatedHeight = Math.min(430, 82 + nearby.items.length * 57);
+  const preferredLeft = nearby.anchor.right + anchorGap;
+  const left =
+    preferredLeft + popoverWidth <= window.innerWidth - viewportPadding
+      ? preferredLeft
+      : Math.max(
+          viewportPadding,
+          nearby.anchor.left - popoverWidth - anchorGap
+        );
+  const top = Math.min(
+    Math.max(viewportPadding, nearby.anchor.top - 8),
+    Math.max(viewportPadding, window.innerHeight - estimatedHeight - viewportPadding)
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    const handleViewportChange = () => onClose();
+    const handleViewportScroll = (event: Event) => {
+      if (
+        event.target instanceof Node &&
+        popoverRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportScroll, true);
+    window.requestAnimationFrame(() => popoverRef.current?.focus());
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportScroll, true);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="reservation-popover-layer" onPointerDown={onClose}>
+      <article
+        ref={popoverRef}
+        className="reservation-popover nearby-reservations-popover"
+        role="dialog"
+        aria-label="选择附近占用"
+        tabIndex={-1}
+        style={{ left, top }}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <div className="reservation-popover-head">
+          <div>
+            <strong>附近有 {nearby.items.length} 条占用</strong>
+          </div>
+          <button
+            className="reservation-popover-action"
+            type="button"
+            aria-label="关闭"
+            title="关闭"
+            onClick={onClose}
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <p className="nearby-reservations-hint">请选择一条查看完整信息</p>
+        <div className="nearby-reservations-list">
+          {nearby.items.map((detail) => (
+            <button
+              type="button"
+              key={detail.item.id}
+              onClick={() => onSelect(detail)}
+            >
+              <span
+                className={`nearby-reservation-marker${
+                  detail.item.scope === "MACHINE" ? " machine-scope" : ""
+                }${detail.item.mine ? " mine" : ""}`}
+              />
+              <span className="nearby-reservation-copy">
+                <time>
+                  {formatChina(detail.item.startAt, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false
+                  })}
+                  –
+                  {formatChina(detail.item.endAt, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false
+                  })}
+                </time>
+                <strong>
+                  {detail.item.scope === "MACHINE" && "整机 · "}
+                  {detail.item.applicantName}
+                  {detail.item.applicantEmployeeNumber
+                    ? ` · ${detail.item.applicantEmployeeNumber}`
+                    : ""}
+                </strong>
+                {detail.item.title && <small>{detail.item.title}</small>}
+              </span>
+              <ChevronRight size={15} />
+            </button>
+          ))}
+        </div>
+      </article>
+    </div>
+  );
+}
+
 function CalendarReservationPopover({
   detail,
   currentTime,
@@ -9061,12 +9271,7 @@ function CalendarReservationPopover({
   onChanged,
   onEdit
 }: {
-  detail: {
-    item: TimelineReservation;
-    machineName: string;
-    groupName: string;
-    anchor: DOMRect;
-  };
+  detail: CalendarReservationDetail;
   currentTime: number;
   canManage: boolean;
   notify: (kind: "success" | "error", message: string) => void;

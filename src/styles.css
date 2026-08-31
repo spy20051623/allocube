@@ -257,10 +257,6 @@ a {
   gap: 18px;
 }
 
-.auth-panel-content-wide {
-  width: min(560px, 100%);
-}
-
 .auth-page-tools {
   min-height: 38px;
   display: flex;
@@ -276,10 +272,6 @@ a {
   border: 1px solid var(--line);
   background: white;
   box-shadow: 0 24px 80px rgba(22, 31, 50, .08);
-}
-
-.auth-card-wide {
-  width: min(560px, 100%);
 }
 
 .auth-docs-link {

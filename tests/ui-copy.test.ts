@@ -111,6 +111,20 @@ describe("角色化界面文案", () => {
     expect(source.match(/注册审核通过前请使用用户名登录。/g)).toHaveLength(1);
   });
 
+  it("认证页统一使用同一内容宽度", () => {
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const styles = readText(new URL("../src/styles.css", import.meta.url), "utf8");
+    const authLayout = source.slice(
+      source.indexOf("function AuthLayout"),
+      source.indexOf("function PageHeader")
+    );
+
+    expect(authLayout).not.toContain("wide");
+    expect(styles).toMatch(/\.auth-panel-content\s*\{[^}]*width:\s*min\(440px, 100%\)/s);
+    expect(styles).not.toContain(".auth-panel-content-wide");
+    expect(styles).not.toContain(".auth-card-wide");
+  });
+
   it("机器权限区域使用简洁列表名称和图标操作", () => {
     const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain('label: "资源管理"');
@@ -745,7 +759,7 @@ describe("角色化界面文案", () => {
     expect(source).toContain('className="auth-docs-link" href="/docs/getting-started"');
     expect(authLayout).toContain('className="auth-page-tools"');
     expect(authLayout.indexOf('className="auth-page-tools"')).toBeLessThan(
-      authLayout.indexOf('className={`auth-card')
+      authLayout.indexOf('className="auth-card"')
     );
     expect(authLayout).not.toContain(
       '<h2>{title}</h2>\n            <LanguageSwitcher />'

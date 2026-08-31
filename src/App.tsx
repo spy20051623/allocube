@@ -1159,11 +1159,9 @@ function AuthRouter({
 
 function AuthLayout({
   title,
-  wide = false,
   children
 }: {
   title: string;
-  wide?: boolean;
   children: React.ReactNode;
 }) {
   const [siteConfig, setSiteConfig] = useState<PublicSiteConfigPayload | null>(
@@ -1234,13 +1232,13 @@ function AuthLayout({
         )}
       </section>
       <section className="auth-panel">
-        <div className={`auth-panel-content${wide ? " auth-panel-content-wide" : ""}`}>
+        <div className="auth-panel-content">
           <div className="auth-page-tools">
             <a className="auth-docs-link" href="/docs/getting-started">
               <BookOpenText size={15} />{tr("帮助与文档")}</a>
             <LanguageSwitcher />
           </div>
-          <div className={`auth-card${wide ? " auth-card-wide" : ""}`}>
+          <div className="auth-card">
             <div className="auth-card-head">
               <span className="mini-mark"><Boxes size={18} /></span>
               <h2>{title}</h2>
@@ -2586,7 +2584,7 @@ function RegisterPage({
 
   if (successUsername) {
     return (
-      <AuthLayout title={tr("注册申请已提交")} wide>
+      <AuthLayout title={tr("注册申请已提交")}>
         <div className="registration-success">
           <div className="success-mark"><Check size={24} /></div>
           <p>{tr("注册审核通过前请使用用户名登录。")}</p>
@@ -2621,7 +2619,6 @@ function RegisterPage({
   return (
     <AuthLayout
       title={tr("用户注册")}
-      wide
     >
       <form onSubmit={submit} className="stack-form" noValidate>
         <RegistrationFieldShell

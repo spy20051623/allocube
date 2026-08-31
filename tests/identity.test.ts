@@ -53,7 +53,7 @@ async function requestCode(email: string) {
   const queued = dbModule.db
     .prepare(
       `SELECT html FROM email_outbox
-       WHERE to_email = ? AND subject = 'Allocube 注册验证码'
+       WHERE to_email = ? AND subject LIKE 'Allocube 注册验证码%'
        ORDER BY created_at DESC LIMIT 1`
     )
     .get(email) as { html: string };
@@ -1541,7 +1541,7 @@ describe("用户身份与审批生命周期", () => {
     const email = dbModule.db
       .prepare(
         `SELECT html FROM email_outbox
-         WHERE subject = '重置 Allocube 密码' ORDER BY created_at DESC LIMIT 1`
+         WHERE subject LIKE '重置 Allocube 密码%' ORDER BY created_at DESC LIMIT 1`
       )
       .get() as { html: string };
     expect(email.html).toContain("/reset-password#token=");
@@ -1736,7 +1736,7 @@ describe("用户身份与审批生命周期", () => {
       .prepare(
         `SELECT html FROM email_outbox
          WHERE to_email = 'changed@example.com'
-           AND subject = 'Allocube 邮箱验证码'
+           AND subject LIKE 'Allocube 邮箱验证码%'
          ORDER BY created_at DESC LIMIT 1`
       )
       .get() as { html: string };
@@ -1878,6 +1878,14 @@ describe("用户身份与审批生命周期", () => {
       headers: { cookie: userCookie }
     });
     expect(notifications.statusCode).toBe(200);
+    expect(
+      notifications
+        .json()
+        .notifications.every(
+          (item: { templateKey?: string; templateParams?: Record<string, unknown> }) =>
+            typeof item.templateKey === "string" && item.templateParams !== undefined
+        )
+    ).toBe(true);
     const unreadCount = await app.inject({
       method: "GET",
       url: "/api/v1/notifications/unread-count",
@@ -1945,7 +1953,7 @@ describe("用户身份与审批生命周期", () => {
       .prepare(
         `SELECT html FROM email_outbox
          WHERE to_email = 'latest-revision@example.com'
-           AND subject = 'Allocube 邮箱验证码'
+           AND subject LIKE 'Allocube 邮箱验证码%'
          ORDER BY created_at DESC LIMIT 1`
       )
       .get() as { html: string };
@@ -2275,7 +2283,7 @@ describe("用户身份与审批生命周期", () => {
     expect(
       dbModule.db
         .prepare(
-          "SELECT COUNT(*) AS count FROM email_outbox WHERE user_id = ? AND subject = ?"
+          "SELECT COUNT(*) AS count FROM email_outbox WHERE user_id = ? AND subject LIKE ?"
         )
         .get(created.userId, "可选占用邮件")
     ).toEqual({ count: 0 });
@@ -2303,9 +2311,53 @@ describe("用户身份与审批生命周期", () => {
     expect(
       dbModule.db
         .prepare(
-          "SELECT COUNT(*) AS count FROM email_outbox WHERE user_id = ? AND subject = ?"
+          "SELECT COUNT(*) AS count FROM email_outbox WHERE user_id = ? AND subject LIKE ?"
         )
-        .get(created.userId, "账号安全邮件")
+        .get(created.userId, "账号安全邮件%")
     ).toEqual({ count: 1 });
+  });
+
+  it("stores structured notification parameters and safely renders bilingual dynamic mail", async () => {
+    const created = await registerPending({
+      username: "structured-notice-user",
+      realName: "结构化通知用户",
+      employeeNumber: "10009124",
+      email: "structured-notice@example.com"
+    });
+    const { createNotification } = await import("../server/mailer.js");
+    const unsafeUsername = '<img src=x onerror="alert(1)">';
+    createNotification(
+      created.userId,
+      "USERNAME_CHANGED",
+      "用户名已修改",
+      `你的登录用户名已修改为 ${unsafeUsername}。`
+    );
+
+    const notification = dbModule.db
+      .prepare(
+        `SELECT template_key, template_params_json
+         FROM notifications WHERE user_id = ? AND type = 'USERNAME_CHANGED'
+         ORDER BY created_at DESC LIMIT 1`
+      )
+      .get(created.userId) as { template_key: string; template_params_json: string };
+    expect(notification.template_key).toMatch(
+      /^SYSTEM_MESSAGE_V1:SYSTEM_MESSAGE_[0-9A-F]{8}:SYSTEM_MESSAGE_[0-9A-F]{8}$/u
+    );
+    expect(JSON.parse(notification.template_params_json).body.params).toEqual({
+      v0: unsafeUsername
+    });
+
+    const email = dbModule.db
+      .prepare(
+        `SELECT subject, html FROM email_outbox
+         WHERE user_id = ? AND subject LIKE '用户名已修改 / %'
+         ORDER BY created_at DESC LIMIT 1`
+      )
+      .get(created.userId) as { subject: string; html: string };
+    expect(email.subject).toBe("用户名已修改 / Username modified");
+    expect(email.html).toContain(
+      "Your login username has been changed to &lt;img src=x onerror=&quot;alert(1)&quot;&gt;."
+    );
+    expect(email.html).not.toContain(unsafeUsername);
   });
 });

@@ -1,3 +1,4 @@
+import { tr } from "./i18n/index";
 import type {
   ReservationPreviewItem,
   ReservationSegmentInput
@@ -715,7 +716,7 @@ export function calendarDraftIssues(
 ) {
   const issues: string[] = [];
   if (new Set(drafts.map((draft) => draft.scope ?? "RESOURCE_GROUP")).size > 1) {
-    issues.push("整机占用和资源组占用不能同时提交");
+    issues.push(tr("整机占用和资源组占用不能同时提交"));
   }
   const grouped = new Map<string, CalendarDraft[]>();
   for (const draft of drafts) {
@@ -731,7 +732,7 @@ export function calendarDraftIssues(
     const sorted = [...bucket].sort((a, b) => a.startAt.localeCompare(b.startAt));
     for (let index = 1; index < sorted.length; index += 1) {
       if (sorted[index].startAt < sorted[index - 1].endAt) {
-        issues.push("同一占用目标存在重叠的草稿时段");
+        issues.push(tr("同一占用目标存在重叠的草稿时段"));
         break;
       }
     }
@@ -747,23 +748,23 @@ export function calendarDraftFieldIssues(
   const start = new Date(draft.startAt).getTime();
   const end = new Date(draft.endAt).getTime();
   if (!Number.isFinite(start)) {
-    return { startAt: "请输入有效的开始时间" };
+    return { startAt: tr("请输入有效的开始时间") };
   }
   if (!Number.isFinite(end) || end <= start) {
-    return { endAt: "结束时间必须晚于开始时间" };
+    return { endAt: tr("结束时间必须晚于开始时间") };
   }
   const issues: CalendarDraftFieldIssues = {};
   const minutes = (end - start) / 60_000;
   const currentMinute = Math.floor(now / 60_000) * 60_000;
   if (start < currentMinute) {
-    issues.startAt = "不能占用已经过去的时间";
+    issues.startAt = tr("不能占用已经过去的时间");
   }
   if (minutes < rules.minBookingMinutes) {
-    issues.endAt = `占用时间至少需要 ${rules.minBookingMinutes} 分钟`;
+    issues.endAt = tr("占用时间至少需要 {{v0}} 分钟", { v0: rules.minBookingMinutes });
   } else if (minutes > rules.maxBookingMinutes) {
-    issues.endAt = `单次占用最长 ${rules.maxBookingMinutes} 分钟`;
+    issues.endAt = tr("单次占用最长 {{v0}} 分钟", { v0: rules.maxBookingMinutes });
   } else if (end > now + rules.advanceDays * 24 * 60 * 60_000) {
-    issues.endAt = `占用结束时间不能超过未来 ${rules.advanceDays} 天`;
+    issues.endAt = tr("占用结束时间不能超过未来 {{v0}} 天", { v0: rules.advanceDays });
   }
   return issues;
 }

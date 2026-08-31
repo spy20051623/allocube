@@ -1,3 +1,4 @@
+import { tr } from "./i18n/index";
 export type CatalogAccessState =
   | "ADMIN"
   | "USER"
@@ -13,38 +14,38 @@ export function resolveCatalogAccessDisplay(input: {
   hasPendingRequest: boolean;
 }): {
   state: CatalogAccessState;
-  label: "管理员" | "使用者" | "审核中" | "无权限";
+  label: string;
   action: CatalogAccessAction;
-  actionLabel: "申请" | "撤回" | "退出" | null;
+  actionLabel: string | null;
 } {
   if (input.userRole === "SYSTEM_ADMIN" || input.isManager) {
     return {
       state: "ADMIN",
-      label: "管理员",
+      label: tr("管理员"),
       action: input.userRole === "SYSTEM_ADMIN" ? null : "EXIT",
-      actionLabel: input.userRole === "SYSTEM_ADMIN" ? null : "退出"
+      actionLabel: input.userRole === "SYSTEM_ADMIN" ? null : tr("退出")
     };
   }
   if (input.hasAccess) {
     return {
       state: "USER",
-      label: "使用者",
+      label: tr("使用者"),
       action: "EXIT",
-      actionLabel: "退出"
+      actionLabel: tr("退出")
     };
   }
   if (input.hasPendingRequest) {
     return {
       state: "PENDING",
-      label: "审核中",
+      label: tr("审核中"),
       action: "WITHDRAW",
-      actionLabel: "撤回"
+      actionLabel: tr("撤回")
     };
   }
   return {
     state: "NO_ACCESS",
-    label: "无权限",
+    label: tr("无权限"),
     action: "APPLY",
-    actionLabel: "申请"
+    actionLabel: tr("申请")
   };
 }

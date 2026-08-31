@@ -119,7 +119,7 @@ function decodeCursor<T>(value: string | undefined, schema: z.ZodType<T>): T | n
   try {
     return schema.parse(JSON.parse(Buffer.from(value, "base64url").toString("utf8")));
   } catch {
-    throw new OpenApiError(400, "INVALID_REQUEST", "分页游标无效");
+    throw new OpenApiError(400, "INVALID_REQUEST", "Pagination cursor is invalid");
   }
 }
 
@@ -130,17 +130,17 @@ function requireOpenAuth(
 ) {
   const auth = authenticateApiToken(request);
   if (!auth) {
-    throw new OpenApiError(401, "UNAUTHENTICATED", "个人访问令牌无效、已到期或已吊销");
+    throw new OpenApiError(401, "UNAUTHENTICATED", "Personal access token is invalid, expired, or revoked");
   }
   if (requiredAccess === "READ_WRITE" && auth.token.accessLevel !== "READ_WRITE") {
-    throw new OpenApiError(403, "INSUFFICIENT_SCOPE", "此操作需要读写令牌");
+    throw new OpenApiError(403, "INSUFFICIENT_SCOPE", "This operation requires a read-write token");
   }
   const overall = overallLimiter.check(`open:${auth.token.id}`, {
     max: 120,
     windowMs: 60_000
   });
   if (!overall.allowed) {
-    throw new OpenApiError(429, "RATE_LIMITED", "请求过于频繁", {
+    throw new OpenApiError(429, "RATE_LIMITED", "Too many requests", {
       retryAfterSeconds: overall.retryAfterSeconds
     });
   }
@@ -150,7 +150,7 @@ function requireOpenAuth(
       windowMs: 60_000
     });
     if (!operations.allowed) {
-      throw new OpenApiError(429, "RATE_LIMITED", "占用操作过于频繁", {
+      throw new OpenApiError(429, "RATE_LIMITED", "Too many reservation operations", {
         retryAfterSeconds: operations.retryAfterSeconds
       });
     }
@@ -162,7 +162,7 @@ function requireOpenAuth(
 function ensureMachineAccess(auth: ApiTokenAuth, machineId: string) {
   const accessible = new Set(getAccessibleMachineIds(auth.user.id, auth.user.role));
   if (!accessible.has(machineId)) {
-    throw new OpenApiError(403, "FORBIDDEN", "你没有这台机器的使用权限");
+    throw new OpenApiError(403, "FORBIDDEN", "You do not have access to this machine");
   }
 }
 
@@ -205,7 +205,7 @@ function mapOwnReservation(row: Record<string, unknown>) {
     machineId: row.machine_id,
     machineName: row.machine_name,
     resourceGroupId: row.resource_group_id,
-    resourceGroupName: row.scope === "MACHINE" ? "整机" : row.resource_group_name,
+    resourceGroupName: row.scope === "MACHINE" ? "Entire machine" : row.resource_group_name,
     startAt: row.start_at,
     endAt: row.end_at,
     initialStartAt: row.initial_start_at,
@@ -289,7 +289,7 @@ function executePreparedOperation(
     if (!operation) {
       return {
         kind: "ERROR",
-        error: new OpenApiError(404, "NOT_FOUND", "确认令牌不存在")
+        error: new OpenApiError(404, "NOT_FOUND", "Confirmation token not found")
       };
     }
     if (operation.status === "COMMITTED" && operation.result_json) {
@@ -307,7 +307,7 @@ function executePreparedOperation(
         error: new OpenApiError(
           409,
           "OPERATION_REJECTED",
-          "此预检操作已经失效，请重新预检",
+          "This preflight has expired. Run the preflight again.",
           { rejectionCode: operation.rejection_code }
         )
       };
@@ -320,7 +320,7 @@ function executePreparedOperation(
       ).run(operation.id);
       return {
         kind: "ERROR",
-        error: new OpenApiError(410, "OPERATION_EXPIRED", "确认令牌已经过期，请重新预检")
+        error: new OpenApiError(410, "OPERATION_EXPIRED", "Confirmation token has expired. Run the preflight again.")
       };
     }
     const prepared = prepareOperationSchema.parse(
@@ -399,7 +399,7 @@ function executePreparedOperation(
         error: new OpenApiError(
           409,
           "OPERATION_REJECTED",
-          "资源或占用状态已经变化，请重新预检",
+          "Resource or reservation status has changed. Run the preflight again.",
           error instanceof BusinessError ? error.details : error.issues
         )
       };
@@ -474,7 +474,7 @@ export function registerOpenApiRoutes(
           )
         : -1;
       if (cursor && cursorIndex < 0) {
-        throw new OpenApiError(400, "INVALID_REQUEST", "分页游标已经失效");
+        throw new OpenApiError(400, "INVALID_REQUEST", "Pagination cursor has expired");
       }
       const start = cursor ? cursorIndex + 1 : 0;
       const page = all.slice(start, start + query.limit);
@@ -521,7 +521,7 @@ export function registerOpenApiRoutes(
           ? rows.findIndex((row) => String(row.id) === cursor.id)
           : -1;
         if (cursor && cursorIndex < 0) {
-          throw new OpenApiError(400, "INVALID_REQUEST", "分页游标已经失效");
+          throw new OpenApiError(400, "INVALID_REQUEST", "Pagination cursor has expired");
         }
         const start = cursor ? cursorIndex + 1 : 0;
         const page = rows.slice(start, start + query.limit);
@@ -551,7 +551,7 @@ export function registerOpenApiRoutes(
         .parse(request.query);
       const range = new Date(query.to).getTime() - new Date(query.from).getTime();
       if (range <= 0 || range > 8 * 24 * 60 * 60 * 1000) {
-        throw new OpenApiError(400, "INVALID_REQUEST", "排期范围必须大于 0 且不超过 8 天");
+        throw new OpenApiError(400, "INVALID_REQUEST", "Scheduling range must be greater than 0 and not exceed 8 days");
       }
       const accessibleIds = getAccessibleMachineIds(auth.user.id, auth.user.role);
       const accessibleSet = new Set(accessibleIds);
@@ -564,14 +564,14 @@ export function registerOpenApiRoutes(
         requestedIds.some((id) => !z.string().uuid().safeParse(id).success) ||
         requestedIds.length > 100
       ) {
-        throw new OpenApiError(400, "INVALID_REQUEST", "机器筛选条件无效");
+        throw new OpenApiError(400, "INVALID_REQUEST", "Invalid machine filter");
       }
       if (requestedIds.some((id) => !accessibleSet.has(id))) {
-        throw new OpenApiError(403, "FORBIDDEN", "你没有所请求机器的使用权限");
+        throw new OpenApiError(403, "FORBIDDEN", "You do not have access to one or more requested machines");
       }
       const selectedIds = requestedIds.length ? requestedIds : accessibleIds;
       if (selectedIds.length > 100) {
-        throw new OpenApiError(400, "INVALID_REQUEST", "机器数量超过 100，请明确指定 machineIds");
+        throw new OpenApiError(400, "INVALID_REQUEST", "More than 100 machines match; specify machineIds");
       }
       if (!selectedIds.length) {
         return success(
@@ -680,7 +680,7 @@ export function registerOpenApiRoutes(
         query.to &&
         new Date(query.to).getTime() <= new Date(query.from).getTime()
       ) {
-        throw new OpenApiError(400, "INVALID_REQUEST", "to 必须晚于 from");
+        throw new OpenApiError(400, "INVALID_REQUEST", "to must be later than from");
       }
       const where = ["r.user_id = ?"];
       const params: unknown[] = [auth.user.id];
@@ -728,7 +728,7 @@ export function registerOpenApiRoutes(
       const row = db
         .prepare(`${reservationSelect()} WHERE r.id = ? AND r.user_id = ?`)
         .get(id, auth.user.id) as Record<string, unknown> | undefined;
-      if (!row) throw new OpenApiError(404, "NOT_FOUND", "占用记录不存在");
+      if (!row) throw new OpenApiError(404, "NOT_FOUND", "Reservation not found");
       reply.header("X-RateLimit-Limit", "120");
       return success({ reservation: mapOwnReservation(row) });
     });
@@ -801,13 +801,13 @@ export function registerOpenApiRoutes(
     );
 
     openApp.all(`${OPEN_API_PREFIX}/*`, async () => {
-      throw new OpenApiError(404, "NOT_FOUND", "接口不存在");
+      throw new OpenApiError(404, "NOT_FOUND", "Endpoint not found");
     });
 
     openApp.setErrorHandler((error, request, reply) => {
       let statusCode = 500;
       let code: OpenApiErrorCode = "INTERNAL_ERROR";
-      let message = "服务器处理失败";
+      let message = "Server processing failed";
       let details: unknown;
       if (error instanceof OpenApiError) {
         statusCode = error.statusCode;
@@ -824,12 +824,19 @@ export function registerOpenApiRoutes(
               : statusCode === 409
                 ? "CONFLICT"
                 : "INVALID_REQUEST";
-        message = error.message;
+        message =
+          statusCode === 403
+            ? "This token cannot perform this operation"
+            : statusCode === 404
+              ? "Requested resource not found"
+              : statusCode === 409
+                ? "The request conflicts with the current resource state"
+                : "The request does not satisfy the business rules";
         details = error.details;
       } else if (error instanceof z.ZodError) {
         statusCode = 400;
         code = "INVALID_REQUEST";
-        message = "请求参数不符合接口约定";
+        message = "Request parameters do not match the API specification";
         details = error.issues.map((issue) => ({
           path: issue.path.join("."),
           message: issue.message
@@ -843,7 +850,7 @@ export function registerOpenApiRoutes(
         ) {
           statusCode = typed.statusCode;
           code = "INVALID_REQUEST";
-          message = typeof typed.message === "string" ? typed.message : "请求无效";
+          message = typeof typed.message === "string" ? typed.message : "Invalid request";
         } else {
           openApp.log.error(error);
         }

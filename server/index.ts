@@ -38,6 +38,18 @@ import {
   SourceRateLimiter,
   type SourceRateLimitPolicy
 } from "./source-rate-limit.js";
+import serverEnglish from "../src/i18n/server-en.json" with { type: "json" };
+import { createSystemMessageCatalog } from "../src/shared/system-message.js";
+
+const systemMessages = createSystemMessageCatalog(serverEnglish);
+
+function fieldErrorCodes(value: unknown): unknown {
+  if (typeof value === "string") {
+    return systemMessages.resolve(value)?.code ?? "VALIDATION_ERROR";
+  }
+  if (Array.isArray(value)) return value.map(fieldErrorCodes);
+  return "VALIDATION_ERROR";
+}
 
 validateRuntimeConfig();
 if (config.instanceSecretsCreatedForExistingDatabase) {
@@ -166,6 +178,40 @@ app.addHook("onSend", async (request, reply, payload) => {
   );
   if (request.url.startsWith("/api/")) {
     reply.header("Cache-Control", "no-store");
+  }
+  const pathname = request.url.split("?")[0];
+  if (
+    reply.statusCode >= 400 &&
+    pathname.startsWith("/api/v1/") &&
+    !pathname.startsWith("/api/open/v1/") &&
+    typeof payload === "string"
+  ) {
+    try {
+      const body = JSON.parse(payload) as Record<string, unknown>;
+      if (typeof body.error === "string" || typeof body.message === "string") {
+        const message = typeof body.error === "string" ? body.error : body.message as string;
+        const resolved = systemMessages.resolve(message);
+        const code = typeof body.code === "string"
+          ? body.code
+          : body.fieldErrors
+            ? "VALIDATION_ERROR"
+            : resolved?.code ?? "REQUEST_REJECTED";
+        body.code = code;
+        body.params ??= resolved?.params ?? {};
+        body.messageCode ??= resolved?.code ?? `errors.${code.toLocaleLowerCase()}`;
+        if (body.fieldErrors && !body.fieldErrorCodes) {
+          body.fieldErrorCodes = Object.fromEntries(
+            Object.entries(body.fieldErrors as Record<string, unknown>).map(([field, errors]) => [
+              field,
+              fieldErrorCodes(errors)
+            ])
+          );
+        }
+        return JSON.stringify(body);
+      }
+    } catch {
+      // Non-JSON responses are passed through unchanged.
+    }
   }
   return payload;
 });

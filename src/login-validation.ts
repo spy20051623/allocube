@@ -1,3 +1,4 @@
+import { tr } from "./i18n/index";
 import {
   EMPLOYEE_NUMBER_MESSAGE,
   isEmployeeNumberValid
@@ -14,18 +15,18 @@ export function validateLoginField(
   password: string
 ) {
   if (field === "password") {
-    return password.length === 0 ? "请输入密码" : null;
+    return password.length === 0 ? tr("请输入密码") : null;
   }
 
   if (!identifier.trim()) {
-    return identifierType === "USERNAME" ? "请输入用户名" : "请输入工号";
+    return identifierType === "USERNAME" ? tr("请输入用户名") : tr("请输入工号");
   }
 
   if (
     identifierType === "EMPLOYEE_NUMBER" &&
     !isEmployeeNumberValid(identifier)
   ) {
-    return EMPLOYEE_NUMBER_MESSAGE;
+    return tr(EMPLOYEE_NUMBER_MESSAGE);
   }
 
   return null;

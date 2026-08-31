@@ -1,3 +1,4 @@
+import { tr } from "./i18n/index";
 export type ResourcePoolDraftInput = {
   id: string;
   name: string;
@@ -74,19 +75,19 @@ export function resourceTagDraftIssue(tags: string[], input = "") {
     normalizedTags.length > 30 ||
     normalizedTags.some((tag) => !tag || tag.length > 40)
   ) {
-    return "标签最多 30 个，每个应为 1–40 个字符";
+    return tr("标签最多 30 个，每个应为 1–40 个字符");
   }
   if (uniqueTags.size !== normalizedTags.length) {
-    return "标签不能重复";
+    return tr("标签不能重复");
   }
   const pendingTag = input.trim();
   if (!pendingTag) return "";
-  if (tags.length >= 30) return "标签最多 30 个";
+  if (tags.length >= 30) return tr("标签最多 30 个");
   if (uniqueTags.has(pendingTag.toLocaleLowerCase())) {
-    return "该标签已经存在";
+    return tr("该标签已经存在");
   }
-  if (pendingTag.length > 40) return "标签不能超过 40 个字符";
-  return "按回车或点击添加当前标签";
+  if (pendingTag.length > 40) return tr("标签不能超过 40 个字符");
+  return tr("按回车或点击添加当前标签");
 }
 
 function hasAtMostThreeDecimals(value: number) {
@@ -123,7 +124,7 @@ export function validateResourceConfigurationDraft(
         target: "POOL",
         poolId: pool.id,
         field: "name",
-        message: "资源项名称应为 1–80 个字符"
+        message: tr("资源项名称应为 1–80 个字符")
       });
     } else {
       const normalized = name.toLocaleLowerCase();
@@ -135,7 +136,7 @@ export function validateResourceConfigurationDraft(
         target: "POOL",
         poolId: pool.id,
         field: "unit",
-        message: "单位应为 1–20 个字符"
+        message: tr("单位应为 1–20 个字符")
       });
     }
     if (pool.description.length > 2000) {
@@ -143,7 +144,7 @@ export function validateResourceConfigurationDraft(
         target: "POOL",
         poolId: pool.id,
         field: "description",
-        message: "说明不能超过 2000 个字符"
+        message: tr("说明不能超过 2000 个字符")
       });
     }
     if (
@@ -155,7 +156,7 @@ export function validateResourceConfigurationDraft(
         target: "POOL",
         poolId: pool.id,
         field: "sortOrder",
-        message: "排序应为 0–10000 的整数"
+        message: tr("排序应为 0–10000 的整数")
       });
     }
 
@@ -170,7 +171,7 @@ export function validateResourceConfigurationDraft(
           target: "POOL",
           poolId: pool.id,
           field: "range",
-          message: "编号范围必须是非负整数，且结束编号不能小于起始编号"
+          message: tr("编号范围必须是非负整数，且结束编号不能小于起始编号")
         });
       }
     } else if (pool.kind === "CAPACITY") {
@@ -184,7 +185,7 @@ export function validateResourceConfigurationDraft(
           target: "POOL",
           poolId: pool.id,
           field: "capacity",
-          message: "容量必须大于 0，并且最多保留三位小数"
+          message: tr("容量必须大于 0，并且最多保留三位小数")
         });
       }
     } else {
@@ -193,7 +194,7 @@ export function validateResourceConfigurationDraft(
           target: "POOL",
           poolId: pool.id,
           field: "items",
-          message: "设备列表至少需要一项设备"
+          message: tr("设备列表至少需要一项设备")
         });
       }
       const itemKeys = new Map<string, number>();
@@ -205,7 +206,7 @@ export function validateResourceConfigurationDraft(
             target: "POOL",
             poolId: pool.id,
             field: "items",
-            message: "每项设备都需要合法的标识和名称"
+            message: tr("每项设备都需要合法的标识和名称")
           });
         }
         const normalizedKey = key.toLocaleLowerCase();
@@ -216,7 +217,7 @@ export function validateResourceConfigurationDraft(
             target: "POOL",
             poolId: pool.id,
             field: "items",
-            message: "设备内部标识重复，请删除后重新添加"
+            message: tr("设备内部标识重复，请删除后重新添加")
           });
         }
         allItemIds.set(item.id, pool.id);
@@ -226,7 +227,7 @@ export function validateResourceConfigurationDraft(
           target: "POOL",
           poolId: pool.id,
           field: "items",
-          message: "同一资源项中的设备标识不能重复"
+          message: tr("同一资源项中的设备标识不能重复")
         });
       }
     }
@@ -239,7 +240,7 @@ export function validateResourceConfigurationDraft(
         target: "POOL",
         poolId: pool.id,
         field: "name",
-        message: "资源项名称不能重复"
+        message: tr("资源项名称不能重复")
       });
     }
   }
@@ -270,7 +271,7 @@ export function validateResourceConfigurationDraft(
         target: "GROUP",
         groupId: group.id,
         field: "name",
-        message: "资源组名称应为 1–80 个字符"
+        message: tr("资源组名称应为 1–80 个字符")
       });
     } else {
       const normalized = name.toLocaleLowerCase();
@@ -281,7 +282,7 @@ export function validateResourceConfigurationDraft(
         target: "GROUP",
         groupId: group.id,
         field: "description",
-        message: "说明不能超过 2000 个字符"
+        message: tr("说明不能超过 2000 个字符")
       });
     }
     if (
@@ -296,7 +297,7 @@ export function validateResourceConfigurationDraft(
         target: "GROUP",
         groupId: group.id,
         field: "sortOrder",
-        message: "排序应为 0–10000 的整数"
+        message: tr("排序应为 0–10000 的整数")
       });
     }
     const tagIssue = resourceTagDraftIssue(
@@ -316,7 +317,7 @@ export function validateResourceConfigurationDraft(
         target: "GROUP",
         groupId: group.id,
         field: "allocations",
-        message: "资源组至少需要分配一项资源"
+        message: tr("资源组至少需要分配一项资源")
       });
     }
 
@@ -335,22 +336,22 @@ export function validateResourceConfigurationDraft(
           message
         });
       if (allocatedPoolIds.has(allocation.poolId)) {
-        allocationIssue("allocation", "同一资源组不能重复分配同一资源项");
+        allocationIssue("allocation", tr("同一资源组不能重复分配同一资源项"));
       }
       allocatedPoolIds.add(allocation.poolId);
       const pool = poolById.get(allocation.poolId);
       if (!pool) {
-        allocationIssue("allocation", "该资源项已经不存在");
+        allocationIssue("allocation", tr("该资源项已经不存在"));
         continue;
       }
       if (pool.kind !== allocation.kind) {
-        allocationIssue("allocation", "资源项的分配方式不匹配");
+        allocationIssue("allocation", tr("资源项的分配方式不匹配"));
         continue;
       }
 
       if (allocation.kind === "INDEX_RANGE" && pool.kind === "INDEX_RANGE") {
         if (!allocation.ranges.length) {
-          allocationIssue("ranges", "至少需要一个编号区间");
+          allocationIssue("ranges", tr("至少需要一个编号区间"));
           continue;
         }
         const ranges = [...allocation.ranges].sort(
@@ -367,12 +368,12 @@ export function validateResourceConfigurationDraft(
           ) {
             allocationIssue(
               "ranges",
-              `${pool.name} 的编号必须位于 ${pool.rangeStart}–${pool.rangeEnd}`
+              tr("{{v0}} 的编号必须位于 {{v1}}–{{v2}}", { v0: pool.name, v1: pool.rangeStart, v2: pool.rangeEnd })
             );
             continue;
           }
           if (index > 0 && ranges[index - 1].end >= range.start) {
-            allocationIssue("ranges", "同一资源组内存在重叠的编号区间");
+            allocationIssue("ranges", tr("同一资源组内存在重叠的编号区间"));
           }
           const claims = rangeClaims.get(pool.id) ?? [];
           if (pool.sharingMode !== "SHARED") {
@@ -381,21 +382,21 @@ export function validateResourceConfigurationDraft(
               if (claim.start <= range.end && claim.end >= range.start) {
                 allocationIssue(
                   "ranges",
-                  `与 ${claim.groupName} 的 ${claim.start}–${claim.end} 重叠`
+                  tr("与 {{v0}} 的 {{v1}}–{{v2}} 重叠", { v0: claim.groupName, v1: claim.start, v2: claim.end })
                 );
                 push({
                   target: "ALLOCATION",
                   poolId: pool.id,
                   groupId: claim.groupId,
                   field: "ranges",
-                  message: `与 ${group.name || "未命名资源组"} 的 ${range.start}–${range.end} 重叠`
+                  message: tr("与 {{v0}} 的 {{v1}}–{{v2}} 重叠", { v0: group.name || "未命名资源组", v1: range.start, v2: range.end })
                 });
               }
             }
           }
           claims.push({
             groupId: group.id,
-            groupName: group.name || "未命名资源组",
+            groupName: group.name || tr("未命名资源组"),
             start: range.start,
             end: range.end
           });
@@ -406,15 +407,15 @@ export function validateResourceConfigurationDraft(
         pool.kind === "ITEM_LIST"
       ) {
         if (!allocation.itemIds.length) {
-          allocationIssue("items", "至少需要选择一项设备");
+          allocationIssue("items", tr("至少需要选择一项设备"));
         }
         if (new Set(allocation.itemIds).size !== allocation.itemIds.length) {
-          allocationIssue("items", "同一设备不能重复选择");
+          allocationIssue("items", tr("同一设备不能重复选择"));
         }
         for (const itemId of allocation.itemIds) {
           const item = pool.items.find((candidate) => candidate.id === itemId);
           if (!item) {
-            allocationIssue("items", "包含已经不存在的设备");
+            allocationIssue("items", tr("包含已经不存在的设备"));
             continue;
           }
           const claim = itemClaims.get(itemId);
@@ -425,19 +426,19 @@ export function validateResourceConfigurationDraft(
           ) {
             allocationIssue(
               "items",
-              `${item.key} 已分配给 ${claim.groupName}`
+              tr("{{v0}} 已分配给 {{v1}}", { v0: item.key, v1: claim.groupName })
             );
             push({
               target: "ALLOCATION",
               poolId: claim.poolId,
               groupId: claim.groupId,
               field: "items",
-              message: `${item.key} 同时分配给了 ${group.name || "未命名资源组"}`
+              message: tr("{{v0}} 同时分配给了 {{v1}}", { v0: item.key, v1: group.name || "未命名资源组" })
             });
           } else if (pool.sharingMode !== "SHARED") {
             itemClaims.set(itemId, {
               groupId: group.id,
-              groupName: group.name || "未命名资源组",
+              groupName: group.name || tr("未命名资源组"),
               poolId: pool.id
             });
           }
@@ -456,7 +457,7 @@ export function validateResourceConfigurationDraft(
         ) {
           allocationIssue(
             "capacity",
-            "分配数量必须大于 0，并且最多保留三位小数"
+            tr("分配数量必须大于 0，并且最多保留三位小数")
           );
         }
         if (pool.sharingMode !== "SHARED") {
@@ -476,7 +477,7 @@ export function validateResourceConfigurationDraft(
         target: "GROUP",
         groupId: group.id,
         field: "name",
-        message: "资源组名称不能重复"
+        message: tr("资源组名称不能重复")
       });
     }
   }
@@ -496,7 +497,7 @@ export function validateResourceConfigurationDraft(
         poolId,
         groupId: claim.groupId,
         field: "capacity",
-        message: `分配总量 ${total} ${pool.unit} 超过可用容量 ${pool.capacity} ${pool.unit}`
+        message: tr("分配总量 {{v0}} {{v1}} 超过可用容量 {{v2}} {{v3}}", { v0: total, v1: pool.unit, v2: pool.capacity, v3: pool.unit })
       });
     }
   }

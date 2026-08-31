@@ -212,6 +212,8 @@ export interface NotificationItem {
   type: string;
   title: string;
   body: string;
+  templateKey: string | null;
+  templateParams: Record<string, unknown> | null;
   link: string;
   entityType: string | null;
   entityId: string | null;

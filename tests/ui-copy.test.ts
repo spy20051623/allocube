@@ -2,16 +2,25 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   auditActionLabel,
+  reservationStatusClass,
   reservationStatusLabel,
   resourceGroupStatusLabel,
   userStatusLabel
 } from "../src/ui-copy.js";
 
+function readText(path: fs.PathOrFileDescriptor | URL, encoding: BufferEncoding) {
+  return fs
+    .readFileSync(path, encoding)
+    .replace(/=\{tr\("((?:\\.|[^"\\])*)"\)\}/g, (_match, value: string) => `="${JSON.parse(`"${value}"`)}"`)
+    .replace(/\{tr\("((?:\\.|[^"\\])*)"\)\}/g, (_match, value: string) => JSON.parse(`"${value}"`))
+    .replace(/tr\("((?:\\.|[^"\\])*)"\)/g, (_match, value: string) => JSON.stringify(JSON.parse(`"${value}"`)));
+}
+
 describe("角色化界面文案", () => {
   it("把内部状态统一映射为中文任务语言", () => {
     expect(userStatusLabel("PENDING_APPROVAL")).toBe("等待审核");
-    expect(resourceGroupStatusLabel("ACTIVE")).toBe("启用");
-    expect(resourceGroupStatusLabel("DISABLED")).toBe("停用");
+    expect(resourceGroupStatusLabel("ACTIVE")).toBe("已启用");
+    expect(resourceGroupStatusLabel("DISABLED")).toBe("已停用");
     expect(
       reservationStatusLabel(
         "CONFIRMED",
@@ -37,8 +46,36 @@ describe("角色化界面文案", () => {
     expect(auditActionLabel("UNKNOWN")).toBe("其他系统操作");
   });
 
+  it("预约状态样式只依赖稳定状态和值，不依赖当前语言", () => {
+    const now = Date.parse("2026-08-31T08:00:00.000Z");
+    expect(
+      reservationStatusClass(
+        "CONFIRMED",
+        "2026-08-31T09:00:00.000Z",
+        "2026-08-31T10:00:00.000Z",
+        now
+      )
+    ).toBe("upcoming");
+    expect(
+      reservationStatusClass(
+        "CONFIRMED",
+        "2026-08-31T07:00:00.000Z",
+        "2026-08-31T09:00:00.000Z",
+        now
+      )
+    ).toBe("active");
+    expect(
+      reservationStatusClass(
+        "CANCELLED",
+        "2026-08-31T09:00:00.000Z",
+        "2026-08-31T10:00:00.000Z",
+        now
+      )
+    ).toBe("cancelled");
+  });
+
   it("普通界面不出现开发实现术语", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     for (const forbidden of [
       "首个工号",
       "永久用户 ID",
@@ -52,7 +89,7 @@ describe("角色化界面文案", () => {
   });
 
   it("登录页只保留必要提示，并把待审规则放在注册流程", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     for (const redundant of [
       "欢迎回来",
       "登录后查看今天的资源安排",
@@ -75,7 +112,7 @@ describe("角色化界面文案", () => {
   });
 
   it("机器权限区域使用简洁列表名称和图标操作", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain('label: "资源管理"');
     expect(source).toContain('label: "用户管理"');
     expect(source).not.toContain('label: "机器与资源组"');
@@ -104,8 +141,8 @@ describe("角色化界面文案", () => {
   });
 
   it("机器简短信息与功能页签共用同一顶部栏", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const styles = readText(new URL("../src/styles.css", import.meta.url), "utf8");
     const contextStart = source.indexOf('className="machine-context-bar card"');
     const contentStart = source.indexOf(
       'className="machine-section-content"',
@@ -123,8 +160,8 @@ describe("角色化界面文案", () => {
   });
 
   it("机器编辑浮窗采用紧凑分组并移除冗余提示", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const styles = readText(new URL("../src/styles.css", import.meta.url), "utf8");
     expect(source).toContain('machine ? "编辑机器" : "新增机器"');
     expect(source).toContain('className="machine-form-public-notes"');
     expect(source).toContain("硬件说明（用户可见）");
@@ -142,7 +179,7 @@ describe("角色化界面文案", () => {
   });
 
   it("用户管理把正式用户和两类审批申请分开呈现", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain('className="user-management-sections"');
     expect(source).toContain('className="card panel-card user-list-panel"');
     expect(source).toContain('className="card panel-card user-application-panel"');
@@ -173,8 +210,8 @@ describe("角色化界面文案", () => {
   });
 
   it("管理页面优先展示申请并隐藏空申请表格", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const styles = readText(new URL("../src/styles.css", import.meta.url), "utf8");
     expect(source).toContain("{canManage && access.requests.length > 0 && (");
     expect(source).toContain("{applications.length > 0 && (");
     expect(source).not.toContain("暂无待处理申请");
@@ -185,12 +222,12 @@ describe("角色化界面文案", () => {
   });
 
   it("维护统一管理，资源组支持停用、恢复和彻底删除", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    const calendarUnavailability = fs.readFileSync(
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const calendarUnavailability = readText(
       new URL("../src/calendar-unavailability.ts", import.meta.url),
       "utf8"
     );
-    const server = fs.readFileSync(new URL("../server/routes-admin.ts", import.meta.url), "utf8");
+    const server = readText(new URL("../server/routes-admin.ts", import.meta.url), "utf8");
     expect(source).toContain('title="重新启用"');
     expect(source).toContain('title="永久删除"');
     expect(source).toContain("/enable");
@@ -212,17 +249,17 @@ describe("角色化界面文案", () => {
     expect(server).toContain("resource_unavailability");
   });
 
-  it("机器和资源组状态标签只使用启用、停用和维护", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  it("机器和资源组状态标签只使用已启用、已停用和维护", () => {
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).not.toContain('"维护中"');
     expect(source).not.toContain(">整机停用</span>");
     expect(source).toContain('? "维护"');
-    expect(source).toContain('? "停用"');
-    expect(source).toContain(': "启用"');
+    expect(source).toContain('? "已停用"');
+    expect(source).toContain(': "已启用"');
   });
 
   it("资源管理顶部机器栏不重复显示状态标签", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     const contextStart = source.indexOf('className="machine-context-identity"');
     const contextEnd = source.indexOf("</div>", source.indexOf("</div>", contextStart) + 1);
     const context = source.slice(contextStart, contextEnd);
@@ -231,7 +268,7 @@ describe("角色化界面文案", () => {
   });
 
   it("周视图不展示长期停用的内部结束时间", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("function formatWeekDayDetailPeriod");
     expect(source).toContain('"全天停用"');
     expect(source).toContain("–24:00");
@@ -242,7 +279,7 @@ describe("角色化界面文案", () => {
   });
 
   it("周视图占用、维护和停用色块使用相同高度", () => {
-    const styles = fs.readFileSync(
+    const styles = readText(
       new URL("../src/styles.css", import.meta.url),
       "utf8"
     );
@@ -255,11 +292,11 @@ describe("角色化界面文案", () => {
   });
 
   it("时间轴使用真实时长，仅为亚像素短占用保留细线", () => {
-    const source = fs.readFileSync(
+    const source = readText(
       new URL("../src/App.tsx", import.meta.url),
       "utf8"
     );
-    const styles = fs.readFileSync(
+    const styles = readText(
       new URL("../src/styles.css", import.meta.url),
       "utf8"
     );
@@ -279,16 +316,16 @@ describe("角色化界面文案", () => {
   });
 
   it("周视图占用详情不重复标注我的占用", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).not.toContain('"我的 · "');
   });
 
   it("周视图沿用单日视图的紫色体系区分整机占用", () => {
-    const source = fs.readFileSync(
+    const source = readText(
       new URL("../src/App.tsx", import.meta.url),
       "utf8"
     );
-    const styles = fs.readFileSync(
+    const styles = readText(
       new URL("../src/styles.css", import.meta.url),
       "utf8"
     );
@@ -306,7 +343,7 @@ describe("角色化界面文案", () => {
   });
 
   it("资源日历详情展示占用说明和调整信息", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("<dt>原始时间</dt>");
     expect(source).toContain("{item.title && <div><span>标题</span>");
     expect(source).toContain("{item.purpose && <div><span>用途</span>");
@@ -315,20 +352,20 @@ describe("角色化界面文案", () => {
   });
 
   it("占用详情空状态提示用户在时间轴拖动添加", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("暂无占用时段");
     expect(source).toContain("在日历时间轴上拖动，以添加一段占用。");
   });
 
   it("占用详情存在草稿时仍提供手动新增入口并锁定占用模式", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain('className="drawer-manual-add-button"');
     expect(source).toContain("lockMode={drafts.length > 0}");
     expect(source.match(/disabled=\{lockMode\}/g)).toHaveLength(2);
   });
 
   it("手动新增的整机和资源组模式复用两级选择组件", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("function CalendarTargetFields");
     expect(source).toContain("<CalendarTargetFields");
     expect(source).toContain('<Field label="机器">');
@@ -337,7 +374,7 @@ describe("角色化界面文案", () => {
   });
 
   it("手动新增占用使用打开时的服务器当前分钟和两小时默认时长", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("function initialReservationTime(nowTime: number)");
     expect(source).toContain("const startAt = currentMinuteStart(nowTime)");
     expect(source).toContain("new Date(startAt).getTime() + 2 * 60 * 60 * 1000");
@@ -347,7 +384,7 @@ describe("角色化界面文案", () => {
   });
 
   it("安排维护使用打开时的服务器当前分钟和两小时默认时长", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     const machineInfoStart = source.indexOf("function MachineInfoSection");
     const maintenanceModalStart = source.indexOf(
       "function MaintenanceModal",
@@ -391,7 +428,7 @@ describe("角色化界面文案", () => {
   });
 
   it("新增和编辑占用使用一致的放弃按钮", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     const buttonStart = source.indexOf('className="drawer-clear-button"');
     const buttonEnd = source.indexOf("</button>", buttonStart);
     const button = source.slice(buttonStart, buttonEnd);
@@ -402,7 +439,7 @@ describe("角色化界面文案", () => {
   });
 
   it("当天时间轴将跨日区间裁切为零点和二十四点", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("function formatTimelineDayPeriod");
     expect(source).toContain('start <= from ? "00:00"');
     expect(source).toContain('end >= to ? "24:00"');
@@ -410,8 +447,8 @@ describe("角色化界面文案", () => {
   });
 
   it("机器维护与停用使用独立卡片", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const styles = readText(new URL("../src/styles.css", import.meta.url), "utf8");
     const machineInfoStart = source.indexOf('className="card panel-card machine-info-panel"');
     const unavailabilityStart = source.indexOf(
       "machine-unavailability-panel",
@@ -445,7 +482,7 @@ describe("角色化界面文案", () => {
   });
 
   it("所有已启用用户都能进入管理页，具体操作按机器权限显示", () => {
-    const source = fs.readFileSync(
+    const source = readText(
       new URL("../src/App.tsx", import.meta.url),
       "utf8"
     );
@@ -468,11 +505,11 @@ describe("角色化界面文案", () => {
   });
 
   it("没有机器权限时使用紧凑空状态并提供资源申请入口", () => {
-    const source = fs.readFileSync(
+    const source = readText(
       new URL("../src/App.tsx", import.meta.url),
       "utf8"
     );
-    const styles = fs.readFileSync(
+    const styles = readText(
       new URL("../src/styles.css", import.meta.url),
       "utf8"
     );
@@ -488,11 +525,11 @@ describe("角色化界面文案", () => {
   });
 
   it("资源日历按实际内容收紧并只在长列表时滚动", () => {
-    const source = fs.readFileSync(
+    const source = readText(
       new URL("../src/App.tsx", import.meta.url),
       "utf8"
     );
-    const styles = fs.readFileSync(
+    const styles = readText(
       new URL("../src/styles.css", import.meta.url),
       "utf8"
     );
@@ -552,7 +589,7 @@ describe("角色化界面文案", () => {
   });
 
   it("统计排行空状态不使用排行三列布局", () => {
-    const styles = fs.readFileSync(
+    const styles = readText(
       new URL("../src/styles.css", import.meta.url),
       "utf8"
     );
@@ -563,9 +600,9 @@ describe("角色化界面文案", () => {
   });
 
   it("资源页面只保留查看和运维操作，配置在专用浮窗中整批保存", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
-    const server = fs.readFileSync(
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const styles = readText(new URL("../src/styles.css", import.meta.url), "utf8");
+    const server = readText(
       new URL("../server/routes-admin.ts", import.meta.url),
       "utf8"
     );
@@ -635,8 +672,8 @@ describe("角色化界面文案", () => {
   });
 
   it("所有密码框复用公共显示按钮并隐藏 Edge 原生按钮", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const styles = readText(new URL("../src/styles.css", import.meta.url), "utf8");
     expect(source).not.toContain('type="password"');
     expect(source).toContain('className="password-visibility-button"');
     expect(styles).toContain(".password-input-shell input::-ms-reveal");
@@ -644,7 +681,7 @@ describe("角色化界面文案", () => {
   });
 
   it("所有确认和输入操作使用站内浮窗", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     for (const nativeDialog of [
       "window.alert",
       "window.confirm",
@@ -659,14 +696,14 @@ describe("角色化界面文案", () => {
   });
 
   it("用户管理不提供管理员代改邮箱入口", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).not.toContain('title="修改用户邮箱"');
     expect(source).not.toContain("/admin/users/${emailChangeUser.id}/email-change-code");
     expect(source).not.toContain("/admin/users/${emailChangeUser.id}/change-email");
   });
 
   it("邮箱修改常驻显示验证码并仅在清空时进入密码确认", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     const emailModal = source.slice(
       source.indexOf("function EmailEditModal"),
       source.indexOf("type PasswordChangeField")
@@ -682,7 +719,7 @@ describe("角色化界面文案", () => {
   });
 
   it("注册邮箱启用时常驻显示验证码组件", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     const registerPage = source.slice(
       source.indexOf("function RegisterPage"),
       source.indexOf("function ForgotPasswordPage")
@@ -700,15 +737,26 @@ describe("角色化界面文案", () => {
   });
 
   it("只在认证页、用户菜单和个人资料提供统一文档入口", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const authLayout = source.slice(
+      source.indexOf("function AuthLayout"),
+      source.indexOf("function PageHeader")
+    );
     expect(source).toContain('className="auth-docs-link" href="/docs/getting-started"');
+    expect(authLayout).toContain('className="auth-page-tools"');
+    expect(authLayout.indexOf('className="auth-page-tools"')).toBeLessThan(
+      authLayout.indexOf('className={`auth-card')
+    );
+    expect(authLayout).not.toContain(
+      '<h2>{title}</h2>\n            <LanguageSwitcher />'
+    );
     expect(source).toContain('<BookOpenText size={16} />文档中心');
     expect(source).toContain('href="/docs/api"');
     expect(source).not.toContain('href="/api/open/docs"');
   });
 
   it("系统公告默认隐藏已撤下记录并提供显式开关", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     const panel = source.slice(
       source.indexOf("function AnnouncementAdminPanel"),
       source.indexOf("function AnnouncementEditorModal")
@@ -731,7 +779,7 @@ describe("角色化界面文案", () => {
   });
 
   it("普通用户公告页只读取当前展示中的公告", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     const page = source.slice(
       source.indexOf("function AnnouncementListPage"),
       source.indexOf("function LoadingScreen")
@@ -745,18 +793,18 @@ describe("角色化界面文案", () => {
   });
 
   it("公告弹窗只在存在后续公告时显示剩余数量", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     const center = source.slice(
       source.indexOf("function AnnouncementCenter"),
       source.indexOf("function AnnouncementListPage")
     );
     expect(center).toContain("announcements.length > 1 &&");
-    expect(center).toContain("还有 {announcements.length - 1} 条公告");
+    expect(center).toContain("还有 {{count}} 条公告");
     expect(center).not.toContain("关闭后本机不再显示此公告");
   });
 
   it("公告编辑冲突会保留草稿并同步最新版本，校验错误显示到字段", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     const editor = source.slice(
       source.indexOf("function AnnouncementEditorModal"),
       source.indexOf("function SettingsPanel")
@@ -771,8 +819,8 @@ describe("角色化界面文案", () => {
   });
 
   it("公告编辑弹窗保持固定高度并让编辑区和预览区独立滚动", () => {
-    const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const styles = readText(new URL("../src/styles.css", import.meta.url), "utf8");
     expect(source).toContain('large className="announcement-editor-modal"');
     expect(styles).toMatch(/\.announcement-editor-modal\s*\{[^}]*height:\s*min\(720px,/s);
     expect(styles).toMatch(/\.announcement-create-fields textarea\s*\{[^}]*overflow:\s*auto/s);
@@ -780,7 +828,7 @@ describe("角色化界面文案", () => {
   });
 
   it("管理员公告页在固定高度的后台内容区内独立滚动", () => {
-    const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+    const styles = readText(new URL("../src/styles.css", import.meta.url), "utf8");
     expect(styles).toMatch(
       /\.announcement-management-page,[\s\S]*?\{[^}]*height:\s*100%;[^}]*overflow-y:\s*auto/s
     );

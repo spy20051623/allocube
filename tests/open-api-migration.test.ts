@@ -56,7 +56,7 @@ describe("数据库连续迁移", () => {
       dbModule.db
         .prepare("SELECT MAX(version) AS version FROM schema_migrations")
         .get()
-    ).toEqual({ version: 17 });
+    ).toEqual({ version: 18 });
     const tables = new Set(
       (
         dbModule.db

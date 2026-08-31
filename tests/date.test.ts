@@ -2,14 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   calendarMonthDates,
   calendarMonthLabel,
+  calendarWeekdayLabels,
   chinaDateDayOffset,
+  compactDurationText,
+  compactHoursText,
   durationHoursText,
+  durationText,
   formatChina,
   formatChinaDate,
   formatChinaFullMinute,
   isoToChinaLocal,
   shiftCalendarMonth
 } from "../src/date.js";
+import i18n, { initializeI18n } from "../src/i18n/index.js";
 
 describe("北京时间显示", () => {
   it("完整显示年月日时分", () => {
@@ -46,6 +51,26 @@ describe("北京时间显示", () => {
     expect(dates[0]).toBe("2026-06-29");
     expect(dates.at(-1)).toBe("2026-08-09");
     expect(calendarMonthLabel("2026-07-26")).toBe("2026年7月");
+    expect(calendarWeekdayLabels()).toEqual(["一", "二", "三", "四", "五", "六", "日"]);
     expect(shiftCalendarMonth("2026-12-26", 1)).toBe("2027-01-01");
+  });
+
+  it("英文显示使用英文日期和正确的单复数，同时保持上海时区", async () => {
+    await initializeI18n();
+    await i18n.changeLanguage("en");
+    try {
+      expect(durationText(1)).toBe("1 minute");
+      expect(durationText(61)).toBe("1 hour 1 minute");
+      expect(compactDurationText(2)).toBe("2m");
+      expect(compactDurationText(60)).toBe("1h");
+      expect(compactDurationText(90)).toBe("1h 30m");
+      expect(compactHoursText(396)).toBe("6.6h");
+      expect(durationHoursText(120)).toBe("2.0 hours");
+      expect(calendarMonthLabel("2026-07-26")).toBe("July 2026");
+      expect(calendarWeekdayLabels()).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+      expect(formatChinaFullMinute("2026-07-25T15:08:42.000Z")).toContain("23:08");
+    } finally {
+      await i18n.changeLanguage("zh-CN");
+    }
   });
 });

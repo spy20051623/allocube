@@ -1,3 +1,4 @@
+import { tr, trDynamic } from "./i18n/index";
 import {
   EMPLOYEE_NUMBER_MESSAGE,
   getPasswordChecks,
@@ -53,37 +54,37 @@ export function validateUsername(value: string) {
   const display = value.trim().normalize("NFKC");
   const length = Array.from(display).length;
   if (length < 2 || length > 32) {
-    return ["用户名必须为 2–32 个字符"];
+    return [tr("用户名必须为 2–32 个字符")];
   }
   if (!usernamePattern.test(display)) {
     return [
-      "用户名仅支持中文、字母、数字、点、下划线和短横线，且首尾须为文字或数字"
+      tr("用户名仅支持中文、字母、数字、点、下划线和短横线，且首尾须为文字或数字")
     ];
   }
   if (display.toLocaleLowerCase("zh-CN") === "administrator") {
-    return ["该用户名为系统保留名称"];
+    return [tr("该用户名为系统保留名称")];
   }
   return [];
 }
 
 export function validateRealName(value: string) {
   const length = Array.from(value.trim()).length;
-  return length >= 2 && length <= 60 ? [] : ["姓名必须为 2–60 个字符"];
+  return length >= 2 && length <= 60 ? [] : [tr("姓名必须为 2–60 个字符")];
 }
 
 export function validateEmployeeNumber(value: string) {
-  return isEmployeeNumberValid(value) ? [] : [EMPLOYEE_NUMBER_MESSAGE];
+  return isEmployeeNumberValid(value) ? [] : [tr(EMPLOYEE_NUMBER_MESSAGE)];
 }
 
 export function validateEmail(value: string, allowedDomains: string[]) {
   const email = normalizeRegistrationEmail(value);
   if (!email || email.length > 254 || !emailPattern.test(email)) {
-    return ["请输入有效的邮箱地址"];
+    return [tr("请输入有效的邮箱地址")];
   }
   if (allowedDomains.length) {
     const domain = email.slice(email.lastIndexOf("@") + 1);
     if (!allowedDomains.includes(domain)) {
-      return [`仅允许以下邮箱域名：${allowedDomains.join("、")}`];
+      return [tr("仅允许以下邮箱域名：{{v0}}", { v0: allowedDomains.join("、") })];
     }
   }
   return [];
@@ -105,23 +106,23 @@ export function validateRegistrationField(
       return validateEmployeeNumber(values.employeeNumber);
     case "email":
       if (!emailEnabled) return [];
-      if (!values.email.trim()) return allowEmptyEmail ? [] : ["请输入邮箱"];
+      if (!values.email.trim()) return allowEmptyEmail ? [] : [tr("请输入邮箱")];
       return validateEmail(values.email, allowedDomains);
     case "code":
       if (!emailEnabled || !values.email.trim()) return [];
-      return values.code.length === 6 ? [] : ["请输入6位验证码"];
+      return values.code.length === 6 ? [] : [tr("请输入6位验证码")];
     case "password": {
       const failed = getPasswordChecks(values.password, {
         username: values.username,
         employeeNumbers: [values.employeeNumber]
       }).filter(passwordCheckFailed);
-      return failed.map((item) => item.label);
+      return failed.map((item) => trDynamic(item.label));
     }
     case "confirmPassword":
-      if (!values.confirmPassword) return ["请再次输入密码"];
+      if (!values.confirmPassword) return [tr("请再次输入密码")];
       return values.confirmPassword === values.password
         ? []
-        : ["两次输入的密码不一致"];
+        : [tr("两次输入的密码不一致")];
   }
 }
 

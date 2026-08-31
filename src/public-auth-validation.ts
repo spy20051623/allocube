@@ -1,3 +1,4 @@
+import { tr, trDynamic } from "./i18n/index";
 import { validateEmail } from "./registration-validation";
 import {
   getPasswordChecks,
@@ -20,12 +21,12 @@ export function validateResetPasswordForm(
   const errors: ResetPasswordStaticErrors = {};
   const failedChecks = getPasswordChecks(password).filter(passwordCheckFailed);
   if (failedChecks.length) {
-    errors.password = failedChecks.map((check) => check.label);
+    errors.password = failedChecks.map((check) => trDynamic(check.label));
   }
   if (!confirmPassword) {
-    errors.confirmPassword = ["请再次输入密码"];
+    errors.confirmPassword = [tr("请再次输入密码")];
   } else if (confirmPassword !== password) {
-    errors.confirmPassword = ["两次输入的密码不一致"];
+    errors.confirmPassword = [tr("两次输入的密码不一致")];
   }
   return errors;
 }

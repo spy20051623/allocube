@@ -1,15 +1,15 @@
 const requestIdHeader = {
-  description: "本次请求的唯一标识；联系管理员排查问题时请提供此值",
+  description: "Unique identifier for this request; include it when contacting an administrator for help",
   schema: { type: "string" }
 };
 
 const rateLimitHeader = {
-  description: "当前令牌在该类接口上的每分钟请求上限",
+  description: "Per-minute request limit for this token and endpoint group",
   schema: { type: "integer", minimum: 1 }
 };
 
 const retryAfterHeader = {
-  description: "触发限流后建议等待的秒数",
+  description: "Recommended seconds to wait after triggering rate limiting",
   schema: { type: "integer", minimum: 1 }
 };
 
@@ -34,21 +34,21 @@ function errorResponse(description: string, options: { retryAfter?: boolean } = 
 }
 
 const unauthenticatedResponse = errorResponse(
-  "缺少 Bearer 令牌，或令牌无效、已到期、已吊销，或所属账号已停用"
+  "Missing Bearer token, or the token is invalid, expired, revoked, or the associated account is disabled"
 );
 const readRateLimitedResponse = errorResponse(
-  "令牌超过每分钟 120 次的整体请求限制；按 Retry-After 等待后重试",
+  "Token exceeds the overall request limit of 120 per minute; wait as indicated by Retry-After and retry",
   { retryAfter: true }
 );
 const operationRateLimitedResponse = errorResponse(
-  "令牌超过每分钟 120 次的整体请求限制，或预检与提交合计超过每分钟 30 次；按 Retry-After 等待后重试",
+  "Token exceeds the overall request limit of 120 per minute, or the combined preflight and submission requests exceed 30 per minute; wait as indicated by Retry-After and retry",
   { retryAfter: true }
 );
 const writeScopeResponse = errorResponse(
-  "令牌不是 READ_WRITE，或当前用户不再具备执行该写操作所需的权限"
+  "Token is not READ_WRITE, or the current user no longer has the required permissions to perform this write operation"
 );
 const internalErrorResponse = errorResponse(
-  "服务器处理请求时发生未预期错误；可携带响应中的 requestId 联系管理员排查"
+  "An unexpected error occurred while the server was processing the request; you may contact the administrator with the requestId from the response for investigation"
 );
 
 const bearerSecurity = [{ bearerAuth: [] }];
@@ -56,32 +56,32 @@ const bearerSecurity = [{ bearerAuth: [] }];
 export const OPEN_API_DOCUMENT = {
   openapi: "3.1.0",
   info: {
-    title: "Allocube 官方 API",
+    title: "Allocube Official API",
     version: "1.0.0",
     description:
-      "供 AI、CLI 与服务端自动化查询计算资源并管理本人占用。所有写入都必须先预检，再使用 5 分钟内有效的确认令牌提交。示例中形如 <UPPER_SNAKE_CASE> 的字符串是必须替换的占位符，尖括号不能原样提交。"
+      "Use this API from AI tools, CLIs, scripts, and server automation to read computing resources and manage your reservations. Every write requires a preflight followed by a commit using a confirmation token that remains valid for 5 minutes. Values such as <UPPER_SNAKE_CASE> are placeholders; replace the entire value, including angle brackets, before sending a request."
   },
   "x-placeholder-convention": {
     syntax: "<UPPER_SNAKE_CASE>",
     description:
-      "占位符必须整体替换为当前环境或前序响应中的真实值；OpenAPI 路径中的 {id} 仍遵循标准路径模板语法。"
+      "Placeholders must be replaced entirely with actual values from the current environment or previous responses; {id} in OpenAPI paths still follows standard path template syntax."
   },
   servers: [{ url: "/api/open/v1" }],
   tags: [
-    { name: "Identity", description: "调用身份" },
-    { name: "Resources", description: "机器、资源组和排期" },
-    { name: "Reservations", description: "本人占用与两阶段写入" }
+    { name: "Identity", description: "Calling identity" },
+    { name: "Resources", description: "Machine, resource group, and schedule" },
+    { name: "Reservations", description: "Your reservations and two-phase operations" }
   ],
   paths: {
     "/me": {
       get: {
         operationId: "getCurrentApiIdentity",
         tags: ["Identity"],
-        summary: "确认当前令牌代表的用户和权限",
+        summary: "Get the current token identity and permissions",
         security: bearerSecurity,
         responses: {
           "200": {
-            description: "当前身份",
+            description: "Current identity",
             headers: successResponseHeaders,
             content: {
               "application/json": {
@@ -93,11 +93,11 @@ export const OPEN_API_DOCUMENT = {
                       properties: {
                         data: {
                           type: "object",
-                          description: "当前调用身份",
+                          description: "Current calling identity",
                           required: ["user", "token"],
                           properties: {
-                            user: { $ref: "#/components/schemas/ApiUser", description: "令牌所属用户" },
-                            token: { $ref: "#/components/schemas/ApiTokenIdentity", description: "当前令牌摘要" }
+                            user: { $ref: "#/components/schemas/ApiUser", description: "User to whom the token belongs" },
+                            token: { $ref: "#/components/schemas/ApiTokenIdentity", description: "Current token digest" }
                           }
                         }
                       }
@@ -117,7 +117,7 @@ export const OPEN_API_DOCUMENT = {
       get: {
         operationId: "listAccessibleMachines",
         tags: ["Resources"],
-        summary: "分页列出当前用户有权使用的机器",
+        summary: "List machines available to the current user",
         security: bearerSecurity,
         parameters: [
           { $ref: "#/components/parameters/Limit" },
@@ -125,7 +125,7 @@ export const OPEN_API_DOCUMENT = {
         ],
         responses: {
           "200": {
-            description: "机器列表",
+            description: "Machine list",
             headers: successResponseHeaders,
             content: {
               "application/json": {
@@ -135,23 +135,23 @@ export const OPEN_API_DOCUMENT = {
                   properties: {
                     data: {
                       type: "object",
-                      description: "当前页机器数据",
+                      description: "Machines on this page",
                       required: ["machines"],
                       properties: {
                         machines: {
                           type: "array",
-                          description: "当前用户有权使用的机器",
+                          description: "Machines the current user is authorized to use",
                           items: { $ref: "#/components/schemas/Machine" }
                         }
                       }
                     },
-                    meta: { $ref: "#/components/schemas/PaginationMeta", description: "分页元数据" }
+                    meta: { $ref: "#/components/schemas/PaginationMeta", description: "Pagination metadata" }
                   }
                 }
               }
             }
           },
-          "400": errorResponse("分页大小、游标格式或未知查询参数不符合约束，或游标已经失效"),
+          "400": errorResponse("Page size, cursor format, or unknown query parameter violates constraints, or the cursor has expired"),
           "401": unauthenticatedResponse,
           "429": readRateLimitedResponse,
           "500": internalErrorResponse
@@ -162,7 +162,7 @@ export const OPEN_API_DOCUMENT = {
       get: {
         operationId: "listMachineResourceGroups",
         tags: ["Resources"],
-        summary: "分页列出一台可访问机器的资源组",
+        summary: "List resource groups for a machine",
         security: bearerSecurity,
         parameters: [
           { $ref: "#/components/parameters/MachineId" },
@@ -171,7 +171,7 @@ export const OPEN_API_DOCUMENT = {
         ],
         responses: {
           "200": {
-            description: "资源组列表",
+            description: "Resource group list",
             headers: successResponseHeaders,
             content: {
               "application/json": {
@@ -181,25 +181,25 @@ export const OPEN_API_DOCUMENT = {
                   properties: {
                     data: {
                       type: "object",
-                      description: "当前页资源组数据",
+                      description: "Resource groups on this page",
                       required: ["resourceGroups"],
                       properties: {
                         resourceGroups: {
                           type: "array",
-                          description: "目标机器下当前页可访问的资源组",
+                          description: "Resource groups on this page for the selected machine",
                           items: { $ref: "#/components/schemas/ResourceGroup" }
                         }
                       }
                     },
-                    meta: { $ref: "#/components/schemas/PaginationMeta", description: "分页元数据" }
+                    meta: { $ref: "#/components/schemas/PaginationMeta", description: "Pagination metadata" }
                   }
                 }
               }
             }
           },
-          "400": errorResponse("机器 ID、分页大小或游标格式不正确，或游标已经失效"),
+          "400": errorResponse("Machine ID, page size, or cursor format is incorrect, or the cursor has expired"),
           "401": unauthenticatedResponse,
-          "403": errorResponse("当前用户没有目标机器的有效使用权"),
+          "403": errorResponse("The current user does not have valid machine access for the target machine"),
           "429": readRateLimitedResponse,
           "500": internalErrorResponse
         }
@@ -209,37 +209,37 @@ export const OPEN_API_DOCUMENT = {
       get: {
         operationId: "getResourceSchedule",
         tags: ["Resources"],
-        summary: "查询可访问机器在指定时间范围内的排期",
+        summary: "Get schedules for accessible machines within a time range",
         description:
-          "时间范围必须大于零且不超过 8 天。machineIds 使用英文逗号分隔，最多 100 个；省略时查询全部可访问机器。返回的占用详情对拥有对应机器使用权的用户完整可见。",
+          "The time range must be longer than zero and no more than 8 days. Separate up to 100 machineIds with commas; omit machineIds to include every accessible machine. Users with machine access can see full reservation details.",
         security: bearerSecurity,
         parameters: [
           {
             name: "from",
             in: "query",
             required: true,
-            description: "查询窗口的开始时间（RFC 3339）；返回与该窗口有交集的占用和不可用时段",
+            description: "Start of the time window (RFC 3339). Results include reservations and unavailable periods that overlap the window.",
             schema: { type: "string", format: "date-time" }
           },
           {
             name: "to",
             in: "query",
             required: true,
-            description: "查询窗口的结束时间（RFC 3339），必须晚于 from，且时间跨度不能超过 8 天",
+            description: "End of the time window (RFC 3339). Must be later than from, with a maximum span of 8 days.",
             schema: { type: "string", format: "date-time" }
           },
           {
             name: "machineIds",
             in: "query",
             required: false,
-            description: "以英文逗号分隔的机器 UUID，最多 100 个；省略时查询当前用户可访问的全部机器",
+            description: "Up to 100 machine UUIDs separated by commas. Omit to include every machine available to the current user.",
             schema: { type: "string", maxLength: 5000 },
             example: "<MACHINE_IDS>"
           }
         ],
         responses: {
           "200": {
-            description: "排期数据",
+            description: "Scheduling data",
             headers: successResponseHeaders,
             content: {
               "application/json": {
@@ -249,24 +249,24 @@ export const OPEN_API_DOCUMENT = {
                   properties: {
                     data: {
                       type: "object",
-                      description: "指定窗口内的机器、资源组、占用和不可用时段",
+                      description: "Machines, resource groups, reservations, and unavailable periods within the specified window",
                       required: ["machines", "resourceGroups", "reservations", "unavailability"],
                       properties: {
-                        machines: { type: "array", description: "本次排期查询涉及的机器", items: { $ref: "#/components/schemas/Machine" } },
-                        resourceGroups: { type: "array", description: "本次排期查询涉及的资源组", items: { $ref: "#/components/schemas/ResourceGroup" } },
-                        reservations: { type: "array", description: "与查询窗口有交集的已确认占用", items: { $ref: "#/components/schemas/ScheduleReservation" } },
-                        unavailability: { type: "array", description: "与查询窗口有交集的不可用时段", items: { $ref: "#/components/schemas/Unavailability" } }
+                        machines: { type: "array", description: "Machines involved in this schedule query", items: { $ref: "#/components/schemas/Machine" } },
+                        resourceGroups: { type: "array", description: "Resource groups involved in this schedule query", items: { $ref: "#/components/schemas/ResourceGroup" } },
+                        reservations: { type: "array", description: "Confirmed reservations intersecting with the query window", items: { $ref: "#/components/schemas/ScheduleReservation" } },
+                        unavailability: { type: "array", description: "Unavailable periods intersecting with the query window", items: { $ref: "#/components/schemas/Unavailability" } }
                       }
                     },
-                    meta: { $ref: "#/components/schemas/ScheduleMeta", description: "排期元数据" }
+                    meta: { $ref: "#/components/schemas/ScheduleMeta", description: "Scheduling metadata" }
                   }
                 }
               }
             }
           },
-          "400": errorResponse("时间格式或范围不正确、机器 ID 列表无效，或查询机器超过 100 台、时间超过 8 天"),
+          "400": errorResponse("Incorrect time format or range, invalid machine ID list, query exceeds 100 machines or 8 days"),
           "401": unauthenticatedResponse,
-          "403": errorResponse("machineIds 中包含当前用户无权使用的机器"),
+          "403": errorResponse("machineIds contains machines that the current user is not authorized to use"),
           "429": readRateLimitedResponse,
           "500": internalErrorResponse
         }
@@ -276,25 +276,25 @@ export const OPEN_API_DOCUMENT = {
       get: {
         operationId: "listMyReservations",
         tags: ["Reservations"],
-        summary: "分页查询本人占用",
+        summary: "List your reservations",
         security: bearerSecurity,
         parameters: [
           {
             name: "from",
             in: "query",
-            description: "筛选结束时间晚于此时间的本人占用（RFC 3339）",
+            description: "Return reservations that end after this time (RFC 3339)",
             schema: { type: "string", format: "date-time" }
           },
           {
             name: "to",
             in: "query",
-            description: "筛选开始时间早于此时间的本人占用（RFC 3339）；同时传入 from 时必须晚于 from",
+            description: "Return reservations that start before this time (RFC 3339). When used with from, it must also be later than from.",
             schema: { type: "string", format: "date-time" }
           },
           {
             name: "status",
             in: "query",
-            description: "仅返回指定状态的本人占用",
+            description: "Only return reservations with this status",
             schema: {
               type: "string",
               enum: ["CONFIRMED", "CANCELLED", "CANCELLED_UNAVAILABILITY"]
@@ -305,7 +305,7 @@ export const OPEN_API_DOCUMENT = {
         ],
         responses: {
           "200": {
-            description: "本人占用列表",
+            description: "Your reservations",
             headers: successResponseHeaders,
             content: {
               "application/json": {
@@ -315,23 +315,23 @@ export const OPEN_API_DOCUMENT = {
                   properties: {
                     data: {
                       type: "object",
-                      description: "当前页本人占用数据",
+                      description: "Reservations on this page",
                       required: ["reservations"],
                       properties: {
                         reservations: {
                           type: "array",
-                          description: "符合筛选条件的本人占用",
+                          description: "Own reservations matching the filter criteria",
                           items: { $ref: "#/components/schemas/Reservation" }
                         }
                       }
                     },
-                    meta: { $ref: "#/components/schemas/PaginationMeta", description: "分页元数据" }
+                    meta: { $ref: "#/components/schemas/PaginationMeta", description: "Pagination metadata" }
                   }
                 }
               }
             }
           },
-          "400": errorResponse("时间、状态、分页大小或游标格式不正确，游标失效，或 to 不晚于 from"),
+          "400": errorResponse("Incorrect format for time, status, page size, or cursor; cursor is invalid, or 'to' is not later than 'from'"),
           "401": unauthenticatedResponse,
           "429": readRateLimitedResponse,
           "500": internalErrorResponse
@@ -342,12 +342,12 @@ export const OPEN_API_DOCUMENT = {
       get: {
         operationId: "getMyReservation",
         tags: ["Reservations"],
-        summary: "查询本人单条占用",
+        summary: "Get one of your reservations",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/ReservationId" }],
         responses: {
           "200": {
-            description: "占用详情",
+            description: "Reservation details",
             headers: successResponseHeaders,
             content: {
               "application/json": {
@@ -357,21 +357,21 @@ export const OPEN_API_DOCUMENT = {
                   properties: {
                     data: {
                       type: "object",
-                      description: "本人单条占用数据",
+                      description: "The requested reservation",
                       required: ["reservation"],
                       properties: {
-                        reservation: { $ref: "#/components/schemas/Reservation", description: "目标占用详情" }
+                        reservation: { $ref: "#/components/schemas/Reservation", description: "Target reservation details" }
                       }
                     },
-                    meta: { $ref: "#/components/schemas/Meta", description: "响应元数据" }
+                    meta: { $ref: "#/components/schemas/Meta", description: "Response metadata" }
                   }
                 }
               }
             }
           },
-          "400": errorResponse("占用 ID 不是有效 UUID"),
+          "400": errorResponse("Reservation ID is not a valid UUID"),
           "401": unauthenticatedResponse,
-          "404": errorResponse("占用不存在，或该占用不属于当前用户"),
+          "404": errorResponse("Reservation not found or not owned by the current user"),
           "429": readRateLimitedResponse,
           "500": internalErrorResponse
         }
@@ -381,19 +381,19 @@ export const OPEN_API_DOCUMENT = {
       post: {
         operationId: "prepareReservationOperation",
         tags: ["Reservations"],
-        summary: "预检 CREATE、UPDATE、CANCEL 或 END 并获取确认令牌",
+        summary: "Preflight a CREATE, UPDATE, CANCEL, or END operation",
         description:
-          "四种业务动作共用此预检端点。READ_WRITE 令牌必需；BLOCKED 响应不包含 confirmationToken，调用方不得继续提交。",
+          "All four actions use this endpoint. A READ_WRITE token is required. A BLOCKED response does not include confirmationToken and cannot be committed.",
         security: bearerSecurity,
         requestBody: {
           required: true,
-          description: "根据 action 选择对应请求结构；未知字段会被拒绝。CREATE 一次可预检 1 至 100 个占用片段。",
+          description: "Choose the request shape that matches action. Unknown fields are rejected. CREATE can preflight 1 to 100 reservation segments at once.",
           content: {
             "application/json": {
               schema: { $ref: "#/components/schemas/PrepareOperationRequest" },
               examples: {
                 create: {
-                  summary: "创建一个未来资源组占用",
+                  summary: "Create a future resource group reservation",
                   value: {
                     action: "CREATE",
                     segments: [
@@ -403,14 +403,14 @@ export const OPEN_API_DOCUMENT = {
                         startMode: "SCHEDULED",
                         startAt: "<START_AT_RFC3339>",
                         endAt: "<END_AT_RFC3339>",
-                        title: "模型训练",
-                        purpose: "验证新模型"
+                        title: "Model training",
+                        purpose: "Validate the new model"
                       }
                     ]
                   }
                 },
                 update: {
-                  summary: "修改本人占用的时间和说明",
+                  summary: "Update one of your reservations",
                   value: {
                     action: "UPDATE",
                     reservationId: "<RESERVATION_ID>",
@@ -420,25 +420,25 @@ export const OPEN_API_DOCUMENT = {
                       startMode: "SCHEDULED",
                       startAt: "<START_AT_RFC3339>",
                       endAt: "<END_AT_RFC3339>",
-                      title: "调整后的模型训练",
-                      purpose: "验证新模型"
+                      title: "Adjusted model training",
+                      purpose: "Validate the new model"
                     }
                   }
                 },
                 cancel: {
-                  summary: "取消本人未来占用",
+                  summary: "Cancel my own future reservations",
                   value: {
                     action: "CANCEL",
                     reservationId: "<RESERVATION_ID>",
-                    reason: "任务取消"
+                    reason: "Task cancelled"
                   }
                 },
                 end: {
-                  summary: "提前结束本人进行中的占用",
+                  summary: "End one of your ongoing reservations early",
                   value: {
                     action: "END",
                     reservationId: "<RESERVATION_ID>",
-                    reason: "任务提前完成"
+                    reason: "Task completed early"
                   }
                 }
               }
@@ -447,7 +447,7 @@ export const OPEN_API_DOCUMENT = {
         },
         responses: {
           "200": {
-            description: "READY 或 BLOCKED 的预检结果",
+            description: "Preflight result: READY or BLOCKED",
             headers: successResponseHeaders,
             content: {
               "application/json": {
@@ -455,11 +455,11 @@ export const OPEN_API_DOCUMENT = {
               }
             }
           },
-          "400": errorResponse("请求体、时间、占用片段或未知字段不符合约束"),
+          "400": errorResponse("Request body, time, reservation fragment, or unknown field does not meet constraints"),
           "401": unauthenticatedResponse,
           "403": writeScopeResponse,
-          "404": errorResponse("目标占用、机器或资源组不存在，或不属于当前用户的可操作范围"),
-          "409": errorResponse("占用状态或资源配置不允许当前操作；刷新数据后重新预检"),
+          "404": errorResponse("Target reservation, machine, or resource group not found or unavailable to the current user"),
+          "409": errorResponse("Reservation status or resource configuration no longer allows this operation; refresh the data and run the preflight again"),
           "429": operationRateLimitedResponse,
           "500": internalErrorResponse
         }
@@ -469,13 +469,13 @@ export const OPEN_API_DOCUMENT = {
       post: {
         operationId: "commitReservationOperation",
         tags: ["Reservations"],
-        summary: "提交已成功预检的占用写操作",
+        summary: "Commit a successful reservation preflight",
         description:
-          "此端点通用于 CREATE、UPDATE、CANCEL 和 END。确认令牌已经绑定 prepare 中的动作，提交时不需要再次传 action。令牌同时绑定签发它的用户和个人访问令牌；成功提交可在 24 小时内安全重试，不会重复执行。",
+          "This endpoint is common for CREATE, UPDATE, CANCEL, and END. Ensure the token is already bound to the action in 'prepare'; the action does not need to be passed again on submission. The token is bound to both the user who issued it and the personal access token; successful submissions can be safely retried within 24 hours without duplicate execution.",
         security: bearerSecurity,
         requestBody: {
           required: true,
-          description: "提交 prepare 返回的确认令牌。令牌有效期为 5 分钟，并绑定用户、个人访问令牌和预检内容。",
+          description: "Confirmation token returned by prepare. It is valid for 5 minutes and bound to the user, personal access token, and preflight request.",
           content: {
             "application/json": {
               schema: {
@@ -486,14 +486,14 @@ export const OPEN_API_DOCUMENT = {
                   confirmationToken: {
                     type: "string",
                     description:
-                      "prepare 返回的一次性确认令牌；必须原样传入该次预检响应中的真实值",
+                      "One-time confirmation token returned by prepare. Send the exact value from that response.",
                     example: "<CONFIRMATION_TOKEN>"
                   }
                 }
               },
               examples: {
                 commit: {
-                  summary: "提交预检返回的确认令牌",
+                  summary: "Confirmation token returned by prepare",
                   value: {
                     confirmationToken: "<CONFIRMATION_TOKEN>"
                   }
@@ -504,14 +504,14 @@ export const OPEN_API_DOCUMENT = {
         },
         responses: {
           "200": {
-            description: "操作结果；meta.replayed 表示是否为安全重放",
+            description: "Operation result; meta.replayed indicates whether it is a safe replay",
             headers: successResponseHeaders,
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/CommitOperationResponse" },
                 examples: {
                   create: {
-                    summary: "CREATE 提交成功",
+                    summary: "CREATE completed",
                     value: {
                       data: {
                         batchId: "<BATCH_ID>",
@@ -523,8 +523,8 @@ export const OPEN_API_DOCUMENT = {
                           startMode: "SCHEDULED",
                           startAt: "<START_AT_RFC3339>",
                           endAt: "<END_AT_RFC3339>",
-                          title: "模型训练",
-                          purpose: "回归验证",
+                          title: "Model training",
+                          purpose: "Regression validation",
                           note: ""
                         }],
                         revision: 42,
@@ -537,7 +537,7 @@ export const OPEN_API_DOCUMENT = {
                     }
                   },
                   update: {
-                    summary: "UPDATE 提交成功",
+                    summary: "UPDATE completed",
                     value: {
                       data: {
                         id: "<RESERVATION_ID>",
@@ -550,7 +550,7 @@ export const OPEN_API_DOCUMENT = {
                     }
                   },
                   cancel: {
-                    summary: "CANCEL 提交成功",
+                    summary: "CANCEL completed",
                     value: {
                       data: {
                         id: "<RESERVATION_ID>",
@@ -564,7 +564,7 @@ export const OPEN_API_DOCUMENT = {
                     }
                   },
                   end: {
-                    summary: "END 提交成功",
+                    summary: "END completed",
                     value: {
                       data: {
                         id: "<RESERVATION_ID>",
@@ -582,12 +582,12 @@ export const OPEN_API_DOCUMENT = {
               }
             }
           },
-          "400": errorResponse("confirmationToken 缺失、格式不正确或请求包含未知字段"),
+          "400": errorResponse("confirmationToken is missing, malformed, or the request contains unknown fields"),
           "401": unauthenticatedResponse,
           "403": writeScopeResponse,
-          "404": errorResponse("确认令牌不存在，或它属于其他用户或其他 API 令牌"),
-          "409": errorResponse("预检后权限、资源或占用状态发生变化，或该预检操作已失效；必须重新预检"),
-          "410": errorResponse("确认令牌已超过 5 分钟有效期；必须重新预检"),
+          "404": errorResponse("Confirmation token not found or bound to a different user or API token"),
+          "409": errorResponse("Permissions, resources, or reservation status changed after the preflight, or the operation is no longer valid; run the preflight again"),
+          "410": errorResponse("Confirmation token expired after 5 minutes; run the preflight again"),
           "429": operationRateLimitedResponse,
           "500": internalErrorResponse
         }
@@ -607,7 +607,7 @@ export const OPEN_API_DOCUMENT = {
         name: "limit",
         in: "query",
         required: false,
-        description: "每页最多返回的记录数",
+        description: "Maximum number of records to return per page",
         schema: { type: "integer", minimum: 1, maximum: 200, default: 50 }
       },
       Cursor: {
@@ -615,92 +615,92 @@ export const OPEN_API_DOCUMENT = {
         in: "query",
         required: false,
         schema: { type: "string", maxLength: 2000 },
-        description: "上一页 meta.nextCursor 返回的不透明游标"
+        description: "The opaque cursor returned by meta.nextCursor on the previous page"
       },
       MachineId: {
         name: "id",
         in: "path",
         required: true,
-        description: "要查询资源组的机器 UUID",
+        description: "Machine UUID of the resource group to query",
         schema: { type: "string", format: "uuid" }
       },
       ReservationId: {
         name: "id",
         in: "path",
         required: true,
-        description: "要查询的本人占用 UUID",
+        description: "UUID of one of your reservations",
         schema: { type: "string", format: "uuid" }
       }
     },
     schemas: {
       Meta: {
         type: "object",
-        description: "所有成功响应都包含的通用元数据",
+        description: "Common metadata included in all successful responses",
         required: ["serverTime"],
         properties: {
           serverTime: {
             type: "string",
             format: "date-time",
-            description: "服务器生成响应时的时间（RFC 3339）"
+            description: "Time when the server generated the response (RFC 3339)"
           }
         },
         additionalProperties: true
       },
       PaginationMeta: {
         type: "object",
-        description: "游标分页响应的元数据",
+        description: "Metadata for cursor-based pagination response",
         required: ["serverTime", "nextCursor"],
         properties: {
           serverTime: {
             type: "string",
             format: "date-time",
-            description: "服务器生成响应时的时间（RFC 3339）"
+            description: "Time when the server generated the response (RFC 3339)"
           },
           nextCursor: {
             type: ["string", "null"],
-            description: "下一页的不透明游标；为 null 表示没有下一页"
+            description: "Opaque cursor for the next page; null indicates no next page"
           }
         },
         additionalProperties: false
       },
       ScheduleMeta: {
         type: "object",
-        description: "排期响应的元数据",
+        description: "Metadata for the scheduling response",
         required: ["serverTime", "scheduleRevision"],
         properties: {
           serverTime: {
             type: "string",
             format: "date-time",
-            description: "服务器生成响应时的时间（RFC 3339）"
+            description: "Time when the server generated the response (RFC 3339)"
           },
           scheduleRevision: {
             type: "integer",
             minimum: 1,
-            description: "全局排期修订号；变化表示排期数据可能已经更新"
+            description: "Global scheduling revision number; a change indicates scheduling data may have been updated"
           }
         },
         additionalProperties: false
       },
       SuccessEnvelope: {
         type: "object",
-        description: "通用成功响应外层结构",
+        description: "Outer structure for generic success response",
         required: ["data", "meta"],
         properties: {
-          data: { type: "object", description: "接口返回的业务数据" },
+          data: { type: "object", description: "Data returned by the endpoint" },
           meta: {
             $ref: "#/components/schemas/Meta",
-            description: "响应元数据"
+            description: "Response metadata"
           }
         }
       },
       ErrorResponse: {
         type: "object",
-        description: "所有 API 错误使用的统一响应结构",
+        description: "Unified response structure used for all API errors",
         required: ["error"],
         properties: {
           error: {
             type: "object",
-            description: "错误详情",
+            description: "Error details",
             additionalProperties: false,
             required: ["code", "message", "requestId"],
             properties: {
@@ -718,18 +718,18 @@ export const OPEN_API_DOCUMENT = {
                   "OPERATION_REJECTED",
                   "INTERNAL_ERROR"
                 ],
-                description: "稳定的机器可读错误码，可用于程序分支判断"
+                description: "Stable machine-readable error code, usable for programmatic branching logic"
               },
               message: {
                 type: "string",
-                description: "面向调用者的错误说明，不建议程序依赖具体文案"
+                description: "Error description for the caller; it is not recommended for programs to rely on specific wording"
               },
               details: {
-                description: "可选的结构化上下文；校验错误、冲突和限流会提供不同字段"
+                description: "Optional structured context; validation errors, conflicts, and rate limiting will provide different fields"
               },
               requestId: {
                 type: "string",
-                description: "本次请求的唯一标识，与 X-Request-Id 响应头一致"
+                description: "Unique identifier for this request, consistent with the X-Request-Id response header"
               }
             }
           }
@@ -737,194 +737,194 @@ export const OPEN_API_DOCUMENT = {
       },
       ApiUser: {
         type: "object",
-        description: "个人访问令牌所属的当前用户",
+        description: "Current user to whom the personal access token belongs",
         additionalProperties: false,
         required: ["id", "username", "displayName", "employeeNumber", "role"],
         properties: {
-          id: { type: "string", format: "uuid", description: "用户 UUID" },
-          username: { type: "string", description: "登录用户名" },
-          displayName: { type: "string", description: "页面和记录中展示的姓名" },
-          employeeNumber: { type: ["string", "null"], description: "当前有效工号；未设置时为 null" },
-          role: { type: "string", enum: ["SYSTEM_ADMIN", "USER"], description: "用户角色" }
+          id: { type: "string", format: "uuid", description: "User UUID" },
+          username: { type: "string", description: "Login username" },
+          displayName: { type: "string", description: "Name displayed on pages and records" },
+          employeeNumber: { type: ["string", "null"], description: "Current valid employee ID; null if not set" },
+          role: { type: "string", enum: ["SYSTEM_ADMIN", "USER"], description: "User role" }
         }
       },
       ApiTokenIdentity: {
         type: "object",
-        description: "当前请求所用个人访问令牌的安全摘要，不包含令牌明文",
+        description: "Security digest of the personal access token used in the current request, does not contain the plaintext token",
         additionalProperties: false,
         required: ["id", "name", "prefix", "accessLevel", "expiresAt"],
         properties: {
-          id: { type: "string", format: "uuid", description: "令牌记录 UUID" },
-          name: { type: "string", description: "用户为令牌设置的名称" },
-          prefix: { type: "string", description: "用于辨认令牌的非敏感前缀" },
-          accessLevel: { type: "string", enum: ["READ_ONLY", "READ_WRITE"], description: "令牌权限；写操作必须为 READ_WRITE" },
-          expiresAt: { type: ["string", "null"], format: "date-time", description: "令牌到期时间（RFC 3339）；null 表示永不过期" }
+          id: { type: "string", format: "uuid", description: "Token record UUID" },
+          name: { type: "string", description: "Name set by the user for the token" },
+          prefix: { type: "string", description: "Non-sensitive prefix for identifying the token" },
+          accessLevel: { type: "string", enum: ["READ_ONLY", "READ_WRITE"], description: "Token permissions; write operations must be READ_WRITE" },
+          expiresAt: { type: ["string", "null"], format: "date-time", description: "Token expiration time (RFC 3339); null means never expires" }
         }
       },
       Machine: {
         type: "object",
-        description: "当前用户有权使用的机器",
+        description: "Machines the current user is authorized to use",
         additionalProperties: false,
         required: ["id", "name", "address", "hardwareNotes", "connectionGuide", "resourceSummary", "tags", "status", "isManager"],
         properties: {
-          id: { type: "string", format: "uuid", description: "机器 UUID" },
-          name: { type: "string", description: "机器名称" },
-          address: { type: "string", description: "机器地址或管理员填写的访问位置" },
-          hardwareNotes: { type: "string", description: "硬件配置说明" },
-          connectionGuide: { type: "string", description: "连接和使用说明" },
-          resourceSummary: { type: "string", description: "机器下资源组的简要汇总" },
-          tags: { type: "array", description: "机器标签", items: { type: "string", description: "单个标签" } },
-          status: { type: "string", enum: ["ACTIVE", "DISABLED"], description: "机器是否可用于新的占用" },
-          isManager: { type: "boolean", description: "当前用户是否可以管理该机器" }
+          id: { type: "string", format: "uuid", description: "Machine UUID" },
+          name: { type: "string", description: "Machine name" },
+          address: { type: "string", description: "Machine address or access location filled in by the administrator" },
+          hardwareNotes: { type: "string", description: "Hardware configuration description" },
+          connectionGuide: { type: "string", description: "Connection and usage instructions" },
+          resourceSummary: { type: "string", description: "Brief summary of resource groups under a machine" },
+          tags: { type: "array", description: "Machine tag", items: { type: "string", description: "A single tag" } },
+          status: { type: "string", enum: ["ACTIVE", "DISABLED"], description: "Whether the machine is available for new reservations" },
+          isManager: { type: "boolean", description: "Whether the current user can manage this machine" }
         }
       },
       ResourceRange: {
         type: "object",
-        description: "编号范围资源的一段连续编号",
+        description: "A continuous range of numbers from a numbered resource",
         additionalProperties: false,
         required: ["start", "end"],
         properties: {
-          start: { type: "integer", description: "起始编号，包含该编号" },
-          end: { type: "integer", description: "结束编号，包含该编号" },
-          label: { type: "string", description: "管理员为该编号范围设置的可选备注" }
+          start: { type: "integer", description: "Start ID, inclusive" },
+          end: { type: "integer", description: "End ID, inclusive" },
+          label: { type: "string", description: "Optional remark set by the administrator for this number range" }
         }
       },
       ResourceItem: {
         type: "object",
-        description: "设备列表资源中的一个具体设备",
+        description: "A specific device within the device list resource",
         additionalProperties: false,
         required: ["id", "key", "label"],
         properties: {
-          id: { type: "string", format: "uuid", description: "设备 UUID" },
-          key: { type: "string", description: "设备在资源池中的稳定标识" },
-          label: { type: "string", description: "设备展示名称" }
+          id: { type: "string", format: "uuid", description: "Device UUID" },
+          key: { type: "string", description: "The stable identifier of a device within the resource pool" },
+          label: { type: "string", description: "Device display name" }
         }
       },
       ResourceAllocation: {
         type: "object",
-        description: "资源组从一个资源池中分配到的编号、设备或容量",
+        description: "Number, device, or capacity allocated to a resource group from a resource pool",
         required: ["poolId", "poolName", "kind", "sharingMode", "unit"],
         properties: {
-          poolId: { type: "string", format: "uuid", description: "资源池 UUID" },
-          poolName: { type: "string", description: "资源池名称快照" },
-          kind: { type: "string", enum: ["INDEX_RANGE", "ITEM_LIST", "CAPACITY"], description: "资源池的分配类型" },
-          sharingMode: { type: "string", enum: ["EXCLUSIVE", "SHARED"], description: "资源是否允许多个资源组共享使用" },
-          unit: { type: "string", description: "资源数量的显示单位" },
-          ranges: { type: "array", description: "INDEX_RANGE 类型分配到的编号范围", items: { $ref: "#/components/schemas/ResourceRange" } },
-          items: { type: "array", description: "ITEM_LIST 类型分配到的设备", items: { $ref: "#/components/schemas/ResourceItem" } },
-          quantity: { type: "number", description: "CAPACITY 类型分配到的容量，最多三位小数" }
+          poolId: { type: "string", format: "uuid", description: "Resource pool UUID" },
+          poolName: { type: "string", description: "Resource pool name snapshot" },
+          kind: { type: "string", enum: ["INDEX_RANGE", "ITEM_LIST", "CAPACITY"], description: "Allocation type of the resource pool" },
+          sharingMode: { type: "string", enum: ["EXCLUSIVE", "SHARED"], description: "Whether the resource allows sharing among multiple resource groups" },
+          unit: { type: "string", description: "Display unit for resource quantity" },
+          ranges: { type: "array", description: "Number range allocated for INDEX_RANGE type", items: { $ref: "#/components/schemas/ResourceRange" } },
+          items: { type: "array", description: "Equipment allocated for ITEM_LIST type", items: { $ref: "#/components/schemas/ResourceItem" } },
+          quantity: { type: "number", description: "Capacity allocated for CAPACITY type, up to three decimal places" }
         }
       },
       ResourceGroup: {
         type: "object",
-        description: "机器下可以被占用的资源集合",
+        description: "Collection of resources under a machine that can be reserved",
         required: ["id", "machineId", "name", "allocations", "resourceSummary", "description", "tags", "sortOrder", "status"],
         properties: {
-          id: { type: "string", format: "uuid", description: "资源组 UUID" },
-          machineId: { type: "string", format: "uuid", description: "所属机器 UUID" },
-          name: { type: "string", description: "资源组名称" },
-          allocations: { type: "array", description: "资源组拥有的资源分配明细", items: { $ref: "#/components/schemas/ResourceAllocation" } },
-          resourceSummary: { type: "string", description: "资源分配的人类可读摘要" },
-          description: { type: "string", description: "管理员填写的资源组说明" },
-          tags: { type: "array", description: "资源组标签", items: { type: "string", description: "单个标签" } },
-          sortOrder: { type: "integer", description: "同一机器内的展示顺序，数值越小越靠前" },
-          status: { type: "string", enum: ["ACTIVE", "DISABLED"], description: "资源组是否可用于新的占用" },
-          version: { type: "integer", description: "资源组配置版本；排期接口可能不返回此字段" }
+          id: { type: "string", format: "uuid", description: "Resource group UUID" },
+          machineId: { type: "string", format: "uuid", description: "Owning machine UUID" },
+          name: { type: "string", description: "Resource group name" },
+          allocations: { type: "array", description: "Resource allocation details owned by the resource group", items: { $ref: "#/components/schemas/ResourceAllocation" } },
+          resourceSummary: { type: "string", description: "Human-readable summary of resource allocation" },
+          description: { type: "string", description: "Resource group description filled in by the administrator" },
+          tags: { type: "array", description: "Resource group tags", items: { type: "string", description: "A single tag" } },
+          sortOrder: { type: "integer", description: "Display order within the same machine; smaller values appear earlier" },
+          status: { type: "string", enum: ["ACTIVE", "DISABLED"], description: "Whether the resource group accepts new reservations" },
+          version: { type: "integer", description: "Resource group configuration version; the schedule endpoint may omit this field" }
         }
       },
       ScheduleReservation: {
         type: "object",
-        description: "排期窗口中与当前用户可访问机器相关的已确认占用",
+        description: "Confirmed reservations within the scheduling window related to machines accessible by the current user",
         required: ["id", "scope", "machineId", "resourceGroupId", "applicantName", "applicantEmployeeNumber", "startAt", "endAt", "status", "mine", "title", "purpose", "note", "initialStartAt", "initialEndAt", "adjustmentType", "adjustmentReason"],
         properties: {
-          id: { type: "string", format: "uuid", description: "占用 UUID" },
-          scope: { type: "string", enum: ["RESOURCE_GROUP", "MACHINE"], description: "占用范围：单个资源组或整机" },
-          machineId: { type: "string", format: "uuid", description: "所属机器 UUID" },
-          resourceGroupId: { type: "string", format: "uuid", description: "占用的资源组 UUID；整机占用时为代表资源组" },
-          applicantName: { type: "string", description: "申请人展示姓名" },
-          applicantEmployeeNumber: { type: ["string", "null"], description: "申请人当前有效工号；未设置时为 null" },
-          startAt: { type: "string", format: "date-time", description: "当前生效的开始时间（RFC 3339）" },
-          endAt: { type: "string", format: "date-time", description: "当前生效的结束时间（RFC 3339）" },
-          status: { type: "string", enum: ["CONFIRMED"], description: "排期接口仅返回当前有效的已确认占用" },
-          mine: { type: "boolean", description: "该占用是否属于当前令牌用户" },
-          title: { type: "string", description: "占用标题" },
-          purpose: { type: "string", description: "占用用途" },
-          note: { type: "string", description: "占用补充说明" },
-          initialStartAt: { type: "string", format: "date-time", description: "首次创建时的开始时间" },
-          initialEndAt: { type: "string", format: "date-time", description: "首次创建时的结束时间" },
-          adjustmentType: { type: ["string", "null"], description: "时间被调整的原因类型；未调整时为 null" },
-          adjustmentReason: { type: "string", description: "时间调整原因说明" }
+          id: { type: "string", format: "uuid", description: "Reservation UUID" },
+          scope: { type: "string", enum: ["RESOURCE_GROUP", "MACHINE"], description: "Reservation scope: one resource group or the entire machine" },
+          machineId: { type: "string", format: "uuid", description: "Owning machine UUID" },
+          resourceGroupId: { type: "string", format: "uuid", description: "Resource group UUID for the reservation; represents the resource group for whole-machine reservations" },
+          applicantName: { type: "string", description: "Applicant's display name" },
+          applicantEmployeeNumber: { type: ["string", "null"], description: "Applicant's current valid employee ID; null if not set" },
+          startAt: { type: "string", format: "date-time", description: "Currently effective start time (RFC 3339)" },
+          endAt: { type: "string", format: "date-time", description: "Currently effective end time (RFC 3339)" },
+          status: { type: "string", enum: ["CONFIRMED"], description: "The schedule endpoint only returns active confirmed reservations" },
+          mine: { type: "boolean", description: "Whether this reservation belongs to the current user" },
+          title: { type: "string", description: "Reservation title" },
+          purpose: { type: "string", description: "Reservation purpose" },
+          note: { type: "string", description: "Reservation supplementary notes" },
+          initialStartAt: { type: "string", format: "date-time", description: "Start time at initial creation" },
+          initialEndAt: { type: "string", format: "date-time", description: "End time at initial creation" },
+          adjustmentType: { type: ["string", "null"], description: "The reason type for the time adjustment; null if not adjusted" },
+          adjustmentReason: { type: "string", description: "Description of the time adjustment reason" }
         }
       },
       Unavailability: {
         type: "object",
-        description: "机器或资源组的不可用时段",
+        description: "Unavailable time slots for a machine or resource group",
         required: ["id", "machineId", "resourceGroupId", "kind", "startAt", "endAt", "reason", "status"],
         properties: {
-          id: { type: "string", format: "uuid", description: "不可用记录 UUID" },
-          machineId: { type: "string", format: "uuid", description: "所属机器 UUID" },
-          resourceGroupId: { type: ["string", "null"], format: "uuid", description: "受影响的资源组 UUID；null 表示整机不可用" },
-          kind: { type: "string", enum: ["PLANNED", "LONG_TERM"], description: "计划维护或长期停用" },
-          startAt: { type: "string", format: "date-time", description: "不可用开始时间（RFC 3339）" },
-          endAt: { type: "string", format: "date-time", description: "不可用结束时间（RFC 3339）" },
-          reason: { type: "string", description: "不可用原因" },
-          status: { type: "string", enum: ["ACTIVE", "CANCELLED"], description: "不可用记录状态" }
+          id: { type: "string", format: "uuid", description: "Unavailability record UUID" },
+          machineId: { type: "string", format: "uuid", description: "Owning machine UUID" },
+          resourceGroupId: { type: ["string", "null"], format: "uuid", description: "Affected resource group UUID; null indicates the entire machine is unavailable" },
+          kind: { type: "string", enum: ["PLANNED", "LONG_TERM"], description: "Planned maintenance or long-term deactivation" },
+          startAt: { type: "string", format: "date-time", description: "Unavailability start time (RFC 3339)" },
+          endAt: { type: "string", format: "date-time", description: "Unavailability end time (RFC 3339)" },
+          reason: { type: "string", description: "Reason for unavailability" },
+          status: { type: "string", enum: ["ACTIVE", "CANCELLED"], description: "Unavailability record status" }
         }
       },
       Reservation: {
         type: "object",
-        description: "当前用户自己的完整占用记录",
+        description: "Complete reservation records owned by the current user",
         required: ["id", "batchId", "scope", "machineId", "machineName", "resourceGroupId", "resourceGroupName", "startAt", "endAt", "title", "purpose", "note", "status", "createdAt", "updatedAt"],
         properties: {
-          id: { type: "string", format: "uuid", description: "占用 UUID" },
-          batchId: { type: "string", format: "uuid", description: "同一次 CREATE 操作产生的占用批次 UUID" },
-          scope: { type: "string", enum: ["RESOURCE_GROUP", "MACHINE"], description: "占用范围：单个资源组或整机" },
-          machineId: { type: "string", format: "uuid", description: "所属机器 UUID" },
-          machineName: { type: "string", description: "机器名称" },
-          resourceGroupId: { type: "string", format: "uuid", description: "资源组 UUID" },
-          resourceGroupName: { type: "string", description: "资源组名称；整机占用时为“整机”" },
-          startAt: { type: "string", format: "date-time", description: "当前生效的开始时间（RFC 3339）" },
-          endAt: { type: "string", format: "date-time", description: "当前生效的结束时间（RFC 3339）" },
-          initialStartAt: { type: "string", format: "date-time", description: "首次创建时的开始时间" },
-          initialEndAt: { type: "string", format: "date-time", description: "首次创建时的结束时间" },
-          title: { type: "string", description: "占用标题" },
-          purpose: { type: "string", description: "占用用途" },
-          note: { type: "string", description: "占用补充说明" },
-          status: { type: "string", enum: ["CONFIRMED", "CANCELLED", "CANCELLED_UNAVAILABILITY"], description: "占用当前状态" },
-          adjustmentType: { type: ["string", "null"], description: "时间调整原因类型；未调整时为 null" },
-          adjustmentReason: { type: "string", description: "时间调整原因说明" },
-          cancellationReason: { type: "string", description: "取消原因；未取消时为空字符串" },
-          createdAt: { type: "string", format: "date-time", description: "占用创建时间" },
-          updatedAt: { type: "string", format: "date-time", description: "占用最后更新时间" }
+          id: { type: "string", format: "uuid", description: "Reservation UUID" },
+          batchId: { type: "string", format: "uuid", description: "Reservation batch UUID generated by the same CREATE operation" },
+          scope: { type: "string", enum: ["RESOURCE_GROUP", "MACHINE"], description: "Reservation scope: one resource group or the entire machine" },
+          machineId: { type: "string", format: "uuid", description: "Owning machine UUID" },
+          machineName: { type: "string", description: "Machine name" },
+          resourceGroupId: { type: "string", format: "uuid", description: "Resource group UUID" },
+          resourceGroupName: { type: "string", description: "Resource group name, or 'Entire machine' for a machine-wide reservation" },
+          startAt: { type: "string", format: "date-time", description: "Currently effective start time (RFC 3339)" },
+          endAt: { type: "string", format: "date-time", description: "Currently effective end time (RFC 3339)" },
+          initialStartAt: { type: "string", format: "date-time", description: "Start time at initial creation" },
+          initialEndAt: { type: "string", format: "date-time", description: "End time at initial creation" },
+          title: { type: "string", description: "Reservation title" },
+          purpose: { type: "string", description: "Reservation purpose" },
+          note: { type: "string", description: "Reservation supplementary notes" },
+          status: { type: "string", enum: ["CONFIRMED", "CANCELLED", "CANCELLED_UNAVAILABILITY"], description: "Current status of the reservation" },
+          adjustmentType: { type: ["string", "null"], description: "The reason type for the time adjustment; null if not adjusted" },
+          adjustmentReason: { type: "string", description: "Description of the time adjustment reason" },
+          cancellationReason: { type: "string", description: "Cancellation reason; empty string when not cancelled" },
+          createdAt: { type: "string", format: "date-time", description: "Reservation creation time" },
+          updatedAt: { type: "string", format: "date-time", description: "Reservation last update time" }
         }
       },
       ReservationSegment: {
         type: "object",
-        description: "用于创建或修改占用的目标资源与时间片段",
+        description: "Target resources and time slots for creating or updating a reservation",
         additionalProperties: false,
         required: ["scope", "resourceGroupId", "startAt", "endAt"],
         properties: {
-          scope: { type: "string", enum: ["RESOURCE_GROUP", "MACHINE"], description: "RESOURCE_GROUP 仅占用目标资源组；MACHINE 占用目标机器全部资源组" },
-          machineId: { type: "string", format: "uuid", description: "整机占用对应的机器 UUID；服务端会根据 resourceGroupId 校验并标准化" },
-          resourceGroupId: { type: "string", format: "uuid", description: "目标资源组 UUID；整机占用也需要传入该机器下的一个资源组" },
-          startMode: { type: "string", enum: ["IMMEDIATE", "SCHEDULED"], default: "SCHEDULED", description: "立即开始或按 startAt 计划开始" },
-          startAt: { type: "string", format: "date-time", description: "开始时间（RFC 3339），必须精确到分钟；IMMEDIATE 会按服务器当前分钟标准化" },
-          endAt: { type: "string", format: "date-time", description: "结束时间（RFC 3339），必须精确到分钟并晚于开始时间" },
-          title: { type: "string", maxLength: 120, default: "", description: "占用标题" },
-          purpose: { type: "string", maxLength: 500, default: "", description: "占用用途" },
-          note: { type: "string", maxLength: 1000, default: "", description: "补充说明" }
+          scope: { type: "string", enum: ["RESOURCE_GROUP", "MACHINE"], description: "RESOURCE_GROUP occupies only the target resource group; MACHINE occupies all resource groups of the target machine" },
+          machineId: { type: "string", format: "uuid", description: "Machine UUID for a machine-wide reservation. The server validates and normalizes it from resourceGroupId." },
+          resourceGroupId: { type: "string", format: "uuid", description: "Target resource group UUID; a whole-machine reservation also requires passing a resource group under that machine" },
+          startMode: { type: "string", enum: ["IMMEDIATE", "SCHEDULED"], default: "SCHEDULED", description: "Start immediately or schedule to start at startAt" },
+          startAt: { type: "string", format: "date-time", description: "Start time (RFC 3339) using whole-minute precision. IMMEDIATE is normalized to the server's current minute." },
+          endAt: { type: "string", format: "date-time", description: "End time (RFC 3339) using whole-minute precision and later than startAt" },
+          title: { type: "string", maxLength: 120, default: "", description: "Reservation title" },
+          purpose: { type: "string", maxLength: 500, default: "", description: "Reservation purpose" },
+          note: { type: "string", maxLength: 1000, default: "", description: "Additional notes" }
         }
       },
       PrepareOperationRequest: {
-        description: "占用写操作的预检请求；action 决定其余字段",
+        description: "Preflight request for reservation write operations; action determines the remaining fields",
         oneOf: [
           {
             type: "object",
             additionalProperties: false,
             required: ["action", "segments"],
             properties: {
-              action: { const: "CREATE", description: "创建一批新占用" },
-              segments: { type: "array", minItems: 1, maxItems: 100, description: "要一次性校验的占用片段；所有片段必须使用同一种 scope", items: { $ref: "#/components/schemas/ReservationSegment" } }
+              action: { const: "CREATE", description: "Create a batch of new reservations" },
+              segments: { type: "array", minItems: 1, maxItems: 100, description: "Reservation segments to validate in one batch; all segments must use the same scope", items: { $ref: "#/components/schemas/ReservationSegment" } }
             }
           },
           {
@@ -932,9 +932,9 @@ export const OPEN_API_DOCUMENT = {
             additionalProperties: false,
             required: ["action", "reservationId", "segment"],
             properties: {
-              action: { const: "UPDATE", description: "修改本人现有占用" },
-              reservationId: { type: "string", format: "uuid", description: "要修改的本人占用 UUID" },
-              segment: { $ref: "#/components/schemas/ReservationSegment", description: "修改后的完整占用片段" }
+              action: { const: "UPDATE", description: "Update one of your existing reservations" },
+              reservationId: { type: "string", format: "uuid", description: "UUID of the reservation to update" },
+              segment: { $ref: "#/components/schemas/ReservationSegment", description: "The complete updated reservation segment" }
             }
           },
           {
@@ -942,9 +942,9 @@ export const OPEN_API_DOCUMENT = {
             additionalProperties: false,
             required: ["action", "reservationId"],
             properties: {
-              action: { type: "string", enum: ["CANCEL", "END"], description: "CANCEL 取消尚未开始的占用；END 提前结束进行中的占用" },
-              reservationId: { type: "string", format: "uuid", description: "要取消或提前结束的本人占用 UUID" },
-              reason: { type: "string", maxLength: 500, default: "", description: "操作原因" }
+              action: { type: "string", enum: ["CANCEL", "END"], description: "CANCEL cancels a future reservation; END ends an ongoing reservation early" },
+              reservationId: { type: "string", format: "uuid", description: "UUID of the reservation to cancel or end early" },
+              reason: { type: "string", maxLength: 500, default: "", description: "Reason for this operation" }
             }
           }
         ],
@@ -952,101 +952,101 @@ export const OPEN_API_DOCUMENT = {
       },
       ReservationConflict: {
         type: "object",
-        description: "导致目标时段不可用的冲突",
+        description: "Conflicts causing the target time slot to be unavailable",
         additionalProperties: false,
         required: ["type", "startAt", "endAt", "label"],
         properties: {
-          type: { type: "string", description: "冲突类型，例如已有占用或资源不可用" },
-          startAt: { type: "string", format: "date-time", description: "冲突开始时间" },
-          endAt: { type: "string", format: "date-time", description: "冲突结束时间" },
-          label: { type: "string", description: "适合直接展示的冲突说明" }
+          type: { type: "string", description: "Conflict type, e.g., existing reservation or resource unavailability" },
+          startAt: { type: "string", format: "date-time", description: "Conflict start time" },
+          endAt: { type: "string", format: "date-time", description: "Conflict end time" },
+          label: { type: "string", description: "Conflict description suitable for direct display" }
         }
       },
       ReservationAvailability: {
         type: "object",
-        description: "单个占用片段的可用性预检结果",
+        description: "Availability result for one reservation segment",
         additionalProperties: false,
         required: ["input", "available", "conflicts", "splitSegments"],
         properties: {
-          input: { $ref: "#/components/schemas/ReservationSegment", description: "服务端标准化后的输入片段" },
-          available: { type: "boolean", description: "目标片段当前是否可以提交" },
-          conflicts: { type: "array", description: "阻止提交的冲突；可用时为空数组", items: { $ref: "#/components/schemas/ReservationConflict" } },
-          splitSegments: { type: "array", description: "避开冲突后可用的建议片段", items: { $ref: "#/components/schemas/ReservationSegment" } }
+          input: { $ref: "#/components/schemas/ReservationSegment", description: "Input segment normalized by the server" },
+          available: { type: "boolean", description: "Whether the target fragment can currently be submitted" },
+          conflicts: { type: "array", description: "Conflicts blocking submission; empty array when available", items: { $ref: "#/components/schemas/ReservationConflict" } },
+          splitSegments: { type: "array", description: "Suggested available segments that avoid conflicts", items: { $ref: "#/components/schemas/ReservationSegment" } }
         }
       },
       ReservationOperationSummary: {
         type: "object",
-        description: "预检操作涉及的原占用摘要",
+        description: "Summary of the original reservation involved in the preflight operation",
         additionalProperties: false,
         required: ["id", "scope", "machineId", "resourceGroupId", "startAt", "endAt", "title", "purpose", "note", "status"],
         properties: {
-          id: { type: "string", format: "uuid", description: "占用 UUID" },
-          scope: { type: "string", enum: ["RESOURCE_GROUP", "MACHINE"], description: "占用范围" },
-          machineId: { type: "string", format: "uuid", description: "机器 UUID" },
-          resourceGroupId: { type: "string", format: "uuid", description: "资源组 UUID" },
-          startAt: { type: "string", format: "date-time", description: "当前开始时间" },
-          endAt: { type: "string", format: "date-time", description: "当前结束时间" },
-          title: { type: "string", description: "占用标题" },
-          purpose: { type: "string", description: "占用用途" },
-          note: { type: "string", description: "补充说明" },
-          status: { type: "string", description: "占用当前状态" }
+          id: { type: "string", format: "uuid", description: "Reservation UUID" },
+          scope: { type: "string", enum: ["RESOURCE_GROUP", "MACHINE"], description: "Reservation scope" },
+          machineId: { type: "string", format: "uuid", description: "Machine UUID" },
+          resourceGroupId: { type: "string", format: "uuid", description: "Resource group UUID" },
+          startAt: { type: "string", format: "date-time", description: "Current start time" },
+          endAt: { type: "string", format: "date-time", description: "Current end time" },
+          title: { type: "string", description: "Reservation title" },
+          purpose: { type: "string", description: "Reservation purpose" },
+          note: { type: "string", description: "Additional notes" },
+          status: { type: "string", description: "Current status of the reservation" }
         }
       },
       CreateOperationPreview: {
         type: "object",
-        description: "CREATE 操作的预检详情",
+        description: "Preflight details for CREATE",
         required: ["items", "serverNow"],
         properties: {
-          items: { type: "array", description: "每个输入片段对应的可用性结果", items: { $ref: "#/components/schemas/ReservationAvailability" } },
-          serverNow: { type: "string", format: "date-time", description: "执行预检时的服务器时间" }
+          items: { type: "array", description: "Availability result for each input fragment", items: { $ref: "#/components/schemas/ReservationAvailability" } },
+          serverNow: { type: "string", format: "date-time", description: "Server time when preflight was executed" }
         }
       },
       UpdateOperationPreview: {
         type: "object",
-        description: "UPDATE 操作的预检详情",
+        description: "Preflight details for UPDATE",
         required: ["reservation", "segment", "item", "serverNow"],
         properties: {
-          reservation: { $ref: "#/components/schemas/ReservationOperationSummary", description: "修改前的占用摘要" },
-          segment: { $ref: "#/components/schemas/ReservationSegment", description: "服务端标准化后的新片段" },
-          item: { $ref: "#/components/schemas/ReservationAvailability", description: "新片段的可用性结果" },
-          serverNow: { type: "string", format: "date-time", description: "执行预检时的服务器时间" }
+          reservation: { $ref: "#/components/schemas/ReservationOperationSummary", description: "Reservation before the update" },
+          segment: { $ref: "#/components/schemas/ReservationSegment", description: "New fragment standardized by the server" },
+          item: { $ref: "#/components/schemas/ReservationAvailability", description: "Availability result for the new segment" },
+          serverNow: { type: "string", format: "date-time", description: "Server time when preflight was executed" }
         }
       },
       ExistingReservationPreview: {
         type: "object",
-        description: "CANCEL 或 END 操作的预检详情",
+        description: "Preflight details for CANCEL or END",
         required: ["reservation", "serverNow"],
         properties: {
-          reservation: { $ref: "#/components/schemas/ReservationOperationSummary", description: "即将操作的占用摘要" },
-          serverNow: { type: "string", format: "date-time", description: "执行预检时的服务器时间" }
+          reservation: { $ref: "#/components/schemas/ReservationOperationSummary", description: "Summary of the reservation affected by this operation" },
+          serverNow: { type: "string", format: "date-time", description: "Server time when preflight was executed" }
         }
       },
       PrepareOperationResponse: {
         type: "object",
-        description: "占用写操作的预检响应",
+        description: "Preflight response for reservation write operations",
         required: ["data", "meta"],
         properties: {
           data: {
             type: "object",
-            description: "预检业务结果",
+            description: "Preflight business result",
             required: ["action", "status", "preview"],
             properties: {
-              operationId: { type: "string", format: "uuid", description: "READY 时生成的预检操作 UUID；BLOCKED 时省略" },
-              action: { type: "string", enum: ["CREATE", "UPDATE", "CANCEL", "END"], description: "本次预检的业务动作" },
-              status: { type: "string", enum: ["READY", "BLOCKED"], description: "READY 可以继续提交；BLOCKED 必须调整请求后重新预检" },
+              operationId: { type: "string", format: "uuid", description: "Preflight UUID generated when READY; omitted when BLOCKED" },
+              action: { type: "string", enum: ["CREATE", "UPDATE", "CANCEL", "END"], description: "Action checked by this preflight" },
+              status: { type: "string", enum: ["READY", "BLOCKED"], description: "READY can be committed. BLOCKED requires a revised request and a new preflight." },
               preview: {
-                description: "按 action 返回的预检详情",
+                description: "Action-specific preflight details",
                 oneOf: [
                   { $ref: "#/components/schemas/CreateOperationPreview" },
                   { $ref: "#/components/schemas/UpdateOperationPreview" },
                   { $ref: "#/components/schemas/ExistingReservationPreview" }
                 ]
               },
-              confirmationToken: { type: "string", description: "READY 时返回的一次性确认令牌；BLOCKED 时省略" },
-              expiresAt: { type: "string", format: "date-time", description: "确认令牌到期时间；签发后 5 分钟" }
+              confirmationToken: { type: "string", description: "One-time confirmation token returned when READY; omitted when BLOCKED" },
+              expiresAt: { type: "string", format: "date-time", description: "Confirmation token expiration time, 5 minutes after issuance" }
             }
           },
-          meta: { $ref: "#/components/schemas/Meta", description: "响应元数据" }
+          meta: { $ref: "#/components/schemas/Meta", description: "Response metadata" }
         }
       },
       CommittedReservation: {
@@ -1054,63 +1054,63 @@ export const OPEN_API_DOCUMENT = {
           { $ref: "#/components/schemas/ReservationSegment" },
           {
             type: "object",
-            description: "CREATE 成功创建的占用标识和标准化片段",
+            description: "Reservation ID and normalized segment created by CREATE",
             required: ["id", "machineId"],
             properties: {
-              id: { type: "string", format: "uuid", description: "新占用 UUID" },
-              machineId: { type: "string", format: "uuid", description: "服务端根据资源组确定的机器 UUID" }
+              id: { type: "string", format: "uuid", description: "New reservation UUID" },
+              machineId: { type: "string", format: "uuid", description: "Machine UUID determined by the server based on the resource group" }
             }
           }
         ]
       },
       CreateCommitResult: {
         type: "object",
-        description: "CREATE 提交结果",
+        description: "CREATE submission result",
         required: ["batchId", "reservations", "revision", "serverNow"],
         properties: {
-          batchId: { type: "string", format: "uuid", description: "本批新占用的批次 UUID" },
-          reservations: { type: "array", description: "本次创建的占用", items: { $ref: "#/components/schemas/CommittedReservation" } },
-          revision: { type: "integer", description: "提交后的全局排期修订号" },
-          serverNow: { type: "string", format: "date-time", description: "提交完成时的服务器时间" }
+          batchId: { type: "string", format: "uuid", description: "Batch UUID for this batch of new reservations" },
+          reservations: { type: "array", description: "Reservations created by this request", items: { $ref: "#/components/schemas/CommittedReservation" } },
+          revision: { type: "integer", description: "Global schedule revision number after submission" },
+          serverNow: { type: "string", format: "date-time", description: "Server time at submission completion" }
         }
       },
       UpdateCommitResult: {
         type: "object",
-        description: "UPDATE 提交结果",
+        description: "UPDATE submission result",
         required: ["id", "revision"],
         properties: {
-          id: { type: "string", format: "uuid", description: "已修改的占用 UUID" },
-          revision: { type: "integer", description: "提交后的全局排期修订号" }
+          id: { type: "string", format: "uuid", description: "UUID of the modified reservation" },
+          revision: { type: "integer", description: "Global schedule revision number after submission" }
         }
       },
       CancelCommitResult: {
         type: "object",
-        description: "CANCEL 提交结果",
+        description: "CANCEL submission result",
         required: ["id", "cancelled", "revision"],
         properties: {
-          id: { type: "string", format: "uuid", description: "已取消的占用 UUID" },
-          cancelled: { const: true, description: "固定为 true，表示取消成功" },
-          revision: { type: "integer", description: "提交后的全局排期修订号" }
+          id: { type: "string", format: "uuid", description: "Cancelled reservation UUID" },
+          cancelled: { const: true, description: "Fixed as true, indicating successful cancellation" },
+          revision: { type: "integer", description: "Global schedule revision number after submission" }
         }
       },
       EndCommitResult: {
         type: "object",
-        description: "END 提交结果",
+        description: "END submission result",
         required: ["id", "ended", "removed", "revision"],
         properties: {
-          id: { type: "string", format: "uuid", description: "已提前结束的占用 UUID" },
-          ended: { const: true, description: "固定为 true，表示提前结束成功" },
-          removed: { type: "boolean", description: "占用尚未真正开始而被直接移除时为 true" },
-          revision: { type: "integer", description: "提交后的全局排期修订号" }
+          id: { type: "string", format: "uuid", description: "UUID of the reservation that ended early" },
+          ended: { const: true, description: "Fixed as true, indicating successful early termination" },
+          removed: { type: "boolean", description: "True when the reservation is removed directly before it actually starts" },
+          revision: { type: "integer", description: "Global schedule revision number after submission" }
         }
       },
       CommitOperationResponse: {
         type: "object",
-        description: "提交预检操作后的统一响应；data 结构取决于 prepare 中的 action",
+        description: "Commit response; the data shape depends on the action prepared earlier",
         required: ["data", "meta"],
         properties: {
           data: {
-            description: "CREATE、UPDATE、CANCEL 或 END 的提交结果",
+            description: "Submission result for CREATE, UPDATE, CANCEL, or END",
             oneOf: [
               { $ref: "#/components/schemas/CreateCommitResult" },
               { $ref: "#/components/schemas/UpdateCommitResult" },
@@ -1120,11 +1120,11 @@ export const OPEN_API_DOCUMENT = {
           },
           meta: {
             type: "object",
-            description: "提交响应元数据",
+            description: "Submission response metadata",
             required: ["serverTime", "replayed"],
             properties: {
-              serverTime: { type: "string", format: "date-time", description: "服务器生成响应时的时间" },
-              replayed: { type: "boolean", description: "是否返回同一确认令牌先前已成功提交的结果" }
+              serverTime: { type: "string", format: "date-time", description: "Time when the server generated the response" },
+              replayed: { type: "boolean", description: "Whether to return results previously submitted successfully with the same confirmation token" }
             }
           }
         }

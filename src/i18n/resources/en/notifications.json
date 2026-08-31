@@ -1,0 +1,17 @@
+{
+  "，{{v0}} 条未读通知": ", {{v0}} unread notifications",
+  "{{v0}} 条未读通知": "{{v0}} unread notifications",
+  "标为已读": "Mark as read",
+  "该占用开始不足一分钟，释放后会撤销整条记录并通知使用人。": "This reservation started less than a minute ago. Releasing will revoke the entire record and notify the user.",
+  "机器使用权、资源浏览、占用管理、通知和用户信息。": "Machine access, resource browsing, reservation management, notifications, and user information.",
+  "将清除 {{v0}} 项机器权限、{{v1}} 条使用权申请和 {{v2}} 条通知。\n": "Will clear {{v0}} machine permissions, {{v1}} access requests, and {{v2}} notifications.",
+  "全部通知已标为已读": "All notifications marked as read",
+  "释放后会立即腾出剩余时段，并通知使用人。": "Release will immediately free up remaining time slots and notify the user.",
+  "释放后会取消该占用、立即腾出时段，并通知使用人。": "Release will cancel this reservation, immediately free up time slots, and notify the user.",
+  "通知": "Notifications",
+  "通知中心": "Notifications",
+  "未读": "Unread",
+  "一键已读": "Read all",
+  "邮件通知": "Email",
+  "暂时没有通知": "No notifications yet"
+}

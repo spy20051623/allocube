@@ -54,7 +54,7 @@ describe("公告发布时间迁移", () => {
       dbModule.db
         .prepare("SELECT MAX(version) AS version FROM schema_migrations")
         .get()
-    ).toEqual({ version: 17 });
+    ).toEqual({ version: 18 });
     expect(
       dbModule.db
         .prepare(

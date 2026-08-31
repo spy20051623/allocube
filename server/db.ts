@@ -531,6 +531,30 @@ export async function initializeDatabase() {
       throw error;
     }
   }
+  if (schemaVersion.version === 17 && FINAL_SCHEMA_VERSION >= 18) {
+    db.exec("BEGIN EXCLUSIVE");
+    try {
+      const columns = new Set(
+        (db.prepare("PRAGMA table_info(notifications)").all() as Array<{ name: string }>).map(
+          (column) => column.name
+        )
+      );
+      if (!columns.has("template_key")) {
+        db.exec("ALTER TABLE notifications ADD COLUMN template_key TEXT");
+      }
+      if (!columns.has("template_params_json")) {
+        db.exec("ALTER TABLE notifications ADD COLUMN template_params_json TEXT");
+      }
+      db.prepare(
+        "INSERT INTO schema_migrations(version, applied_at) VALUES(18, ?)"
+      ).run(nowIso());
+      db.exec("COMMIT");
+      schemaVersion = { version: 18 };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
   if (schemaVersion.version !== FINAL_SCHEMA_VERSION) {
     throw new Error(
       `数据库结构版本不匹配：当前 ${schemaVersion.version ?? 0}，需要 ${FINAL_SCHEMA_VERSION}。开发阶段请先重置数据库。`

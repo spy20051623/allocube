@@ -1,3 +1,6 @@
+import { tr } from "./i18n/index";
+import { useTranslation } from "react-i18next";
+import { LanguageSwitcher } from "./i18n/LanguageSwitcher";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -27,9 +30,8 @@ import {
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  docsSectionBySlug,
   docsSectionMatches,
-  docsSections,
+  getDocsSections,
   DOCS_ALLOW_RAW_HTML,
   extractDocsHeadings,
   slugifyDocsHeading
@@ -67,10 +69,14 @@ type DocsNotify = (kind: "success" | "error", message: string) => void;
 const DocsNotifyContext = createContext<DocsNotify>(() => undefined);
 
 export function DocumentationPage({ route, notify }: { route: ResolvedDocsRoute; notify: DocsNotify }) {
+  const { i18n } = useTranslation();
+  const docsSections = getDocsSections();
+  const docsSectionBySlug = new Map(docsSections.map((section) => [section.slug, section]));
   const [query, setQuery] = useState("");
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [openApi, setOpenApi] = useState<OpenApiState>({ status: "loading" });
   const searchRef = useRef<HTMLDivElement>(null);
+  const previousLanguage = useRef(i18n.resolvedLanguage);
 
   const loadOpenApi = useCallback(async () => {
     setOpenApi({ status: "loading" });
@@ -82,12 +88,12 @@ export function DocumentationPage({ route, notify }: { route: ResolvedDocsRoute;
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const document: unknown = await response.json();
       const operations = listOpenApiOperations(document);
-      if (operations.length === 0) throw new Error("OpenAPI 文档中没有可展示的端点");
+      if (operations.length === 0) throw new Error(tr("OpenAPI 文档中没有可展示的端点"));
       setOpenApi({ status: "ready", document, operations });
     } catch (error) {
       setOpenApi({
         status: "error",
-        message: error instanceof Error ? error.message : "无法加载 OpenAPI 文档"
+        message: error instanceof Error ? error.message : tr("无法加载 OpenAPI 文档")
       });
     }
   }, []);
@@ -95,13 +101,21 @@ export function DocumentationPage({ route, notify }: { route: ResolvedDocsRoute;
   useEffect(() => {
     document.body.classList.add("docs-page-active");
     const previousTitle = document.title;
-    document.title = "文档中心 · Allocube";
+    document.title = tr("文档中心 · Allocube");
     void loadOpenApi();
     return () => {
       document.body.classList.remove("docs-page-active");
       document.title = previousTitle;
     };
-  }, [loadOpenApi]);
+  }, [i18n.resolvedLanguage, loadOpenApi]);
+
+  useEffect(() => {
+    if (previousLanguage.current === i18n.resolvedLanguage) return;
+    previousLanguage.current = i18n.resolvedLanguage;
+    if (window.location.hash) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
+  }, [i18n.resolvedLanguage]);
 
   useEffect(() => {
     const closeSearch = (event: MouseEvent) => {
@@ -132,26 +146,26 @@ export function DocumentationPage({ route, notify }: { route: ResolvedDocsRoute;
   const section = docsSectionBySlug.get(route.slug) ?? docsSections[0];
   const headings = extractDocsHeadings(section.markdown).filter((heading) => heading.depth > 1);
   const operations = openApi.status === "ready" ? openApi.operations : [];
-  const searchResults = buildSearchResults(query, operations);
+  const searchResults = buildSearchResults(query, operations, docsSections);
 
   return (
     <DocsNotifyContext.Provider value={notify}>
     <div className="docs-shell">
       <header className="docs-header">
-        <a className="docs-brand" href="/docs" aria-label="Allocube 文档中心首页">
+        <a className="docs-brand" href="/docs" aria-label={tr("Allocube 文档中心首页")}>
           <span className="docs-brand-mark"><Boxes size={20} /></span>
-          <span><strong>Allocube</strong><small>文档中心</small></span>
+          <span><strong>Allocube</strong><small>{tr("文档中心")}</small></span>
         </a>
         <div className="docs-search" ref={searchRef}>
           <Search size={17} aria-hidden="true" />
           <input
-            aria-label="搜索文档"
-            placeholder="搜索手册、路径或 operationId"
+            aria-label={tr("搜索文档")}
+            placeholder={tr("搜索手册、路径或 operationId")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
           {query && (
-            <button type="button" aria-label="清除搜索" onClick={() => setQuery("")}>
+            <button type="button" aria-label={tr("清除搜索")} onClick={() => setQuery("")}>
               <X size={15} />
             </button>
           )}
@@ -159,18 +173,20 @@ export function DocumentationPage({ route, notify }: { route: ResolvedDocsRoute;
             <SearchResults results={searchResults} onSelect={() => setQuery("")} />
           )}
         </div>
-        <nav className="docs-header-actions" aria-label="文档快捷入口">
+        <nav className="docs-header-actions" aria-label={tr("文档快捷入口")}>
+          <LanguageSwitcher />
           {section.slug === "api" && (
             <a href={OPENAPI_URL} target="_blank" rel="noreferrer">
               <FileJson size={16} /> OpenAPI JSON
             </a>
           )}
-          <a href="/login"><ArrowLeft size={16} /> 返回系统</a>
+          <a href="/login"><ArrowLeft size={16} /> {tr("返回系统")}</a>
         </nav>
+        <div className="docs-mobile-language"><LanguageSwitcher compact /></div>
         <button
           className="docs-mobile-menu"
           type="button"
-          aria-label="打开章节导航"
+          aria-label={tr("打开章节导航")}
           aria-expanded={navigationOpen}
           onClick={() => setNavigationOpen((open) => !open)}
         >
@@ -180,8 +196,8 @@ export function DocumentationPage({ route, notify }: { route: ResolvedDocsRoute;
 
       <div className="docs-layout">
         <aside className={`docs-sidebar${navigationOpen ? " open" : ""}`}>
-          <div className="docs-sidebar-title">产品手册</div>
-          <nav aria-label="文档章节">
+          <div className="docs-sidebar-title">{tr("产品手册")}</div>
+          <nav aria-label={tr("文档章节")}>
             {docsSections.map((item) => (
               <a
                 key={item.slug}
@@ -195,7 +211,7 @@ export function DocumentationPage({ route, notify }: { route: ResolvedDocsRoute;
           </nav>
           <div className="docs-sidebar-note">
             <BookOpenText size={16} />
-            <p>说明内容以仓库中的版本化 Markdown 为准；API 字段以 OpenAPI JSON 为准。</p>
+            <p>{tr("说明内容以仓库中的版本化 Markdown 为准；API 字段以 OpenAPI JSON 为准。")}</p>
           </div>
         </aside>
 
@@ -206,11 +222,11 @@ export function DocumentationPage({ route, notify }: { route: ResolvedDocsRoute;
           {section.slug === "api" && (
             <OpenApiReference state={openApi} onRetry={loadOpenApi} />
           )}
-          <DocsPager currentSlug={section.slug} />
+          <DocsPager currentSlug={section.slug} sections={docsSections} />
         </main>
 
-        <aside className="docs-toc" aria-label="本页目录">
-          <strong>本页内容</strong>
+        <aside className="docs-toc" aria-label={tr("本页目录")}>
+          <strong>{tr("本页内容")}</strong>
           <nav>
             {headings.map((heading) => (
               <a
@@ -221,7 +237,7 @@ export function DocumentationPage({ route, notify }: { route: ResolvedDocsRoute;
                 {heading.text}
               </a>
             ))}
-            {section.slug === "api" && <a href="#api-reference">端点参考</a>}
+            {section.slug === "api" && <a href="#api-reference">{tr("端点参考")}</a>}
           </nav>
         </aside>
       </div>
@@ -266,7 +282,7 @@ function MarkdownDocument({ markdown }: { markdown: string }) {
 function LinkedHeading({ level, children }: { level: 2 | 3; children: ReactNode }) {
   const text = nodeText(children);
   const id = slugifyDocsHeading(text);
-  const content = <>{children}<a className="docs-heading-anchor" href={`#${id}`} aria-label={`链接到${text}`}>#</a></>;
+  const content = <>{children}<a className="docs-heading-anchor" href={`#${id}`} aria-label={tr("链接到{{v0}}", { v0: text })}>#</a></>;
   return level === 2 ? <h2 id={id}>{content}</h2> : <h3 id={id}>{content}</h3>;
 }
 
@@ -275,10 +291,9 @@ function CopyableCode({ children }: { children: ReactNode }) {
   const text = nodeText(children).replace(/\n$/, "");
   return (
     <div className="docs-code-block">
-      <button type="button" onClick={() => void copyToClipboard(text)} aria-label="复制代码">
+      <button type="button" onClick={() => void copyToClipboard(text)} aria-label={tr("复制代码")}>
         <Clipboard size={14} />
-        复制
-      </button>
+        {tr("复制")}</button>
       <pre>{children}</pre>
     </div>
   );
@@ -286,9 +301,9 @@ function CopyableCode({ children }: { children: ReactNode }) {
 
 function SearchResults({ results, onSelect }: { results: SearchResult[]; onSelect: () => void }) {
   return (
-    <div className="docs-search-results" role="listbox" aria-label="搜索结果">
+    <div className="docs-search-results" role="listbox" aria-label={tr("搜索结果")}>
       {results.length === 0 ? (
-        <div className="docs-search-empty">没有找到匹配内容</div>
+        <div className="docs-search-empty">{tr("没有找到匹配内容")}</div>
       ) : results.map((result) => (
         <a key={result.key} href={result.href} onClick={onSelect} role="option" aria-selected="false">
           <span>{result.eyebrow}</span>
@@ -300,14 +315,14 @@ function SearchResults({ results, onSelect }: { results: SearchResult[]; onSelec
   );
 }
 
-function buildSearchResults(query: string, operations: OpenApiOperation[]): SearchResult[] {
+function buildSearchResults(query: string, operations: OpenApiOperation[], docsSections: ReturnType<typeof getDocsSections>): SearchResult[] {
   if (!query.trim()) return [];
   const sectionResults = docsSections
     .filter((section) => docsSectionMatches(section, query))
     .map((section) => ({
       key: `section-${section.slug}`,
       href: section.path,
-      eyebrow: "产品手册",
+      eyebrow: tr("产品手册"),
       title: section.title,
       detail: section.description
     }));
@@ -336,23 +351,21 @@ function OpenApiReference({
       <div className="api-reference-head">
         <div>
           <span>OpenAPI 3.1</span>
-          <h2>端点参考</h2>
-          <p>以下内容从公开的 OpenAPI JSON 实时生成，不接受或保存个人访问令牌。</p>
+          <h2>{tr("端点参考")}</h2>
+          <p>{tr("以下内容从公开的 OpenAPI JSON 实时生成，不接受或保存个人访问令牌。")}</p>
         </div>
         <a className="docs-outline-button" href={OPENAPI_URL} target="_blank" rel="noreferrer">
-          <FileJson size={15} /> 原始 JSON
-        </a>
+          <FileJson size={15} /> {tr("原始 JSON")}</a>
       </div>
       {state.status === "loading" && (
-        <div className="api-state"><RefreshCw className="spinning" size={20} />正在加载端点定义…</div>
+        <div className="api-state"><RefreshCw className="spinning" size={20} />{tr("正在加载端点定义…")}</div>
       )}
       {state.status === "error" && (
         <div className="api-state api-state-error">
           <AlertTriangle size={21} />
-          <div><strong>OpenAPI 加载失败</strong><p>{state.message}。上方 API 接入指南仍可正常阅读。</p></div>
+          <div><strong>{tr("OpenAPI 加载失败")}</strong><p>{state.message}{tr("。上方 API 接入指南仍可正常阅读。")}</p></div>
           <button type="button" className="docs-outline-button" onClick={() => void onRetry()}>
-            <RefreshCw size={15} /> 重试
-          </button>
+            <RefreshCw size={15} /> {tr("重试")}</button>
         </div>
       )}
       {state.status === "ready" && (
@@ -394,7 +407,7 @@ function OpenApiOperationCard({ document, operation }: { document: unknown; oper
         <button
           type="button"
           className="api-copy-endpoint"
-          aria-label={`复制接口地址 ${endpointUrl}`}
+          aria-label={tr("复制接口地址 {{v0}}", { v0: endpointUrl })}
           title={endpointUrl}
           onClick={(event) => {
             event.preventDefault();
@@ -410,12 +423,12 @@ function OpenApiOperationCard({ document, operation }: { document: unknown; oper
         {operation.description && <p>{operation.description}</p>}
         {operation.operationId && <p className="api-operation-id"><strong>operationId</strong><code>{operation.operationId}</code></p>}
         <div className="api-endpoint-url">
-          <strong>完整 URL</strong>
+          <strong>{tr("完整 URL")}</strong>
           <button
             type="button"
             className="api-endpoint-url-value"
-            aria-label={`复制完整接口地址 ${endpointUrl}`}
-            title="点击复制完整 URL"
+            aria-label={tr("复制完整接口地址 {{v0}}", { v0: endpointUrl })}
+            title={tr("点击复制完整 URL")}
             onClick={() => void copyToClipboard(endpointUrl)}
           >
             <code>{endpointUrl}</code>
@@ -436,10 +449,10 @@ function OpenApiOperationCard({ document, operation }: { document: unknown; oper
 function ApiParameters({ document, parameters }: { document: unknown; parameters: Record<string, unknown>[] }) {
   return (
     <div className="api-subsection">
-      <h4>参数</h4>
+      <h4>{tr("参数")}</h4>
       <div className="docs-table-wrap">
         <table className="api-parameters-table">
-          <thead><tr><th>参数名</th><th>类型</th><th>位置</th><th>必填</th><th>说明</th></tr></thead>
+          <thead><tr><th>{tr("参数名")}</th><th>{tr("类型")}</th><th>{tr("位置")}</th><th>{tr("必填")}</th><th>{tr("说明")}</th></tr></thead>
           <tbody>
             {parameters.map((parameter, index) => (
               <tr key={`${String(parameter.name)}-${index}`}>
@@ -448,7 +461,7 @@ function ApiParameters({ document, parameters }: { document: unknown; parameters
                 <td><span className="api-parameter-location">{parameterLocationLabel(parameter.in)}</span></td>
                 <td>
                   <span className={`api-parameter-required ${parameter.required === true ? "required" : "optional"}`}>
-                    {parameter.required === true ? "是" : "否"}
+                    {parameter.required === true ? tr("是") : tr("否")}
                   </span>
                 </td>
                 <td className="api-parameter-description">
@@ -467,7 +480,7 @@ function ApiParameters({ document, parameters }: { document: unknown; parameters
 function ApiResponses({ document, responses }: { document: unknown; responses: Record<string, unknown> }) {
   return (
     <div className="api-subsection">
-      <h4>响应</h4>
+      <h4>{tr("响应")}</h4>
       <div className="api-responses">
         {Object.entries(responses).map(([status, raw]) => {
           const response = resolveOpenApiValue(document, raw);
@@ -485,7 +498,7 @@ function ApiResponses({ document, responses }: { document: unknown; responses: R
               {media?.schema !== undefined && (
                 <SchemaDisclosure document={document} value={media.schema} />
               )}
-              {media?.example !== undefined && <ApiExample title="示例" value={media.example} />}
+              {media?.example !== undefined && <ApiExample title={tr("示例")} value={media.example} />}
               {isObject(media?.examples) && Object.entries(media.examples).map(([name, example]) => (
                 <ApiExample key={name} title={name} value={example} />
               ))}
@@ -501,11 +514,11 @@ function ApiRequestBody({ document, requestBody }: { document: unknown; requestB
   const media = mediaTypeDetails(requestBody);
   return (
     <div className="api-subsection">
-      <h4>请求体</h4>
+      <h4>{tr("请求体")}</h4>
       {media?.schema !== undefined && (
         <SchemaDisclosure document={document} value={media.schema} />
       )}
-      {media?.example !== undefined && <ApiExample title="示例" value={media.example} />}
+      {media?.example !== undefined && <ApiExample title={tr("示例")} value={media.example} />}
       {isObject(media?.examples) && Object.entries(media.examples).map(([name, example]) => (
         <ApiExample key={name} title={name} value={example} />
       ))}
@@ -528,10 +541,10 @@ function ApiExample({ title, value }: { title: string; value: unknown }) {
 function ApiResponseHeaders({ document, headers }: { document: unknown; headers: Record<string, unknown> }) {
   return (
     <div className="api-response-headers">
-      <strong>响应头</strong>
+      <strong>{tr("响应头")}</strong>
       <div className="docs-table-wrap">
         <table>
-          <thead><tr><th>名称</th><th>类型</th><th>说明</th></tr></thead>
+          <thead><tr><th>{tr("名称")}</th><th>{tr("类型")}</th><th>{tr("说明")}</th></tr></thead>
           <tbody>
             {Object.entries(headers).map(([name, raw]) => {
               const header = resolveOpenApiValue(document, raw);
@@ -557,7 +570,7 @@ function SchemaDisclosure({ document, value }: { document: unknown; value: unkno
     <div className="api-schema-disclosure">
       <SchemaExplorer document={document} value={value} />
       <details className="api-schema-raw">
-        <summary>查看原始 Schema</summary>
+        <summary>{tr("查看原始 Schema")}</summary>
         <JsonPreview value={resolved} />
       </details>
     </div>
@@ -579,7 +592,7 @@ function SchemaExplorer({
 }) {
   const reference = isObject(value) && typeof value.$ref === "string" ? value.$ref : undefined;
   if (reference && references.has(reference)) {
-    return <div className="api-schema-reference">引用 {reference.split("/").at(-1)}</div>;
+    return <div className="api-schema-reference">{tr("引用")}{reference.split("/").at(-1)}</div>;
   }
   const resolved = resolveOpenApiValue(document, value);
   if (!isObject(resolved)) return <SchemaInlineSummary document={document} value={resolved} />;
@@ -587,11 +600,11 @@ function SchemaExplorer({
   const required = new Set(Array.isArray(resolved.required) ? resolved.required.filter((item): item is string => typeof item === "string") : []);
   const properties = isObject(resolved.properties) ? resolved.properties : undefined;
   const variants = Array.isArray(resolved.oneOf)
-    ? { label: "可选结构", values: resolved.oneOf }
+    ? { label: tr("可选结构"), values: resolved.oneOf }
     : Array.isArray(resolved.anyOf)
-      ? { label: "可选结构", values: resolved.anyOf }
+      ? { label: tr("可选结构"), values: resolved.anyOf }
       : Array.isArray(resolved.allOf)
-        ? { label: "组合结构", values: resolved.allOf }
+        ? { label: tr("组合结构"), values: resolved.allOf }
         : undefined;
 
   return (
@@ -608,7 +621,7 @@ function SchemaExplorer({
                 <div className="api-schema-field-head">
                   <code>{name}</code>
                   <SchemaInlineSummary document={document} value={property} compact />
-                  {required.has(name) && <span className="api-required-badge">必填</span>}
+                  {required.has(name) && <span className="api-required-badge">{tr("必填")}</span>}
                 </div>
                 {description && <p>{description}</p>}
                 {depth < 8 && schemaHasChildren(document, property) && (
@@ -627,7 +640,7 @@ function SchemaExplorer({
       )}
       {resolved.items !== undefined && depth < 8 && (
         <div className="api-schema-items">
-          <strong>数组元素</strong>
+          <strong>{tr("数组元素")}</strong>
           <SchemaExplorer document={document} value={resolved.items} depth={depth + 1} references={nextReferences} />
         </div>
       )}
@@ -678,11 +691,11 @@ function schemaTypeLabel(document: unknown, value: unknown): string {
     if (resolved.type === "array") return `array<${schemaTypeLabel(document, resolved.items)}>`;
     return resolved.format ? `${resolved.type} · ${String(resolved.format)}` : resolved.type;
   }
-  if (Array.isArray(resolved.oneOf) || Array.isArray(resolved.anyOf)) return "联合类型";
-  if (Array.isArray(resolved.allOf)) return "组合对象";
+  if (Array.isArray(resolved.oneOf) || Array.isArray(resolved.anyOf)) return tr("联合类型");
+  if (Array.isArray(resolved.allOf)) return tr("组合对象");
   if (isObject(resolved.properties)) return "object";
   if (resolved.const !== undefined) return typeof resolved.const;
-  return "任意类型";
+  return tr("任意类型");
 }
 
 function schemaVariantLabel(document: unknown, value: unknown, index: number) {
@@ -699,26 +712,26 @@ function schemaVariantLabel(document: unknown, value: unknown, index: number) {
     }
   }
   const type = schemaTypeLabel(document, value);
-  return type === "object" ? `结构 ${index + 1}` : type;
+  return type === "object" ? tr("结构 {{v0}}", { v0: index + 1 }) : type;
 }
 
 function schemaConstraintLabels(schema: Record<string, unknown>): string[] {
   const labels: string[] = [];
-  if (Array.isArray(schema.enum)) labels.push(`可选：${schema.enum.map(schemaDisplayValue).join(" / ")}`);
-  if (schema.const !== undefined) labels.push(`固定：${schemaDisplayValue(schema.const)}`);
-  if (schema.default !== undefined) labels.push(`默认：${schemaDisplayValue(schema.default)}`);
-  if (schema.minimum !== undefined) labels.push(`最小：${String(schema.minimum)}`);
-  if (schema.maximum !== undefined) labels.push(`最大：${String(schema.maximum)}`);
-  if (schema.minLength !== undefined) labels.push(`最短：${String(schema.minLength)}`);
-  if (schema.maxLength !== undefined) labels.push(`最长：${String(schema.maxLength)}`);
-  if (schema.minItems !== undefined) labels.push(`最少 ${String(schema.minItems)} 项`);
-  if (schema.maxItems !== undefined) labels.push(`最多 ${String(schema.maxItems)} 项`);
-  if (typeof schema.pattern === "string") labels.push(`格式：${schema.pattern}`);
+  if (Array.isArray(schema.enum)) labels.push(tr("可选：{{v0}}", { v0: schema.enum.map(schemaDisplayValue).join(" / ") }));
+  if (schema.const !== undefined) labels.push(tr("固定：{{v0}}", { v0: schemaDisplayValue(schema.const) }));
+  if (schema.default !== undefined) labels.push(tr("默认：{{v0}}", { v0: schemaDisplayValue(schema.default) }));
+  if (schema.minimum !== undefined) labels.push(tr("最小：{{v0}}", { v0: String(schema.minimum) }));
+  if (schema.maximum !== undefined) labels.push(tr("最大：{{v0}}", { v0: String(schema.maximum) }));
+  if (schema.minLength !== undefined) labels.push(tr("最短：{{v0}}", { v0: String(schema.minLength) }));
+  if (schema.maxLength !== undefined) labels.push(tr("最长：{{v0}}", { v0: String(schema.maxLength) }));
+  if (schema.minItems !== undefined) labels.push(tr("最少 {{v0}} 项", { v0: String(schema.minItems) }));
+  if (schema.maxItems !== undefined) labels.push(tr("最多 {{v0}} 项", { v0: String(schema.maxItems) }));
+  if (typeof schema.pattern === "string") labels.push(tr("格式：{{v0}}", { v0: schema.pattern }));
   return labels;
 }
 
 function schemaDisplayValue(value: unknown) {
-  if (value === "") return "(空)";
+  if (value === "") return tr("(空)");
   if (value === null) return "null";
   if (value === undefined) return "-";
   return String(value);
@@ -743,9 +756,9 @@ function responseStatusTone(status: string) {
 }
 
 function parameterLocationLabel(value: unknown) {
-  if (value === "query") return "查询参数";
-  if (value === "path") return "路径参数";
-  if (value === "header") return "请求头";
+  if (value === "query") return tr("查询参数");
+  if (value === "path") return tr("路径参数");
+  if (value === "header") return tr("请求头");
   if (value === "cookie") return "Cookie";
   return String(value ?? "-");
 }
@@ -755,7 +768,7 @@ function JsonPreview({ value, compact = false }: { value: unknown; compact?: boo
   const serialized = JSON.stringify(value, null, 2) ?? String(value);
   return (
     <div className={`api-json${compact ? " compact" : ""}`}>
-      <button type="button" aria-label="复制 JSON" onClick={() => void copyToClipboard(serialized)}>
+      <button type="button" aria-label={tr("复制 JSON")} onClick={() => void copyToClipboard(serialized)}>
         <Clipboard size={13} />
       </button>
       <pre><code>{serialized}</code></pre>
@@ -768,21 +781,21 @@ function useCopyToClipboard() {
   return useCallback(async (text: string) => {
     try {
       await copyTextToClipboard(text);
-      notify("success", "复制成功");
+      notify("success", tr("复制成功"));
     } catch {
-      notify("error", "复制失败，请手动复制");
+      notify("error", tr("复制失败，请手动复制"));
     }
   }, [notify]);
 }
 
-function DocsPager({ currentSlug }: { currentSlug: string }) {
-  const index = docsSections.findIndex((section) => section.slug === currentSlug);
-  const previous = index > 0 ? docsSections[index - 1] : undefined;
-  const next = index >= 0 && index < docsSections.length - 1 ? docsSections[index + 1] : undefined;
+function DocsPager({ currentSlug, sections }: { currentSlug: string; sections: ReturnType<typeof getDocsSections> }) {
+  const index = sections.findIndex((section) => section.slug === currentSlug);
+  const previous = index > 0 ? sections[index - 1] : undefined;
+  const next = index >= 0 && index < sections.length - 1 ? sections[index + 1] : undefined;
   return (
-    <nav className="docs-pager" aria-label="相邻章节">
-      {previous ? <a href={previous.path}><small>上一章</small><strong>← {previous.title}</strong></a> : <span />}
-      {next && <a className="next" href={next.path}><small>下一章</small><strong>{next.title} →</strong></a>}
+    <nav className="docs-pager" aria-label={tr("相邻章节")}>
+      {previous ? <a href={previous.path}><small>{tr("上一章")}</small><strong>← {previous.title}</strong></a> : <span />}
+      {next && <a className="next" href={next.path}><small>{tr("下一章")}</small><strong>{next.title} →</strong></a>}
     </nav>
   );
 }
@@ -794,8 +807,8 @@ function DocsNotFound({ pathname }: { pathname: string }) {
   }, []);
   return (
     <div className="docs-not-found">
-      <a className="docs-brand" href="/docs"><span className="docs-brand-mark"><Boxes size={20} /></span><strong>Allocube 文档中心</strong></a>
-      <div><span>404</span><h1>没有这个文档章节</h1><p><code>{pathname}</code> 不在当前文档版本中。</p><a href="/docs">返回文档首页</a></div>
+      <a className="docs-brand" href="/docs"><span className="docs-brand-mark"><Boxes size={20} /></span><strong>{tr("Allocube 文档中心")}</strong></a>
+      <div><span>404</span><h1>{tr("没有这个文档章节")}</h1><p><code>{pathname}</code> {tr("不在当前文档版本中。")}</p><a href="/docs">{tr("返回文档首页")}</a></div>
     </div>
   );
 }

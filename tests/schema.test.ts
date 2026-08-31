@@ -57,7 +57,9 @@ describe("最终数据库结构", () => {
     const notificationColumns = (
       dbModule.db.prepare("PRAGMA table_info(notifications)").all() as Array<{ name: string }>
     ).map((column) => column.name);
-    expect(notificationColumns).toEqual(expect.arrayContaining(["entity_type", "entity_id"]));
+    expect(notificationColumns).toEqual(
+      expect.arrayContaining(["entity_type", "entity_id", "template_key", "template_params_json"])
+    );
     const announcementColumns = (
       dbModule.db.prepare("PRAGMA table_info(announcements)").all() as Array<{
         name: string;

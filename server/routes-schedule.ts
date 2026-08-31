@@ -721,6 +721,11 @@ export function registerScheduleRoutes(
         type: row.type,
         title: row.title,
         body: row.body,
+        templateKey: row.template_key,
+        templateParams:
+          typeof row.template_params_json === "string"
+            ? JSON.parse(row.template_params_json)
+            : null,
         link: row.link,
         entityType: row.entity_type,
         entityId: row.entity_id,
@@ -787,12 +792,17 @@ export function registerScheduleRoutes(
       return reply.code(error.statusCode).send({
         error: error.message,
         details: error.details,
-        ...(error.code ? { code: error.code } : {})
+        code: error.code,
+        params: error.params,
+        messageCode: error.messageCode
       });
     }
     if (error instanceof z.ZodError) {
       return reply.code(400).send({
         error: "输入内容不符合要求",
+        code: "VALIDATION_ERROR",
+        params: {},
+        messageCode: "errors.validation_error",
         details: error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message }))
       });
     }

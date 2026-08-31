@@ -150,7 +150,7 @@ describe("文档内容模型", () => {
     );
     const serialized = JSON.stringify(OPEN_API_DOCUMENT);
 
-    expect(OPEN_API_DOCUMENT.info.title).toBe("Allocube 官方 API");
+    expect(OPEN_API_DOCUMENT.info.title).toBe("Allocube Official API");
     expect(serialized).not.toMatch(/官方 AI API|五分钟|八天|REDACTED/u);
     for (const match of serialized.matchAll(/<([^>\r\n]+)>/g)) {
       expect(match[1]).toMatch(/^[A-Z][A-Z0-9_]*$/u);
@@ -225,13 +225,14 @@ describe("OpenAPI 文档展示模型", () => {
     );
     expect(pageSource).toContain("function SchemaExplorer");
     expect(pageSource).toContain("function ApiResponseHeaders");
-    expect(pageSource).toContain("查看原始 Schema");
+    expect(pageSource).toContain('tr("查看原始 Schema")');
     expect(pageSource).not.toContain("requestBody.description");
     expect(pageSource).toContain("className=\"api-endpoint-url-value\"");
-    expect(pageSource).toContain("点击复制完整 URL");
-    expect(pageSource).toContain("notify(\"success\", \"复制成功\")");
+    expect(pageSource).toContain('tr("点击复制完整 URL")');
+    expect(pageSource).toContain('notify("success", tr("复制成功"))');
+    expect(pageSource).toContain('className="docs-mobile-language"');
     expect(pageSource).not.toContain("已复制");
-    expect(pageSource).toContain("if (value === \"\") return \"(空)\"");
+    expect(pageSource).toContain("if (value === \"\") return tr(\"(空)\")");
     expect(pageSource).toMatch(/<details className=\{`api-response/u);
     expect(pageSource).not.toMatch(/<details className=\{`api-response[^>]+open=/u);
   });
@@ -286,8 +287,8 @@ describe("OpenAPI 端点说明完整性", () => {
     const examples = mediaTypeDetails(success)?.examples;
     expectRecord(examples, "commit 200 examples");
     expect(Object.keys(examples)).toEqual(["create", "update", "cancel", "end"]);
-    expect((examples.update as { summary?: string }).summary).toBe("UPDATE 提交成功");
-    expect((examples.end as { summary?: string }).summary).toBe("END 提交成功");
+    expect((examples.update as { summary?: string }).summary).toBe("UPDATE completed");
+    expect((examples.end as { summary?: string }).summary).toBe("END completed");
   });
 
   it("为请求字段和可复用模型中的每个属性提供含义", () => {

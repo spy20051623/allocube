@@ -209,7 +209,7 @@ describe("官方 API", () => {
     expect(operationIds).toContain("prepareReservationOperation");
     expect(operationIds).toContain("commitReservationOperation");
     expect(document.paths["/reservation-operations/commit"].post.responses[409].description)
-      .toContain("必须重新预检");
+      .toContain("run the preflight again");
     expect(
       document.paths["/reservation-operations/commit"].post.requestBody.content[
         "application/json"
@@ -226,7 +226,7 @@ describe("官方 API", () => {
     ).toEqual(["create", "update", "cancel", "end"]);
     expect(
       document.paths["/reservation-operations/commit"].post.description
-    ).toContain("不需要再次传 action");
+    ).toContain("does not need to be passed again");
     expect(document["x-placeholder-convention"].syntax).toBe(
       "<UPPER_SNAKE_CASE>"
     );
@@ -239,7 +239,7 @@ describe("官方 API", () => {
       expect(match[1]).toMatch(/^[A-Z][A-Z0-9_]*$/u);
     }
     expect(document.paths["/reservations/{id}"].get.responses[404].description)
-      .toContain("不属于当前用户");
+      .toContain("current user");
     expect(document.components.schemas.ScheduleReservation.required).toEqual(
       expect.arrayContaining([
         "title",

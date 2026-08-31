@@ -1,3 +1,4 @@
+import { tr } from "./i18n/index";
 export function verificationCooldownSeconds(
   availableAt: number | null,
   now = Date.now()
@@ -13,7 +14,7 @@ export function verificationButtonLabel({
   sending: boolean;
   remainingSeconds: number;
 }) {
-  if (sending) return "发送中…";
-  if (remainingSeconds > 0) return `${remainingSeconds}秒`;
-  return "获取验证码";
+  if (sending) return tr("发送中…");
+  if (remainingSeconds > 0) return tr("{{v0}}秒", { v0: remainingSeconds });
+  return tr("获取验证码");
 }

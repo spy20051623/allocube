@@ -1,4 +1,13 @@
 import {
+  currentLocale,
+  tr,
+  trDynamic,
+  translateServerMessage,
+  translateSystemMessageCode
+} from "./i18n/index";
+import { useTranslation } from "react-i18next";
+import { LanguageSwitcher } from "./i18n/LanguageSwitcher";
+import {
   Activity,
   Bell,
   BookOpenText,
@@ -170,9 +179,11 @@ import {
   addDays,
   calendarMonthDates,
   calendarMonthLabel,
+  calendarWeekdayLabels,
   chinaDateDayOffset,
   chinaLocalToIso,
-  durationHoursText,
+  compactDurationText,
+  compactHoursText,
   durationText,
   formatChina,
   formatChinaDate,
@@ -242,6 +253,7 @@ import type {
 } from "./shared/types";
 import {
   auditActionLabel,
+  reservationStatusClass,
   reservationStatusLabel,
   userStatusLabel
 } from "./ui-copy";
@@ -542,6 +554,7 @@ function ServerClockProvider({
 }
 
 export function App() {
+  useTranslation();
   const routeLocation = useLocation();
   const routeNavigate = useNavigate();
   const docsRoute = useMemo(
@@ -980,11 +993,10 @@ function AnnouncementCenter({
         />
         <div className="announcement-dialog-footer">
           {announcements.length > 1 && (
-            <span>还有 {announcements.length - 1} 条公告</span>
+            <span>{tr("还有 {{count}} 条公告", { count: announcements.length - 1 })}</span>
           )}
           <button type="button" className="primary-button" onClick={dismiss}>
-            我知道了
-          </button>
+            {tr("我知道了")}</button>
         </div>
       </div>
     </Modal>
@@ -1017,15 +1029,14 @@ function AnnouncementListPage() {
 
   return (
     <div className="page-shell narrow-page announcement-viewer-page">
-      <PageHeader title="系统公告" />
+      <PageHeader title={tr("系统公告")} />
       {loading ? (
-        <div className="card announcement-admin-empty">正在加载系统公告…</div>
+        <div className="card announcement-admin-empty">{tr("正在加载系统公告…")}</div>
       ) : loadError ? (
         <div className="card announcement-load-error" role="alert">
-          <span>系统公告加载失败</span>
+          <span>{tr("系统公告加载失败")}</span>
           <button type="button" className="secondary-button" onClick={() => void load()}>
-            重试
-          </button>
+            {tr("重试")}</button>
         </div>
       ) : announcements.length ? (
         <div className="announcement-admin-list">
@@ -1040,7 +1051,7 @@ function AnnouncementListPage() {
               />
               <footer>
                 <span>{announcement.createdByName}</span>
-                <time>发布于 {formatChinaFullMinute(announcement.publishedAt)}</time>
+                <time>{tr("发布于")}{formatChinaFullMinute(announcement.publishedAt)}</time>
               </footer>
             </article>
           ))}
@@ -1048,8 +1059,8 @@ function AnnouncementListPage() {
       ) : (
         <EmptyState
           icon={Megaphone}
-          title="暂无系统公告"
-          text="当前没有正在展示的系统公告。"
+          title={tr("暂无系统公告")}
+          text={tr("当前没有正在展示的系统公告。")}
         />
       )}
     </div>
@@ -1061,7 +1072,7 @@ function LoadingScreen() {
     <main className="boot-shell">
       <div className="boot-mark">A</div>
       <h1>Allocube</h1>
-      <p>正在载入机器资源与占用日历…</p>
+      <p>{tr("正在载入机器资源与占用日历…")}</p>
     </main>
   );
 }
@@ -1173,8 +1184,8 @@ function AuthLayout({
           <span>Allocube</span>
         </div>
         <div className="auth-intro">
-          <h1>计算资源占用系统</h1>
-          <p>统一安排机器、设备与共享资源的占用时间，减少多人协作中的冲突。</p>
+          <h1>{tr("计算资源占用系统")}</h1>
+          <p>{tr("统一安排机器、设备与共享资源的占用时间，减少多人协作中的冲突。")}</p>
         </div>
         {(siteConfig?.icpFilingNumber ||
           (siteConfig?.publicSecurityFilingNumber &&
@@ -1211,16 +1222,20 @@ function AuthLayout({
         )}
       </section>
       <section className="auth-panel">
-        <div className={`auth-card${wide ? " auth-card-wide" : ""}`}>
-          <div className="auth-card-head">
-            <span className="mini-mark"><Boxes size={18} /></span>
-            <h2>{title}</h2>
+        <div className={`auth-panel-content${wide ? " auth-panel-content-wide" : ""}`}>
+          <div className="auth-page-tools">
+            <a className="auth-docs-link" href="/docs/getting-started">
+              <BookOpenText size={15} />{tr("帮助与文档")}</a>
+            <LanguageSwitcher />
           </div>
-          {children}
+          <div className={`auth-card${wide ? " auth-card-wide" : ""}`}>
+            <div className="auth-card-head">
+              <span className="mini-mark"><Boxes size={18} /></span>
+              <h2>{title}</h2>
+            </div>
+            {children}
+          </div>
         </div>
-        <a className="auth-docs-link" href="/docs/getting-started">
-          <BookOpenText size={15} />帮助与文档
-        </a>
       </section>
     </div>
   );
@@ -1469,18 +1484,18 @@ function LoginPage({
       setCsrfToken(result.csrfToken);
       await onAuthenticated(result);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "登录失败");
+      setError(error instanceof Error ? error.message : tr("登录失败"));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <AuthLayout title="账号登录">
+    <AuthLayout title={tr("账号登录")}>
       <div
         className="segmented auth-tabs"
         role="tablist"
-        aria-label="登录方式"
+        aria-label={tr("登录方式")}
         onKeyDown={(event) => {
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
             return;
@@ -1512,8 +1527,7 @@ function LoginPage({
           className={method === "USERNAME" ? "active" : ""}
           onClick={() => selectMethod("USERNAME")}
         >
-          用户名
-        </button>
+          {tr("用户名")}</button>
         <button
           type="button"
           id="employee-number-login-tab"
@@ -1524,8 +1538,7 @@ function LoginPage({
           className={method === "EMPLOYEE_NUMBER" ? "active" : ""}
           onClick={() => selectMethod("EMPLOYEE_NUMBER")}
         >
-          工号
-        </button>
+          {tr("工号")}</button>
       </div>
       {method === "USERNAME" ? (
         <UsernameLoginForm
@@ -1579,17 +1592,15 @@ function LoginPage({
         className="text-button auth-alt"
         onClick={() => navigate("/forgot-password")}
       >
-        忘记密码？
-      </button>
+        {tr("忘记密码？")}</button>
       <div className="auth-register-entry">
-        <span>还没有账号？</span>
+        <span>{tr("还没有账号？")}</span>
         <button
           type="button"
           className="secondary-button wide"
           onClick={() => navigate("/register")}
         >
-          申请注册账号
-        </button>
+          {tr("申请注册账号")}</button>
       </div>
     </AuthLayout>
   );
@@ -1644,7 +1655,7 @@ function PasswordInput({
   const [focused, setFocused] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
   const capsLockFeedbackId = useId();
-  const actionLabel = visible ? "隐藏密码" : "显示密码";
+  const actionLabel = visible ? tr("隐藏密码") : tr("显示密码");
   const updateCapsLock = (active: boolean) => {
     setCapsLockOn(active);
     onCapsLockChange?.(active);
@@ -1701,8 +1712,7 @@ function PasswordInput({
       </div>
       {focused && capsLockOn && (
         <AuthFeedback id={capsLockFeedbackId} tone="warning">
-          已开启大写锁定。
-        </AuthFeedback>
+          {tr("已开启大写锁定。")}</AuthFeedback>
       )}
     </div>
   );
@@ -1870,7 +1880,7 @@ function UsernameLoginForm({
     >
       <AuthFieldShell
         id="username-login-identifier"
-        label="用户名"
+        label={tr("用户名")}
         focused={validation.focused === "identifier"}
         error={validation.errors.identifier}
       >
@@ -1897,7 +1907,7 @@ function UsernameLoginForm({
       </AuthFieldShell>
       <AuthFieldShell
         id="username-login-password"
-        label="密码"
+        label={tr("密码")}
         focused={validation.focused === "password"}
         error={validation.errors.password}
       >
@@ -1929,7 +1939,7 @@ function UsernameLoginForm({
         </AuthFeedback>
       )}
       <button className="primary-button auth-submit" disabled={busy}>
-        <BusyButtonContent busy={busy} iconSize={16}>登录</BusyButtonContent>
+        <BusyButtonContent busy={busy} iconSize={16}>{tr("登录")}</BusyButtonContent>
       </button>
     </form>
   );
@@ -1980,7 +1990,7 @@ function EmployeeNumberLoginForm({
     >
       <AuthFieldShell
         id="employee-number-login-identifier"
-        label="工号"
+        label={tr("工号")}
         focused={validation.focused === "identifier"}
         error={validation.errors.identifier}
       >
@@ -2007,7 +2017,7 @@ function EmployeeNumberLoginForm({
       </AuthFieldShell>
       <AuthFieldShell
         id="employee-number-login-password"
-        label="密码"
+        label={tr("密码")}
         focused={validation.focused === "password"}
         error={validation.errors.password}
       >
@@ -2036,7 +2046,7 @@ function EmployeeNumberLoginForm({
         </AuthFeedback>
       )}
       <button className="primary-button auth-submit" disabled={busy}>
-        <BusyButtonContent busy={busy} iconSize={16}>登录</BusyButtonContent>
+        <BusyButtonContent busy={busy} iconSize={16}>{tr("登录")}</BusyButtonContent>
       </button>
     </form>
   );
@@ -2075,7 +2085,7 @@ function PasswordChecklist({
           ) : (
             <span className="check-dot" />
           )}
-          <span>{check.label}</span>
+          <span>{trDynamic(check.label)}</span>
         </li>
       ))}
     </ul>
@@ -2192,7 +2202,7 @@ function RegisterPage({
         (domain) => typeof domain === "string"
       )
     ) {
-      throw new Error("注册配置格式不正确");
+      throw new Error(tr("注册配置格式不正确"));
     }
     setRegistrationConfig({
       ...result,
@@ -2276,7 +2286,7 @@ function RegisterPage({
 
   const announceErrors = () => {
     setAnnouncement("");
-    window.requestAnimationFrame(() => setAnnouncement("请检查标出的内容"));
+    window.requestAnimationFrame(() => setAnnouncement(tr("请检查标出的内容")));
   };
 
   const validateOnBlur = (field: RegistrationField) => {
@@ -2409,10 +2419,10 @@ function RegisterPage({
     let withoutEmailConfirmed = false;
     if (emailEnabled && allowEmptyEmail && !normalizedEmail) {
       withoutEmailConfirmed = await dialog.confirm({
-        title: "不填写邮箱？",
+        title: tr("不填写邮箱？"),
         message:
-          "不填写邮箱将无法接收系统邮件提醒，也无法自行通过邮件找回密码。",
-        confirmLabel: "仍然提交"
+          tr("不填写邮箱将无法接收系统邮件提醒，也无法自行通过邮件找回密码。"),
+        confirmLabel: tr("仍然提交")
       });
       if (!withoutEmailConfirmed) return;
     }
@@ -2461,7 +2471,7 @@ function RegisterPage({
       ) {
         try {
           await loadRegistrationConfig();
-          notify("error", "注册规则已更新，请按当前页面重新确认后提交");
+          notify("error", tr("注册规则已更新，请按当前页面重新确认后提交"));
         } catch {
           setConfigError(true);
         }
@@ -2478,7 +2488,7 @@ function RegisterPage({
           return;
         }
       }
-      notify("error", error instanceof Error ? error.message : "注册提交失败");
+      notify("error", error instanceof Error ? error.message : tr("注册提交失败"));
     } finally {
       setSubmitting(false);
     }
@@ -2556,7 +2566,7 @@ function RegisterPage({
           return;
         }
       }
-      notify("error", error instanceof Error ? error.message : "验证码发送失败");
+      notify("error", error instanceof Error ? error.message : tr("验证码发送失败"));
     } finally {
       setCodeSending(false);
     }
@@ -2564,17 +2574,16 @@ function RegisterPage({
 
   if (successUsername) {
     return (
-      <AuthLayout title="注册申请已提交" wide>
+      <AuthLayout title={tr("注册申请已提交")} wide>
         <div className="registration-success">
           <div className="success-mark"><Check size={24} /></div>
-          <p>注册审核通过前请使用用户名登录。</p>
+          <p>{tr("注册审核通过前请使用用户名登录。")}</p>
           <button
             type="button"
             className="primary-button wide auth-submit"
             onClick={() => navigate("/login")}
           >
-            返回登录
-          </button>
+            {tr("返回登录")}</button>
         </div>
       </AuthLayout>
     );
@@ -2582,7 +2591,7 @@ function RegisterPage({
 
   const emailHasHint = Boolean(allowedEmailDomains?.length);
   const emailHint = emailHasHint
-    ? `仅允许以下邮箱域名：${allowedEmailDomains!.join("、")}`
+    ? tr("仅允许以下邮箱域名：{{v0}}", { v0: allowedEmailDomains!.join("、") })
     : undefined;
   const emailIsValid =
     emailEnabled &&
@@ -2599,16 +2608,16 @@ function RegisterPage({
 
   return (
     <AuthLayout
-      title="用户注册"
+      title={tr("用户注册")}
       wide
     >
       <form onSubmit={submit} className="stack-form" noValidate>
         <RegistrationFieldShell
           field="username"
-          label="用户名"
+          label={tr("用户名")}
           focused={focusedField === "username"}
           error={errors.username}
-          hint="2–32个字符，支持中文。"
+          hint={tr("2–32个字符，支持中文。")}
         >
           <input
             {...inputAccessibility("username", true)}
@@ -2623,7 +2632,7 @@ function RegisterPage({
         <div className="two-fields auth-two-fields">
           <RegistrationFieldShell
             field="realName"
-            label="姓名"
+            label={tr("姓名")}
             focused={focusedField === "realName"}
             error={errors.realName}
           >
@@ -2639,7 +2648,7 @@ function RegisterPage({
           </RegistrationFieldShell>
           <RegistrationFieldShell
             field="employeeNumber"
-            label="工号"
+            label={tr("工号")}
             focused={focusedField === "employeeNumber"}
             error={errors.employeeNumber}
           >
@@ -2660,7 +2669,7 @@ function RegisterPage({
           <>
             <RegistrationFieldShell
               field="email"
-              label={allowEmptyEmail ? "邮箱（选填）" : "邮箱"}
+              label={allowEmptyEmail ? tr("邮箱（选填）") : tr("邮箱")}
               focused={focusedField === "email"}
               error={errors.email}
               hint={emailHint}
@@ -2680,7 +2689,7 @@ function RegisterPage({
             <div className="verification-row">
               <RegistrationFieldShell
                 field="code"
-                label="邮箱验证码"
+                label={tr("邮箱验证码")}
                 focused={focusedField === "code"}
                 error={errors.code}
               >
@@ -2723,7 +2732,7 @@ function RegisterPage({
         )}
         <RegistrationFieldShell
           field="password"
-          label="密码"
+          label={tr("密码")}
           focused={focusedField === "password"}
           error={errors.password}
           passwordChecks={passwordChecks}
@@ -2742,7 +2751,7 @@ function RegisterPage({
         </RegistrationFieldShell>
         <RegistrationFieldShell
           field="confirmPassword"
-          label="确认密码"
+          label={tr("确认密码")}
           focused={focusedField === "confirmPassword"}
           error={errors.confirmPassword}
         >
@@ -2764,8 +2773,7 @@ function RegisterPage({
         {configError && (
           <div className="inline-message error">
             <CircleAlert size={16} />
-            暂时无法加载注册规则，请刷新页面重试。
-          </div>
+            {tr("暂时无法加载注册规则，请刷新页面重试。")}</div>
         )}
         <div className="sr-only" aria-live="assertive">{announcement}</div>
         <button
@@ -2778,8 +2786,7 @@ function RegisterPage({
           }
         >
           <BusyButtonContent busy={submitting} iconSize={16}>
-            提交注册
-          </BusyButtonContent>
+            {tr("提交注册")}</BusyButtonContent>
         </button>
       </form>
       <button
@@ -2787,8 +2794,7 @@ function RegisterPage({
         className="text-button auth-alt"
         onClick={() => navigate("/login")}
       >
-        返回登录
-      </button>
+        {tr("返回登录")}</button>
     </AuthLayout>
   );
 }
@@ -2816,7 +2822,7 @@ function ForgotPasswordPage({
       })
       .catch(() => {
         if (active) {
-          setConfigError("暂时无法加载邮件设置，请刷新页面重试。");
+          setConfigError(tr("暂时无法加载邮件设置，请刷新页面重试。"));
         }
       });
     return () => {
@@ -2845,7 +2851,7 @@ function ForgotPasswordPage({
       setSent(true);
     } catch (error) {
       setFormError(
-        error instanceof Error ? error.message : "重置邮件发送失败"
+        error instanceof Error ? error.message : tr("重置邮件发送失败")
       );
     } finally {
       setBusy(false);
@@ -2854,17 +2860,16 @@ function ForgotPasswordPage({
 
   if (registrationConfig && !registrationConfig.emailEnabled) {
     return (
-      <AuthLayout title="找回密码">
+      <AuthLayout title={tr("找回密码")}>
         <div className="registration-success">
           <div className="success-mark"><ShieldCheck size={24} /></div>
-          <p>邮件功能未启用，请联系系统管理员获取密码重置链接。</p>
+          <p>{tr("邮件功能未启用，请联系系统管理员获取密码重置链接。")}</p>
           <button
             type="button"
             className="primary-button wide auth-submit"
             onClick={() => navigate("/login")}
           >
-            返回登录
-          </button>
+            {tr("返回登录")}</button>
         </div>
       </AuthLayout>
     );
@@ -2872,24 +2877,23 @@ function ForgotPasswordPage({
 
   if (sent) {
     return (
-      <AuthLayout title="重置邮件已发送">
+      <AuthLayout title={tr("重置邮件已发送")}>
         <div className="registration-success">
           <div className="success-mark"><Mail size={24} /></div>
-          <p>如果该邮箱已绑定有效账号，你将收到密码重置邮件。</p>
+          <p>{tr("如果该邮箱已绑定有效账号，你将收到密码重置邮件。")}</p>
           <button
             type="button"
             className="primary-button wide auth-submit"
             onClick={() => navigate("/login")}
           >
-            返回登录
-          </button>
+            {tr("返回登录")}</button>
         </div>
       </AuthLayout>
     );
   }
 
   return (
-    <AuthLayout title="找回密码">
+    <AuthLayout title={tr("找回密码")}>
       <form onSubmit={submit} className="stack-form" noValidate>
         {configError && (
           <AuthFeedback tone="error" anchored={false}>
@@ -2898,7 +2902,7 @@ function ForgotPasswordPage({
         )}
         <AuthFieldShell
           id="forgot-password-email"
-          label="邮箱"
+          label={tr("邮箱")}
           focused={focused}
           error={emailErrors}
         >
@@ -2933,8 +2937,7 @@ function ForgotPasswordPage({
           disabled={busy || !registrationConfig || Boolean(configError)}
         >
           <BusyButtonContent busy={busy} iconSize={16}>
-            发送重置邮件
-          </BusyButtonContent>
+            {tr("发送重置邮件")}</BusyButtonContent>
         </button>
       </form>
       <button
@@ -2942,8 +2945,7 @@ function ForgotPasswordPage({
         className="text-button auth-alt"
         onClick={() => navigate("/login")}
       >
-        返回登录
-      </button>
+        {tr("返回登录")}</button>
     </AuthLayout>
   );
 }
@@ -3071,7 +3073,7 @@ function ResetPasswordPage({
         setLinkInvalid(true);
         return;
       }
-      setFormError(error instanceof Error ? error.message : "密码重置失败");
+      setFormError(error instanceof Error ? error.message : tr("密码重置失败"));
     } finally {
       setBusy(false);
     }
@@ -3079,17 +3081,15 @@ function ResetPasswordPage({
 
   if (linkInvalid) {
     return (
-      <AuthLayout title="设置新密码">
+      <AuthLayout title={tr("设置新密码")}>
         <AuthFeedback tone="error" anchored={false}>
-          重置链接无效或已经过期
-        </AuthFeedback>
+          {tr("重置链接无效或已经过期")}</AuthFeedback>
         <button
           type="button"
           className="primary-button wide auth-submit"
           onClick={() => navigate("/forgot-password")}
         >
-          重新申请重置链接
-        </button>
+          {tr("重新申请重置链接")}</button>
       </AuthLayout>
     );
   }
@@ -3100,11 +3100,11 @@ function ResetPasswordPage({
     focusedField === "password" && !passwordCapsLockOn;
 
   return (
-    <AuthLayout title="设置新密码">
+    <AuthLayout title={tr("设置新密码")}>
       <form onSubmit={submit} className="stack-form" noValidate>
         <AuthFieldShell
           id="reset-password"
-          label="新密码"
+          label={tr("新密码")}
           focused={focusedField === "password"}
           error={passwordError?.messages}
           hint={<PasswordChecklist checks={passwordChecks} />}
@@ -3148,7 +3148,7 @@ function ResetPasswordPage({
         </AuthFieldShell>
         <AuthFieldShell
           id="reset-confirm-password"
-          label="确认密码"
+          label={tr("确认密码")}
           focused={focusedField === "confirmPassword"}
           error={confirmPasswordError?.messages}
         >
@@ -3183,8 +3183,7 @@ function ResetPasswordPage({
         )}
         <button className="primary-button auth-submit" disabled={busy}>
           <BusyButtonContent busy={busy} iconSize={16}>
-            保存新密码
-          </BusyButtonContent>
+            {tr("保存新密码")}</BusyButtonContent>
         </button>
       </form>
       <button
@@ -3192,8 +3191,7 @@ function ResetPasswordPage({
         className="text-button auth-alt"
         onClick={() => navigate("/login")}
       >
-        返回登录
-      </button>
+        {tr("返回登录")}</button>
     </AuthLayout>
   );
 }
@@ -3265,12 +3263,12 @@ function AccountProfilePage({
         body: jsonBody(next)
       });
       setEmailPreferences(next);
-      notify("success", "邮件接收设置已更新");
+      notify("success", tr("邮件接收设置已更新"));
       await reload();
     } catch (error) {
       notify(
         "error",
-        error instanceof Error ? error.message : "邮件接收设置更新失败"
+        error instanceof Error ? error.message : tr("邮件接收设置更新失败")
       );
     } finally {
       setEmailPreferenceSaving(null);
@@ -3283,45 +3281,45 @@ function AccountProfilePage({
   }> = [
     {
       key: "reservationUpdates",
-      label: "占用与资源",
+      label: tr("占用与资源"),
       details: [
-        "占用取消或调整",
-        "资源组配置更新",
-        "机器或资源组删除"
+        tr("占用取消或调整"),
+        tr("资源组配置更新"),
+        tr("机器或资源组删除")
       ]
     },
     {
       key: "machineAccessUpdates",
-      label: "机器权限",
+      label: tr("机器权限"),
       details: [
-        "机器使用权状态更新",
-        "机器管理员身份更新"
+        tr("机器使用权状态更新"),
+        tr("机器管理员身份更新")
       ]
     },
     {
       key: "approvalUpdates",
-      label: "审核结果",
+      label: tr("审核结果"),
       details: [
-        "注册申请提交",
-        "资料修改审核状态更新"
+        tr("注册申请提交"),
+        tr("资料修改审核状态更新")
       ]
     }
   ];
   if (user.role === "SYSTEM_ADMIN") {
     emailPreferenceOptions.push({
       key: "administrationUpdates",
-      label: "管理待办",
+      label: tr("管理待办"),
       details: [
-        "新用户注册待审核",
-        "资料修改待审核",
-        "机器使用权待审核"
+        tr("新用户注册待审核"),
+        tr("资料修改待审核"),
+        tr("机器使用权待审核")
       ]
     });
   } else {
     emailPreferenceOptions.push({
       key: "administrationUpdates",
-      label: "管理待办",
-      details: ["所管理机器的使用权待审核"]
+      label: tr("管理待办"),
+      details: [tr("所管理机器的使用权待审核")]
     });
   }
 
@@ -3329,7 +3327,7 @@ function AccountProfilePage({
     <>
       <div className="page-shell narrow-page profile-layout">
         <PageHeader
-          title="用户信息"
+          title={tr("用户信息")}
           actions={
             user.status === "PENDING_APPROVAL" ||
             user.status === "CHANGES_REQUESTED" ? (
@@ -3352,19 +3350,19 @@ function AccountProfilePage({
                 <span className="profile-section-icon">
                   <UserCheck size={16} />
                 </span>
-                <h2>账号资料</h2>
+                <h2>{tr("账号资料")}</h2>
               </div>
             </div>
             <div className="profile-fields-grid">
               <div className="profile-field profile-field-third">
                 <div className="profile-field-head">
-                  <span>用户名</span>
+                  <span>{tr("用户名")}</span>
                 {editable && (
                   <button
                     type="button"
                     className="icon-button profile-edit"
-                    title="修改用户名"
-                    aria-label="修改用户名"
+                    title={tr("修改用户名")}
+                    aria-label={tr("修改用户名")}
                     onClick={() => setUsernameOpen(true)}
                   >
                     <Pencil size={15} />
@@ -3375,13 +3373,13 @@ function AccountProfilePage({
               </div>
               <div className="profile-field profile-field-third">
                 <div className="profile-field-head">
-                  <span>姓名</span>
+                  <span>{tr("姓名")}</span>
                   {editable && (
                     <button
                       type="button"
                       className="icon-button profile-edit"
-                      title={user.pendingProfileChange ? "请先撤回待审修改" : "修改姓名和工号"}
-                      aria-label="修改姓名和工号"
+                      title={user.pendingProfileChange ? tr("请先撤回待审修改") : tr("修改姓名和工号")}
+                      aria-label={tr("修改姓名和工号")}
                       disabled={Boolean(user.pendingProfileChange)}
                       onClick={() => setIdentityOpen(true)}
                     >
@@ -3393,7 +3391,7 @@ function AccountProfilePage({
               </div>
               <div className="profile-field profile-field-third">
                 <div className="profile-field-head">
-                  <span>工号</span>
+                  <span>{tr("工号")}</span>
                   <div className="profile-row-actions">
                     {user.pendingProfileChange && (
                       <div
@@ -3412,13 +3410,12 @@ function AccountProfilePage({
                           className="state-chip pending profile-review-chip"
                           aria-expanded={reviewOpen}
                         >
-                          审核中
-                        </button>
+                          {tr("审核中")}</button>
                         {reviewOpen && (
-                          <div className="profile-review-popover" role="dialog" aria-label="待审资料">
-                            <div><span>新姓名</span><strong>{user.pendingProfileChange.displayName}</strong></div>
-                            <div><span>新工号</span><strong>{user.pendingProfileChange.employeeNumber}</strong></div>
-                            <small>提交于 {formatChina(user.pendingProfileChange.requestedAt)}</small>
+                          <div className="profile-review-popover" role="dialog" aria-label={tr("待审资料")}>
+                            <div><span>{tr("新姓名")}</span><strong>{user.pendingProfileChange.displayName}</strong></div>
+                            <div><span>{tr("新工号")}</span><strong>{user.pendingProfileChange.employeeNumber}</strong></div>
+                            <small>{tr("提交于")}{formatChina(user.pendingProfileChange.requestedAt)}</small>
                             <button
                               type="button"
                               className="text-action danger"
@@ -3427,17 +3424,16 @@ function AccountProfilePage({
                                   await api(`/auth/profile-change-requests/${user.pendingProfileChange!.id}`, {
                                     method: "DELETE"
                                   });
-                                  notify("success", "资料修改已撤回");
+                                  notify("success", tr("资料修改已撤回"));
                                   setReviewOpen(false);
                                   await reload();
                                 } catch (error) {
-                                  notify("error", error instanceof Error ? error.message : "撤回失败");
+                                  notify("error", error instanceof Error ? error.message : tr("撤回失败"));
                                   await reload();
                                 }
                               }}
                             >
-                              撤回
-                            </button>
+                              {tr("撤回")}</button>
                           </div>
                         )}
                       </div>
@@ -3446,8 +3442,8 @@ function AccountProfilePage({
                       <button
                         type="button"
                         className="icon-button profile-edit"
-                        title={user.pendingProfileChange ? "请先撤回待审修改" : "修改姓名和工号"}
-                        aria-label="修改姓名和工号"
+                        title={user.pendingProfileChange ? tr("请先撤回待审修改") : tr("修改姓名和工号")}
+                        aria-label={tr("修改姓名和工号")}
                         disabled={Boolean(user.pendingProfileChange)}
                         onClick={() => setIdentityOpen(true)}
                       >
@@ -3456,40 +3452,40 @@ function AccountProfilePage({
                     )}
                   </div>
                 </div>
-                <strong>{user.employeeNumber ?? "不适用"}</strong>
+                <strong>{user.employeeNumber ?? tr("不适用")}</strong>
               </div>
               <div className="profile-field profile-field-half">
                 <div className="profile-field-head">
-                  <span>邮箱</span>
+                  <span>{tr("邮箱")}</span>
                   {editable &&
                     (registrationConfig?.emailEnabled || user.email) && (
                     <button
                       type="button"
                       className="icon-button profile-edit"
-                      title="修改邮箱"
-                      aria-label="修改邮箱"
+                      title={tr("修改邮箱")}
+                      aria-label={tr("修改邮箱")}
                       onClick={() => setEmailOpen(true)}
                     >
                       <Pencil size={15} />
                     </button>
                   )}
                 </div>
-                <strong title={user.email ?? undefined}>{user.email ?? "未设置"}</strong>
+                <strong title={user.email ?? undefined}>{user.email ?? tr("未设置")}</strong>
               </div>
               <div className="profile-field profile-field-half profile-id-cell">
                 <div className="profile-field-head">
-                  <span>账号 ID</span>
+                  <span>{tr("账号 ID")}</span>
                   <button
                     type="button"
                     className="icon-button profile-edit"
-                    title="复制账号 ID"
-                    aria-label="复制账号 ID"
+                    title={tr("复制账号 ID")}
+                    aria-label={tr("复制账号 ID")}
                     onClick={async () => {
                       try {
                         await copyTextToClipboard(user.id);
-                        notify("success", "账号 ID 已复制");
+                        notify("success", tr("账号 ID 已复制"));
                       } catch {
-                        notify("error", "复制失败，请手动选择账号 ID");
+                        notify("error", tr("复制失败，请手动选择账号 ID"));
                       }
                     }}
                   >
@@ -3507,18 +3503,18 @@ function AccountProfilePage({
                 <span className="profile-section-icon security">
                   <ShieldCheck size={16} />
                 </span>
-                <h2>登录与安全</h2>
+                <h2>{tr("登录与安全")}</h2>
               </div>
             </div>
             <div className="profile-security-grid">
               <div className="profile-field">
                 <div className="profile-field-head">
-                  <span>最近登录</span>
+                  <span>{tr("最近登录")}</span>
                 </div>
                 <strong>
                   {user.lastLoginAt
                     ? formatChinaFullMinute(user.lastLoginAt)
-                    : "暂无记录"}
+                    : tr("暂无记录")}
                 </strong>
                 {user.lastLoginIp && (
                   <span className="profile-field-meta">IP {user.lastLoginIp}</span>
@@ -3526,7 +3522,7 @@ function AccountProfilePage({
               </div>
               <div className="profile-field">
                 <div className="profile-field-head">
-                  <span>密码</span>
+                  <span>{tr("密码")}</span>
                 </div>
                 <button
                   type="button"
@@ -3534,8 +3530,7 @@ function AccountProfilePage({
                   onClick={() => setPasswordOpen(true)}
                 >
                   <Pencil size={13} />
-                  修改密码
-                </button>
+                  {tr("编辑")}</button>
               </div>
             </div>
           </div>
@@ -3549,7 +3544,7 @@ function AccountProfilePage({
                 <span className="profile-section-icon mail">
                   <Mail size={16} aria-hidden="true" />
                 </span>
-                <h2>邮件通知</h2>
+                <h2>{tr("邮件通知")}</h2>
               </div>
               <span
                 className="state-chip active profile-required-email"
@@ -3557,16 +3552,15 @@ function AccountProfilePage({
                 aria-describedby="required-email-detail"
               >
                 <ShieldCheck size={13} aria-hidden="true" />
-                安全邮件必收
-                <span
+                {tr("安全邮件必收")}<span
                   id="required-email-detail"
                   className="profile-required-email-detail"
                   role="tooltip"
                 >
                   <ul>
-                    <li>验证码与密码重置</li>
-                    <li>邮箱或登录信息变更</li>
-                    <li>账号安全状态更新</li>
+                    <li>{tr("验证码与密码重置")}</li>
+                    <li>{tr("邮箱或登录信息变更")}</li>
+                    <li>{tr("账号安全状态更新")}</li>
                   </ul>
                 </span>
               </span>
@@ -3615,7 +3609,7 @@ function AccountProfilePage({
           onSaved={async (username) => {
             rememberUsername(username, false);
             setUsernameOpen(false);
-            notify("success", "用户名已更新");
+            notify("success", tr("用户名已更新"));
             await reload();
           }}
         />
@@ -3631,8 +3625,8 @@ function AccountProfilePage({
             notify(
               "success",
               user.status === "ACTIVE"
-                ? "资料修改已提交审核"
-                : "资料已更新，注册信息已重新提交"
+                ? tr("资料修改已提交审核")
+                : tr("资料已更新，注册信息已重新提交")
             );
             await reload();
           }}
@@ -3645,7 +3639,7 @@ function AccountProfilePage({
           onClose={() => setEmailOpen(false)}
           onSaved={async () => {
             setEmailOpen(false);
-            notify("success", "邮箱已更新");
+            notify("success", tr("邮箱已更新"));
             await reload();
           }}
         />
@@ -3657,7 +3651,7 @@ function AccountProfilePage({
           onClose={() => setPasswordOpen(false)}
           onSaved={async () => {
             setPasswordOpen(false);
-            notify("success", "密码已更新");
+            notify("success", tr("密码已更新"));
             await reload();
           }}
         />
@@ -3695,7 +3689,7 @@ function ApiTokenSection({
       }>("/auth/api-tokens");
       setTokens(result.tokens);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "令牌列表加载失败");
+      notify("error", error instanceof Error ? error.message : tr("令牌列表加载失败"));
     } finally {
       setLoading(false);
     }
@@ -3705,31 +3699,31 @@ function ApiTokenSection({
   }, [loadTokens]);
 
   const tokenState = (token: PersonalApiToken) => {
-    if (token.revokedAt) return { label: "已吊销", className: "retiring" };
+    if (token.revokedAt) return { label: tr("已吊销"), className: "retiring" };
     if (token.expiresAt && token.expiresAt <= new Date().toISOString()) {
-      return { label: "已到期", className: "retiring" };
+      return { label: tr("已到期"), className: "retiring" };
     }
-    return { label: "有效", className: "active" };
+    return { label: tr("有效"), className: "active" };
   };
 
   const revoke = async (token: PersonalApiToken) => {
     const confirmed = await dialog.confirm({
-      title: "吊销个人访问令牌",
-      message: `吊销“${token.name}”后，使用它的 AI 或脚本会立即失去访问权限。`,
-      confirmLabel: "吊销令牌",
+      title: tr("吊销个人访问令牌"),
+      message: tr("吊销“{{v0}}”后，使用它的 AI 或脚本会立即失去访问权限。", { v0: token.name }),
+      confirmLabel: tr("吊销令牌"),
       tone: "danger"
     });
     if (!confirmed) return;
     try {
       await api(`/auth/api-tokens/${token.id}`, { method: "DELETE" });
-      notify("success", "个人访问令牌已吊销");
+      notify("success", tr("个人访问令牌已吊销"));
       await loadTokens();
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "令牌吊销失败");
+      notify("error", error instanceof Error ? error.message : tr("令牌吊销失败"));
     }
   };
 
-  const activeCount = tokens.filter((token) => tokenState(token).label === "有效").length;
+  const activeCount = tokens.filter((token) => tokenState(token).label === tr("有效")).length;
   return (
     <div className="profile-section profile-api-tokens">
       <div className="profile-section-head">
@@ -3738,8 +3732,8 @@ function ApiTokenSection({
             <KeyRound size={16} />
           </span>
           <div>
-            <h2>个人访问令牌</h2>
-            <small>供 AI、CLI 和服务端自动化调用官方 API</small>
+            <h2>{tr("个人访问令牌")}</h2>
+            <small>{tr("供 AI、CLI 和服务端自动化调用官方 API")}</small>
           </div>
         </div>
         <div className="profile-api-token-actions">
@@ -3749,8 +3743,7 @@ function ApiTokenSection({
             target="_blank"
             rel="noreferrer"
           >
-            API 文档
-          </a>
+            {tr("API 文档")}</a>
           <button
             type="button"
             className="primary-button"
@@ -3758,12 +3751,11 @@ function ApiTokenSection({
             onClick={() => setCreateOpen(true)}
           >
             <Plus size={14} />
-            创建令牌
-          </button>
+            {tr("新建")}</button>
         </div>
       </div>
       {loading ? (
-        <div className="mini-empty">正在加载令牌…</div>
+        <div className="mini-empty">{tr("正在加载令牌…")}</div>
       ) : tokens.length ? (
         <div className="profile-api-token-list">
           {tokens.map((token) => {
@@ -3775,30 +3767,30 @@ function ApiTokenSection({
                     <strong>{token.name}</strong>
                     <span className={`state-chip ${state.className}`}>{state.label}</span>
                     <span className="state-chip">
-                      {token.accessLevel === "READ_WRITE" ? "读写" : "只读"}
+                      {token.accessLevel === "READ_WRITE" ? tr("读写") : tr("只读")}
                     </span>
                   </div>
                   <code>{token.prefix}…</code>
                 </div>
                 <div className="profile-api-token-meta">
-                  <span>创建 {formatChinaFullMinute(token.createdAt)}</span>
+                  <span>{tr("创建于")}{formatChinaFullMinute(token.createdAt)}</span>
                   <span>
                     {token.lastUsedAt
-                      ? `最近使用 ${formatChinaFullMinute(token.lastUsedAt)}`
-                      : "尚未使用"}
+                      ? tr("最近使用 {{v0}}", { v0: formatChinaFullMinute(token.lastUsedAt) })
+                      : tr("尚未使用")}
                   </span>
                   <span>
                     {token.expiresAt
-                      ? `到期 ${formatChinaFullMinute(token.expiresAt)}`
-                      : "永不过期"}
+                      ? tr("到期 {{v0}}", { v0: formatChinaFullMinute(token.expiresAt) })
+                      : tr("永不过期")}
                   </span>
                 </div>
-                {!token.revokedAt && state.label === "有效" && (
+                {!token.revokedAt && state.label === tr("有效") && (
                   <button
                     type="button"
                     className="icon-button danger"
-                    title="吊销令牌"
-                    aria-label={`吊销令牌 ${token.name}`}
+                    title={tr("吊销令牌")}
+                    aria-label={tr("吊销令牌 {{v0}}", { v0: token.name })}
                     onClick={() => void revoke(token)}
                   >
                     <Trash2 size={15} />
@@ -3809,7 +3801,7 @@ function ApiTokenSection({
           })}
         </div>
       ) : (
-        <div className="mini-empty">尚未创建个人访问令牌</div>
+        <div className="mini-empty">{tr("尚未创建个人访问令牌")}</div>
       )}
       {createOpen && (
         <ApiTokenCreateModal
@@ -3847,11 +3839,11 @@ function ApiTokenCreateModal({
     event.preventDefault();
     const normalizedName = name.trim();
     if (!normalizedName) {
-      setError("请输入令牌名称");
+      setError(tr("请输入令牌名称"));
       return;
     }
     if (!currentPassword) {
-      setError("请输入当前密码");
+      setError(tr("请输入当前密码"));
       return;
     }
     setBusy(true);
@@ -3873,7 +3865,7 @@ function ApiTokenCreateModal({
       setSecret(result.secret);
       await onCreated();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "令牌创建失败");
+      setError(caught instanceof Error ? caught.message : tr("令牌创建失败"));
     } finally {
       setBusy(false);
     }
@@ -3881,11 +3873,11 @@ function ApiTokenCreateModal({
 
   if (secret) {
     return (
-      <Modal title="保存个人访问令牌" onClose={onClose}>
+      <Modal title={tr("保存个人访问令牌")} onClose={onClose}>
         <div className="api-token-secret-view">
           <div className="context-notice warning">
             <CircleAlert size={15} />
-            <span>这是令牌明文唯一一次显示。关闭窗口后无法再次查看，请立即保存到可信的密钥管理工具。</span>
+            <span>{tr("这是令牌明文唯一一次显示。关闭窗口后无法再次查看，请立即保存到可信的密钥管理工具。")}</span>
           </div>
           <code>{secret}</code>
           <div className="modal-actions">
@@ -3895,18 +3887,16 @@ function ApiTokenCreateModal({
               onClick={async () => {
                 try {
                   await copyTextToClipboard(secret);
-                  notify("success", "复制成功");
+                  notify("success", tr("复制成功"));
                 } catch {
-                  notify("error", "复制失败，请手动选择令牌");
+                  notify("error", tr("复制失败，请手动选择令牌"));
                 }
               }}
             >
               <Copy size={14} />
-              复制令牌
-            </button>
+              {tr("复制令牌")}</button>
             <button type="button" className="primary-button" onClick={onClose}>
-              我已保存
-            </button>
+              {tr("我已保存")}</button>
           </div>
           {error && <AuthFeedback tone="error">{error}</AuthFeedback>}
         </div>
@@ -3915,45 +3905,45 @@ function ApiTokenCreateModal({
   }
 
   return (
-    <Modal title="创建个人访问令牌" onClose={onClose}>
+    <Modal title={tr("创建个人访问令牌")} onClose={onClose}>
       <form className="stack-form api-token-create-form" onSubmit={submit}>
-        <Field label="令牌名称">
+        <Field label={tr("令牌名称")}>
           <input
             autoFocus
             value={name}
             maxLength={80}
-            placeholder="例如：AI 排期助手"
+            placeholder={tr("例如：AI 排期助手")}
             onChange={(event) => {
               setName(event.target.value);
               setError("");
             }}
           />
         </Field>
-        <Field label="访问权限">
+        <Field label={tr("访问权限")}>
           <select
             value={accessLevel}
             onChange={(event) =>
               setAccessLevel(event.target.value as "READ_ONLY" | "READ_WRITE")
             }
           >
-            <option value="READ_ONLY">只读：查询资源和本人占用</option>
-            <option value="READ_WRITE">读写：可预检并提交本人占用操作</option>
+            <option value="READ_ONLY">{tr("只读：查询资源和本人占用")}</option>
+            <option value="READ_WRITE">{tr("读写：可预检并提交本人占用操作")}</option>
           </select>
         </Field>
-        <Field label="有效期">
+        <Field label={tr("有效期")}>
           <select
             value={expiry}
             onChange={(event) =>
               setExpiry(event.target.value as "NEVER" | "30" | "90" | "365")
             }
           >
-            <option value="NEVER">永不过期</option>
-            <option value="30">30 天</option>
-            <option value="90">90 天</option>
-            <option value="365">365 天</option>
+            <option value="NEVER">{tr("永不过期")}</option>
+            <option value="30">{tr("30 天")}</option>
+            <option value="90">{tr("90 天")}</option>
+            <option value="365">{tr("365 天")}</option>
           </select>
         </Field>
-        <Field label="当前密码">
+        <Field label={tr("当前密码")}>
           <PasswordInput
             autoComplete="current-password"
             value={currentPassword}
@@ -3967,10 +3957,9 @@ function ApiTokenCreateModal({
         {error && <AuthFeedback tone="error" anchored={false}>{error}</AuthFeedback>}
         <div className="modal-actions">
           <button type="button" className="secondary-button" onClick={onClose}>
-            取消
-          </button>
+            {tr("取消")}</button>
           <button className="primary-button" disabled={busy}>
-            <BusyButtonContent busy={busy}>创建令牌</BusyButtonContent>
+            <BusyButtonContent busy={busy}>{tr("创建")}</BusyButtonContent>
           </button>
         </div>
       </form>
@@ -3981,20 +3970,20 @@ function ApiTokenCreateModal({
 function profileUsernameError(value: string, currentUsername: string) {
   const username = value.trim().normalize("NFKC");
   const length = Array.from(username).length;
-  if (length < 2 || length > 32) return "用户名必须为 2–32 个字符";
+  if (length < 2 || length > 32) return tr("用户名必须为 2–32 个字符");
   const edge = "[\\p{Script=Han}A-Za-z0-9]";
   const body = "[\\p{Script=Han}A-Za-z0-9._-]";
   if (!new RegExp(`^${edge}${body}*${edge}$`, "u").test(username)) {
-    return "用户名仅支持中文、字母、数字、点、下划线和短横线，且首尾须为文字或数字";
+    return tr("用户名仅支持中文、字母、数字、点、下划线和短横线，且首尾须为文字或数字");
   }
   if (username.toLocaleLowerCase("zh-CN") === "administrator") {
-    return "该用户名为系统保留名称";
+    return tr("该用户名为系统保留名称");
   }
   if (
     username.toLocaleLowerCase("zh-CN") ===
     currentUsername.normalize("NFKC").toLocaleLowerCase("zh-CN")
   ) {
-    return "新用户名与当前用户名相同";
+    return tr("新用户名与当前用户名相同");
   }
   return "";
 }
@@ -4050,16 +4039,16 @@ function UsernameEditModal({
     } catch (caught) {
       const fieldError = fieldErrorFromApi(caught, "username");
       if (fieldError) setError(fieldError);
-      else setError(caught instanceof Error ? caught.message : "修改失败");
+      else setError(caught instanceof Error ? caught.message : tr("修改失败"));
     } finally {
       setBusy(false);
     }
   };
   return (
-    <Modal title="修改用户名" onClose={onClose}>
+    <Modal title={tr("修改用户名")} onClose={onClose}>
       <form className="stack-form profile-edit-form" noValidate onSubmit={submit}>
         <label className={`field${error ? " has-error" : ""}`}>
-          <span>用户名</span>
+          <span>{tr("用户名")}</span>
           <input
             autoFocus
             name="username"
@@ -4074,9 +4063,9 @@ function UsernameEditModal({
           {error && <AuthFeedback tone="error">{error}</AuthFeedback>}
         </label>
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>取消</button>
+          <button type="button" className="secondary-button" onClick={onClose}>{tr("取消")}</button>
           <button className="primary-button" disabled={busy}>
-            <BusyButtonContent busy={busy}>保存</BusyButtonContent>
+            <BusyButtonContent busy={busy}>{tr("保存")}</BusyButtonContent>
           </button>
         </div>
       </form>
@@ -4107,13 +4096,13 @@ function IdentityEditModal({
     const nextNumber = number.trim().toLowerCase();
     const nextErrors: typeof errors = {};
     if (Array.from(nextName).length < 2 || Array.from(nextName).length > 60) {
-      nextErrors.displayName = "姓名必须为 2–60 个字符";
+      nextErrors.displayName = tr("姓名必须为 2–60 个字符");
     }
     if (!isEmployeeNumberValid(nextNumber)) {
-      nextErrors.employeeNumber = EMPLOYEE_NUMBER_MESSAGE;
+      nextErrors.employeeNumber = tr(EMPLOYEE_NUMBER_MESSAGE);
     }
     if (nextName === displayName && nextNumber === employeeNumber) {
-      nextErrors.displayName = "姓名或工号至少需要修改一项";
+      nextErrors.displayName = tr("姓名或工号至少需要修改一项");
     }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
@@ -4133,18 +4122,18 @@ function IdentityEditModal({
           ...(employeeNumberError ? { employeeNumber: employeeNumberError } : {})
         });
       } else {
-        setErrors({ displayName: caught instanceof Error ? caught.message : "提交失败" });
+        setErrors({ displayName: caught instanceof Error ? caught.message : tr("提交失败") });
       }
     } finally {
       setBusy(false);
     }
   };
   return (
-    <Modal title="修改姓名和工号" onClose={onClose}>
+    <Modal title={tr("修改姓名和工号")} onClose={onClose}>
       <form className="stack-form profile-edit-form" noValidate onSubmit={submit}>
         <div className="two-fields">
           <label className={`field${errors.displayName ? " has-error" : ""}`}>
-            <span>姓名</span>
+            <span>{tr("姓名")}</span>
             <input
               autoFocus
               name="displayName"
@@ -4158,7 +4147,7 @@ function IdentityEditModal({
             {errors.displayName && <AuthFeedback tone="error">{errors.displayName}</AuthFeedback>}
           </label>
           <label className={`field${errors.employeeNumber ? " has-error" : ""}`}>
-            <span>工号</span>
+            <span>{tr("工号")}</span>
             <input
               name="employeeNumber"
               value={number}
@@ -4172,10 +4161,10 @@ function IdentityEditModal({
           </label>
         </div>
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>取消</button>
+          <button type="button" className="secondary-button" onClick={onClose}>{tr("取消")}</button>
           <button className="primary-button" disabled={busy}>
             <BusyButtonContent busy={busy}>
-              {registrationPending ? "保存" : "提交审核"}
+              {registrationPending ? tr("保存") : tr("提交审核")}
             </BusyButtonContent>
           </button>
         </div>
@@ -4232,7 +4221,7 @@ function EmailEditModal({
   }, []);
   useEffect(() => {
     void loadConfig().catch(() =>
-      setConfigError("暂时无法加载邮箱规则，请稍后重试。")
+      setConfigError(tr("暂时无法加载邮箱规则，请稍后重试。"))
     );
   }, [loadConfig]);
   useEffect(() => {
@@ -4255,9 +4244,9 @@ function EmailEditModal({
   const allowedDomains = registrationConfig?.allowedEmailDomains ?? null;
   const validateCurrentEmail = () => {
     if (!email.trim()) {
-      return currentEmail ? "" : "当前账号尚未设置邮箱";
+      return currentEmail ? "" : tr("当前账号尚未设置邮箱");
     }
-    if (!emailEnabled) return "邮件功能未启用，暂时不能绑定邮箱";
+    if (!emailEnabled) return tr("邮件功能未启用，暂时不能绑定邮箱");
     const normalized = normalizeRegistrationEmail(email);
     const errors = validateEmail(normalized, allowedDomains ?? []);
     if (errors.length) return errors[0];
@@ -4265,7 +4254,7 @@ function EmailEditModal({
       currentEmail &&
       normalized === normalizeRegistrationEmail(currentEmail)
     ) {
-      return "新邮箱与当前邮箱相同";
+      return tr("新邮箱与当前邮箱相同");
     }
     return "";
   };
@@ -4291,11 +4280,11 @@ function EmailEditModal({
         caught.code === "EMAIL_FEATURE_DISABLED"
       ) {
         await loadConfig().catch(() =>
-          setConfigError("暂时无法加载邮箱规则，请稍后重试。")
+          setConfigError(tr("暂时无法加载邮箱规则，请稍后重试。"))
         );
         return;
       }
-      const message = caught instanceof Error ? caught.message : "发送失败";
+      const message = caught instanceof Error ? caught.message : tr("发送失败");
       if (/邮箱|域名|占用/.test(message)) setEmailError(message);
       else notify("error", message);
     } finally {
@@ -4333,12 +4322,12 @@ function EmailEditModal({
       ) {
         setStep("EDIT");
         await loadConfig().catch(() =>
-          setConfigError("暂时无法加载邮箱规则，请稍后重试。")
+          setConfigError(tr("暂时无法加载邮箱规则，请稍后重试。"))
         );
-        notify("error", "邮件设置已更新，请按当前规则重新确认");
+        notify("error", tr("邮件设置已更新，请按当前规则重新确认"));
         return;
       }
-      const message = caught instanceof Error ? caught.message : "更换失败";
+      const message = caught instanceof Error ? caught.message : tr("更换失败");
       const passwordMessage = fieldErrorFromApi(caught, "currentPassword");
       const codeMessage = fieldErrorFromApi(caught, "code");
       const emailMessage = fieldErrorFromApi(caught, "email");
@@ -4375,8 +4364,8 @@ function EmailEditModal({
       : /^\d{6}$/.test(code)
         ? challengeId
           ? ""
-          : "验证码无效，请重新输入"
-        : "请输入6位验证码";
+          : tr("验证码无效，请重新输入")
+        : tr("请输入6位验证码");
     setEmailError(nextEmailError);
     setCodeError(nextCodeError);
     if (nextEmailError || nextCodeError) return;
@@ -4391,7 +4380,7 @@ function EmailEditModal({
   const confirmClear = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!currentPassword) {
-      setCurrentPasswordError("请输入当前密码");
+      setCurrentPasswordError(tr("请输入当前密码"));
       return;
     }
     await performChange({ clearing: true, password: currentPassword });
@@ -4402,7 +4391,7 @@ function EmailEditModal({
   });
   return (
     <Modal
-      title={step === "CONFIRM_CLEAR" ? "确认清空邮箱" : "修改邮箱"}
+      title={step === "CONFIRM_CLEAR" ? tr("确认清空邮箱") : tr("修改邮箱")}
       onClose={
         step === "CONFIRM_CLEAR"
           ? () => {
@@ -4420,10 +4409,9 @@ function EmailEditModal({
           onSubmit={confirmClear}
         >
           <AuthFeedback tone="warning" anchored={false}>
-            清空邮箱后将无法接收系统邮件提醒，也无法自行通过邮件找回密码。
-          </AuthFeedback>
+            {tr("清空邮箱后将无法接收系统邮件提醒，也无法自行通过邮件找回密码。")}</AuthFeedback>
           <label className={`field${currentPasswordError ? " has-error" : ""}`}>
-            <span>当前密码</span>
+            <span>{tr("当前密码")}</span>
             <PasswordInput
               autoFocus
               name="currentPassword"
@@ -4450,10 +4438,9 @@ function EmailEditModal({
                 setCurrentPasswordError("");
               }}
             >
-              返回
-            </button>
+              {tr("返回")}</button>
             <button className="danger-button" disabled={busy}>
-              <BusyButtonContent busy={busy}>确认清空</BusyButtonContent>
+              <BusyButtonContent busy={busy}>{tr("确认清空")}</BusyButtonContent>
             </button>
           </div>
         </form>
@@ -4466,23 +4453,21 @@ function EmailEditModal({
           )}
           {currentEmail && (
             <label className="field">
-              <span>当前邮箱</span>
+              <span>{tr("当前邮箱")}</span>
               <input readOnly value={currentEmail} />
             </label>
           )}
           {registrationConfig && !emailEnabled && (
             currentEmail ? (
             <AuthFeedback tone="warning" anchored={false}>
-              邮件功能未启用，只能清空当前邮箱。
-            </AuthFeedback>
+              {tr("邮件功能未启用，只能清空当前邮箱。")}</AuthFeedback>
           ) : (
             <AuthFeedback tone="warning" anchored={false}>
-              邮件功能未启用，当前账号没有可修改的邮箱。
-            </AuthFeedback>
+              {tr("邮件功能未启用，当前账号没有可修改的邮箱。")}</AuthFeedback>
           )
           )}
           <label className={`field${emailError ? " has-error" : ""}`}>
-            <span>新邮箱（留空表示清空）</span>
+            <span>{tr("新邮箱（留空表示清空）")}</span>
             <input
               autoFocus
               type="email"
@@ -4500,13 +4485,13 @@ function EmailEditModal({
               }}
             />
             {emailEnabled && allowedDomains?.length ? (
-              <small>仅允许以下邮箱域名：{allowedDomains.join("、")}。</small>
+              <small>{tr("仅允许以下邮箱域名：")}{allowedDomains.join("、")}。</small>
             ) : null}
             {emailError && <AuthFeedback tone="error">{emailError}</AuthFeedback>}
           </label>
           <div className="verification-row">
             <label className={`field${codeError ? " has-error" : ""}`}>
-              <span>验证码</span>
+              <span>{tr("验证码")}</span>
               <input
                 ref={codeRef}
                 name="code"
@@ -4541,8 +4526,7 @@ function EmailEditModal({
           </div>
           <div className="modal-actions">
             <button type="button" className="secondary-button" onClick={onClose}>
-              取消
-            </button>
+              {tr("取消")}</button>
             <button
               className="primary-button"
               disabled={
@@ -4552,7 +4536,7 @@ function EmailEditModal({
                 (!emailEnabled && !currentEmail)
               }
             >
-              <BusyButtonContent busy={busy}>确认修改</BusyButtonContent>
+              <BusyButtonContent busy={busy}>{tr("确认修改")}</BusyButtonContent>
             </button>
           </div>
         </form>
@@ -4571,7 +4555,7 @@ type PasswordChangeErrors = Partial<
 >;
 
 function PasswordChangeModal({
-  title = "修改密码",
+  title = tr("修改密码"),
   username,
   employeeNumber,
   onClose,
@@ -4621,18 +4605,18 @@ function PasswordChangeModal({
 
     const nextErrors: PasswordChangeErrors = {};
     if (!currentPassword) {
-      nextErrors.currentPassword = { messages: ["请输入当前密码"] };
+      nextErrors.currentPassword = { messages: [tr("请输入当前密码")] };
     }
     if (passwordChecks.some((check) => check.met === false)) {
       nextErrors.newPassword = {
-        messages: ["请满足全部密码要求"],
+        messages: [tr("请满足全部密码要求")],
         checklist: true
       };
     }
     if (!confirmPassword) {
-      nextErrors.confirmPassword = { messages: ["请再次输入新密码"] };
+      nextErrors.confirmPassword = { messages: [tr("请再次输入新密码")] };
     } else if (confirmPassword !== newPassword) {
-      nextErrors.confirmPassword = { messages: ["两次输入的密码不一致"] };
+      nextErrors.confirmPassword = { messages: [tr("两次输入的密码不一致")] };
     }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
@@ -4671,7 +4655,7 @@ function PasswordChangeModal({
         });
       } else {
         setFormError(
-          caught instanceof Error ? caught.message : "密码修改失败，请重试"
+          caught instanceof Error ? caught.message : tr("密码修改失败，请重试")
         );
       }
     } finally {
@@ -4689,7 +4673,7 @@ function PasswordChangeModal({
       >
         <AuthFieldShell
           id="change-current-password"
-          label="当前密码"
+          label={tr("当前密码")}
           focused={focusedField === "currentPassword"}
           error={errors.currentPassword?.messages}
         >
@@ -4719,7 +4703,7 @@ function PasswordChangeModal({
         </AuthFieldShell>
         <AuthFieldShell
           id="change-new-password"
-          label="新密码"
+          label={tr("新密码")}
           focused={focusedField === "newPassword"}
           error={newPasswordError?.messages}
           hint={<PasswordChecklist checks={passwordChecks} />}
@@ -4762,7 +4746,7 @@ function PasswordChangeModal({
         </AuthFieldShell>
         <AuthFieldShell
           id="change-confirm-password"
-          label="确认新密码"
+          label={tr("确认新密码")}
           focused={focusedField === "confirmPassword"}
           error={errors.confirmPassword?.messages}
         >
@@ -4800,10 +4784,9 @@ function PasswordChangeModal({
             className="secondary-button"
             onClick={onClose}
           >
-            取消
-          </button>
+            {tr("取消")}</button>
           <button className="primary-button" disabled={busy}>
-            <BusyButtonContent busy={busy}>保存密码</BusyButtonContent>
+            <BusyButtonContent busy={busy}>{tr("保存密码")}</BusyButtonContent>
           </button>
         </div>
       </form>
@@ -4855,10 +4838,10 @@ function Topbar({
   const nav = restricted
     ? []
     : [
-        { id: "calendar" as const, label: "资源日历", icon: CalendarDays },
-        { id: "my" as const, label: "我的占用", icon: Clock3 },
+        { id: "calendar" as const, label: tr("资源日历"), icon: CalendarDays },
+        { id: "my" as const, label: tr("我的占用"), icon: Clock3 },
         ...(showAdmin
-          ? [{ id: "admin" as const, label: "管理", icon: Settings }]
+          ? [{ id: "admin" as const, label: tr("管理"), icon: Settings }]
           : [])
       ];
   return (
@@ -4883,17 +4866,17 @@ function Topbar({
           </button>
         ))}
       </nav>
-      <div className="topbar-user" ref={userMenuRef}>
+      <div className="topbar-actions">
+        <LanguageSwitcher compact />
+        <div className="topbar-user" ref={userMenuRef}>
         <button
           type="button"
           className={`topbar-user-trigger${userMenuOpen ? " open" : ""}`}
           aria-haspopup="menu"
           aria-expanded={userMenuOpen}
-          aria-label={`打开用户菜单${
-            unreadNotificationCount
-              ? `，${unreadNotificationCount} 条未读通知`
-              : ""
-          }`}
+          aria-label={tr("打开用户菜单{{v0}}", { v0: unreadNotificationCount
+              ? tr("，{{v0}} 条未读通知", { v0: unreadNotificationCount })
+              : "" })}
           onClick={() => setUserMenuOpen((open) => !open)}
         >
           <span className="topbar-avatar-wrap">
@@ -4908,7 +4891,7 @@ function Topbar({
             <strong>{user.displayName}</strong>
             <small>
               {user.role === "SYSTEM_ADMIN"
-                ? "系统管理员"
+                ? tr("系统管理员")
                 : `${user.username}${user.employeeNumber ? ` · ${user.employeeNumber}` : ""}`}
             </small>
           </span>
@@ -4925,8 +4908,7 @@ function Topbar({
                 setUserMenuOpen(false);
               }}
             >
-              <UserCheck size={16} />用户信息
-            </button>
+              <UserCheck size={16} />{tr("用户信息")}</button>
             {!restricted && (
               <button
                 type="button"
@@ -4937,8 +4919,7 @@ function Topbar({
                   setUserMenuOpen(false);
                 }}
               >
-                <Megaphone size={16} />系统公告
-              </button>
+                <Megaphone size={16} />{tr("系统公告")}</button>
             )}
             {!restricted && (
               <button
@@ -4951,11 +4932,11 @@ function Topbar({
                 }}
               >
                 <MessageSquare size={16} />
-                <span>反馈</span>
+                <span>{tr("反馈")}</span>
                 {feedbackUnreadCount > 0 && (
                   <span
                     className="notification-menu-indicator"
-                    aria-label={`${feedbackUnreadCount} 条反馈未读更新`}
+                    aria-label={tr("{{v0}} 条反馈未读更新", { v0: feedbackUnreadCount })}
                   >
                     {notificationBadgeText(feedbackUnreadCount)}
                   </span>
@@ -4972,11 +4953,11 @@ function Topbar({
               }}
             >
               <Bell size={16} />
-              <span>通知</span>
+              <span>{tr("通知")}</span>
               {unreadNotificationCount > 0 && (
                 <span
                   className="notification-menu-indicator"
-                  aria-label={`${unreadNotificationCount} 条未读通知`}
+                  aria-label={tr("{{v0}} 条未读通知", { v0: unreadNotificationCount })}
                 >
                   {notificationBadgeText(unreadNotificationCount)}
                 </span>
@@ -4987,8 +4968,7 @@ function Topbar({
               role="menuitem"
               onClick={() => setUserMenuOpen(false)}
             >
-              <BookOpenText size={16} />文档中心
-            </a>
+              <BookOpenText size={16} />{tr("文档中心")}</a>
             <button
               type="button"
               role="menuitem"
@@ -4997,10 +4977,10 @@ function Topbar({
                 onLogout();
               }}
             >
-              <LogOut size={16} />退出登录
-            </button>
+              <LogOut size={16} />{tr("退出登录")}</button>
           </div>
         )}
+        </div>
       </div>
     </header>
   );
@@ -5020,9 +5000,8 @@ function PasswordBanner({
   return (
     <div className="password-banner">
       <CircleAlert size={17} />
-      当前仍在使用初始或恢复密码，建议尽快修改。
-      <button onClick={onModify}>现在修改</button>
-      <button onClick={onDismiss}>本次稍后提醒</button>
+      {tr("当前仍在使用初始或恢复密码，建议尽快修改。")}<button onClick={onModify}>{tr("现在修改")}</button>
+      <button onClick={onDismiss}>{tr("本次稍后提醒")}</button>
     </div>
   );
 }
@@ -5052,7 +5031,7 @@ type CatalogMachine = {
 };
 
 function catalogManagerLabel(manager: CatalogManager) {
-  return `${manager.displayName} · ${manager.employeeNumber || "暂无工号"}`;
+  return `${manager.displayName} · ${manager.employeeNumber || tr("暂无工号")}`;
 }
 
 function AdaptiveManagerList({ managers }: { managers: CatalogManager[] }) {
@@ -5061,7 +5040,11 @@ function AdaptiveManagerList({ managers }: { managers: CatalogManager[] }) {
   const measureRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closeTimerRef = useRef<number | null>(null);
-  const labels = useMemo(() => managers.map(catalogManagerLabel), [managers]);
+  const { i18n } = useTranslation();
+  const labels = useMemo(
+    () => managers.map(catalogManagerLabel),
+    [i18n.resolvedLanguage, managers]
+  );
   const [visibleCount, setVisibleCount] = useState(labels.length);
   const [open, setOpen] = useState(false);
 
@@ -5155,8 +5138,8 @@ function AdaptiveManagerList({ managers }: { managers: CatalogManager[] }) {
     return (
       <div className="catalog-manager-list">
         <ShieldCheck size={14} />
-        <span>管理员</span>
-        <em>暂无机器管理员</em>
+        <span>{tr("管理员")}</span>
+        <em>{tr("暂无机器管理员")}</em>
       </div>
     );
   }
@@ -5166,7 +5149,7 @@ function AdaptiveManagerList({ managers }: { managers: CatalogManager[] }) {
   return (
     <div className="catalog-manager-list">
       <ShieldCheck size={14} />
-      <span>管理员</span>
+      <span>{tr("管理员")}</span>
       <div className="catalog-manager-summary" ref={summaryRef}>
         <div className="catalog-manager-visible">
           {labels.slice(0, visibleCount).map((label, index) => (
@@ -5187,14 +5170,13 @@ function AdaptiveManagerList({ managers }: { managers: CatalogManager[] }) {
                 ref={triggerRef}
                 type="button"
                 className="catalog-manager-count"
-                aria-label={`共 ${labels.length} 位管理员，查看完整名单`}
+                aria-label={tr("共 {{v0}} 位管理员，查看完整名单", { v0: labels.length })}
                 aria-expanded={open}
                 aria-controls={popoverId}
                 onFocus={openPopover}
                 onClick={openPopover}
               >
-                共 {labels.length} 人
-              </button>
+                {tr("共")}{labels.length} {tr("人")}</button>
               {open && (
                 <div
                   className="catalog-manager-popover"
@@ -5203,7 +5185,7 @@ function AdaptiveManagerList({ managers }: { managers: CatalogManager[] }) {
                   onMouseEnter={cancelClose}
                   onMouseLeave={scheduleClose}
                 >
-                  <strong>机器管理员</strong>
+                  <strong>{tr("机器管理员")}</strong>
                   <div>
                     {labels.map((label, index) => (
                       <span key={`${label}-full-${index}`}>{label}</span>
@@ -5226,8 +5208,7 @@ function AdaptiveManagerList({ managers }: { managers: CatalogManager[] }) {
             data-manager-overflow-measure
             tabIndex={-1}
           >
-            共 {labels.length} 人
-          </button>
+            {tr("共")}{labels.length} {tr("人")}</button>
         </div>
       </div>
     </div>
@@ -5279,7 +5260,7 @@ function ResourceSummary({
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
       >
-        {value || "尚未配置资源"}
+        {value || tr("尚未配置资源")}
       </span>
       {open && createPortal(
         <span
@@ -5288,7 +5269,7 @@ function ResourceSummary({
           className="resource-summary-popover"
           style={position}
         >
-          {value || "尚未配置资源"}
+          {value || tr("尚未配置资源")}
         </span>,
         document.body
       )}
@@ -5317,7 +5298,7 @@ function ResourceCatalogPage({
       const result = await api<{ machines: CatalogMachine[] }>("/machines/catalog");
       setMachines(result.machines);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "机器目录加载失败");
+      notify("error", error instanceof Error ? error.message : tr("机器目录加载失败"));
     } finally {
       setLoading(false);
     }
@@ -5331,16 +5312,15 @@ function ResourceCatalogPage({
   return (
     <div className="page-shell resource-catalog-page">
       <PageHeader
-        title="全部资源"
+        title={tr("全部资源")}
         actions={(
           <button className="secondary-button" onClick={() => navigate("calendar")}>
             <ChevronLeft size={16} />
-            返回资源日历
-          </button>
+            {tr("返回资源日历")}</button>
         )}
       />
       {loading ? (
-        <div className="content-loading"><RefreshCw className="spin" />正在载入</div>
+        <div className="content-loading"><RefreshCw className="spin" />{tr("正在载入")}</div>
       ) : machines.length ? (
         <div className="resource-catalog-grid">
           {machines.map((machine) => {
@@ -5369,22 +5349,22 @@ function ResourceCatalogPage({
                       }`}
                     >
                       {machine.availabilityStatus === "DISABLED"
-                        ? "停用"
+                        ? tr("已停用")
                         : machine.availabilityStatus === "MAINTENANCE"
-                          ? "维护"
-                          : "启用"}
+                          ? tr("维护")
+                          : tr("已启用")}
                     </span>
                   </div>
-                  <p title={machine.resourceSummary || "尚未配置资源"}>
-                    {machine.resourceSummary || "尚未配置资源"}
+                  <p title={machine.resourceSummary || tr("尚未配置资源")}>
+                    {machine.resourceSummary || tr("尚未配置资源")}
                   </p>
                   <div
                     className="catalog-machine-login-ip"
-                    title={machine.address || "未填写登录 IP"}
+                    title={machine.address || tr("未填写登录 IP")}
                   >
                     <Globe2 size={13} />
-                    <span>登录 IP</span>
-                    <code>{machine.address || "未填写"}</code>
+                    <span>{tr("登录 IP")}</span>
+                    <code>{machine.address || tr("未填写")}</code>
                   </div>
                   <AdaptiveManagerList managers={machine.managers} />
                   <div className="tag-row">
@@ -5402,24 +5382,24 @@ function ResourceCatalogPage({
                       className="secondary-button compact catalog-card-action danger"
                       onClick={async () => {
                         const confirmation = machine.isManager
-                          ? `退出 ${machine.name} 后，你将同时失去管理员身份；进行中和未来占用都会被释放。确定退出？`
-                          : `退出 ${machine.name} 后，进行中和未来占用都会被释放。确定退出？`;
+                          ? tr("退出 {{v0}} 后，你将同时失去管理员身份；进行中和未来占用都会被释放。确定退出？", { v0: machine.name })
+                          : tr("退出 {{v0}} 后，进行中和未来占用都会被释放。确定退出？", { v0: machine.name });
                         if (!(await dialog.confirm({
-                          title: "退出机器",
+                          title: tr("退出机器"),
                           message: confirmation,
-                          confirmLabel: "确认退出",
+                          confirmLabel: tr("确认退出"),
                           tone: "danger"
                         }))) return;
                         try {
                           await api(`/machines/${machine.id}/membership`, {
                             method: "DELETE"
                           });
-                          notify("success", `已退出 ${machine.name}`);
+                          notify("success", tr("已退出 {{v0}}", { v0: machine.name }));
                           await load();
                         } catch (error) {
                           notify(
                             "error",
-                            error instanceof Error ? error.message : "退出失败"
+                            error instanceof Error ? error.message : tr("退出失败")
                           );
                         }
                       }}
@@ -5432,20 +5412,20 @@ function ResourceCatalogPage({
                       className="secondary-button compact catalog-card-action"
                       onClick={async () => {
                         if (!(await dialog.confirm({
-                          title: "撤回申请",
-                          message: `确认撤回对 ${machine.name} 的使用权申请？`,
-                          confirmLabel: "撤回"
+                          title: tr("撤回申请"),
+                          message: tr("确认撤回对 {{v0}} 的使用权申请？", { v0: machine.name }),
+                          confirmLabel: tr("撤回")
                         }))) return;
                         try {
                           await api(`/machine-access/requests/${machine.request!.id}`, {
                             method: "DELETE"
                           });
-                          notify("success", "使用权申请已撤回");
+                          notify("success", tr("使用权申请已撤回"));
                           await load();
                         } catch (error) {
                           notify(
                             "error",
-                            error instanceof Error ? error.message : "撤回失败"
+                            error instanceof Error ? error.message : tr("撤回失败")
                           );
                         }
                       }}
@@ -5470,12 +5450,12 @@ function ResourceCatalogPage({
           })}
         </div>
       ) : (
-        <EmptyState icon={Server} title="暂时没有可申请的机器" />
+        <EmptyState icon={Server} title={tr("暂时没有可申请的机器")} />
       )}
       {requesting && (
-        <Modal title={`申请使用 ${requesting.name}`} onClose={() => setRequesting(null)}>
+        <Modal title={tr("申请使用 {{v0}}", { v0: requesting.name })} onClose={() => setRequesting(null)}>
           <div className="stack-form">
-            <Field label="申请理由（选填）">
+            <Field label={tr("申请理由（选填）")}>
               <textarea
                 rows={5}
                 maxLength={500}
@@ -5494,21 +5474,20 @@ function ResourceCatalogPage({
                     method: "POST",
                     body: jsonBody({ reason })
                   });
-                  notify("success", "使用权申请已提交");
+                  notify("success", tr("使用权申请已提交"));
                   setRequesting(null);
                   await load();
                 } catch (error) {
                   notify(
                     "error",
-                    error instanceof Error ? error.message : "申请提交失败"
+                    error instanceof Error ? error.message : tr("申请提交失败")
                   );
                 } finally {
                   setBusy(false);
                 }
               }}
             >
-              提交申请
-            </button>
+              {tr("提交申请")}</button>
           </div>
         </Modal>
       )}
@@ -5527,6 +5506,7 @@ function CalendarPage({
   notify: (kind: "success" | "error", message: string) => void;
   navigate: (page: Page) => void;
 }) {
+  const { i18n } = useTranslation();
   const dialog = useAppDialog();
   const {
     currentTime,
@@ -5947,7 +5927,7 @@ function CalendarPage({
     } catch (error) {
       notify(
         "error",
-        error instanceof Error ? error.message : "机器列表加载失败"
+        error instanceof Error ? error.message : tr("机器列表加载失败")
       );
     }
   }, [notify]);
@@ -5988,7 +5968,7 @@ function CalendarPage({
       setTimeline(result);
     } catch (error) {
       if (controller.signal.aborted) return;
-      notify("error", error instanceof Error ? error.message : "时间轴加载失败");
+      notify("error", error instanceof Error ? error.message : tr("时间轴加载失败"));
     } finally {
       if (requestId === requestIdRef.current) {
         setInitialLoading(false);
@@ -6215,7 +6195,7 @@ function CalendarPage({
       editingDraftTime
         ? []
         : calendarDraftIssues(drafts, settings, currentTime),
-    [currentTime, drafts, editingDraftTime, settings]
+    [currentTime, drafts, editingDraftTime, i18n.resolvedLanguage, settings]
   );
   const draftFieldIssuesById = useMemo(
     () =>
@@ -6227,7 +6207,7 @@ function CalendarPage({
             : calendarDraftFieldIssues(draft, settings, currentTime)
         ])
       ),
-    [currentTime, drafts, editingDraftTime, settings]
+    [currentTime, drafts, editingDraftTime, i18n.resolvedLanguage, settings]
   );
   const generalDraftIssues = useMemo(() => {
     const fieldMessages = new Set(
@@ -6323,8 +6303,8 @@ function CalendarPage({
       notify(
         "success",
         projection.available.length === 1
-          ? "已跳过过去或被占用的部分，并保留可用时段"
-          : `已跳过过去或被占用的部分，并保留 ${projection.available.length} 个可用时段`
+          ? tr("已跳过过去或被占用的部分，并保留可用时段")
+          : tr("已跳过过去或被占用的部分，并保留 {{v0}} 个可用时段", { v0: projection.available.length })
       );
     }
     invalidatePreview();
@@ -6360,9 +6340,9 @@ function CalendarPage({
     if (
       (drafts.length || editingReservation) &&
       !(await dialog.confirm({
-        title: "开始编辑占用",
-        message: "当前未提交的占用草稿将被替换，原占用仍会保留到你提交修改为止。",
-        confirmLabel: "继续编辑"
+        title: tr("开始编辑占用"),
+        message: tr("当前未提交的占用草稿将被替换，原占用仍会保留到你提交修改为止。"),
+        confirmLabel: tr("继续编辑")
       }))
     ) {
       return;
@@ -6383,7 +6363,7 @@ function CalendarPage({
     if (
       minuteDifference(startAt, item.endAt) < settings.minBookingMinutes
     ) {
-      notify("error", "该占用剩余时间过短，无法进入编辑状态");
+      notify("error", tr("该占用剩余时间过短，无法进入编辑状态"));
       return false;
     }
     setReservationMode(item.scope);
@@ -6428,7 +6408,7 @@ function CalendarPage({
     }
     if (calendarEditRoute.kind === "INVALID") {
       if (editingReservation) resetReservationDetailsState();
-      notify("error", "占用编辑地址无效");
+      notify("error", tr("占用编辑地址无效"));
       void calendarRouteNavigate({
         href: calendarUrlWithoutEditRequest(routeLocation.searchStr),
         replace: true
@@ -6446,7 +6426,7 @@ function CalendarPage({
       new Date(item.endAt).getTime() <= currentTime
     ) {
       if (editingReservation) resetReservationDetailsState();
-      notify("error", "该占用已经结束或无法修改");
+      notify("error", tr("该占用已经结束或无法修改"));
       void calendarRouteNavigate({
         href: calendarUrlWithoutEditRequest(routeLocation.searchStr),
         replace: true
@@ -6486,7 +6466,7 @@ function CalendarPage({
         });
         setMetadata({ title: "", purpose: "", note: "" });
         setPreviewByDraft(new Map());
-        notify("success", "原占用已结束，本次编辑已结束");
+        notify("success", tr("原占用已结束，本次编辑已结束"));
       }
       return;
     }
@@ -6510,8 +6490,8 @@ function CalendarPage({
         notify(
           "success",
           merged.length
-            ? "部分未提交时段已经结束并被移除"
-            : "未提交的占用时段已结束"
+            ? tr("部分未提交时段已经结束并被移除")
+            : tr("未提交的占用时段已结束")
         );
       }
     }
@@ -6525,8 +6505,8 @@ function CalendarPage({
       notify(
         "success",
         merged.length
-          ? "原占用已结束，剩余时段已转为新的占用草稿"
-          : "原占用已结束，本次编辑已结束"
+          ? tr("原占用已结束，剩余时段已转为新的占用草稿")
+          : tr("原占用已结束，本次编辑已结束")
       );
     }
     if (!merged.length) {
@@ -6547,11 +6527,11 @@ function CalendarPage({
     if (
       (drafts.length || editingReservation) &&
       !(await dialog.confirm({
-        title: editingReservation ? "放弃编辑" : "清空占用详情",
+        title: editingReservation ? tr("放弃编辑") : tr("清空占用详情"),
         message: editingReservation
-          ? "当前修改不会提交，原占用将保持不变。"
-          : "当前未提交的占用时段和填写内容将被清除。",
-        confirmLabel: editingReservation ? "确认放弃" : "确认清空",
+          ? tr("当前修改不会提交，原占用将保持不变。")
+          : tr("当前未提交的占用时段和填写内容将被清除。"),
+        confirmLabel: editingReservation ? tr("确认放弃") : tr("确认清空"),
         tone: "danger"
       }))
     ) {
@@ -6581,8 +6561,8 @@ function CalendarPage({
       notify(
         "error",
         target.scope === "MACHINE"
-          ? "该时段内机器已有资源被占用"
-          : "所选时段已被占用，没有可加入的空闲片段"
+          ? tr("该时段内机器已有资源被占用")
+          : tr("所选时段已被占用，没有可加入的空闲片段")
       );
       return false;
     }
@@ -6603,8 +6583,8 @@ function CalendarPage({
       notify(
         "success",
         projection.available.length === 1
-          ? "已跳过过去或被占用的部分，并保留可用时段"
-          : `已跳过过去或被占用的部分，并保留 ${projection.available.length} 个可用时段`
+          ? tr("已跳过过去或被占用的部分，并保留可用时段")
+          : tr("已跳过过去或被占用的部分，并保留 {{v0}} 个可用时段", { v0: projection.available.length })
       );
     }
     return true;
@@ -6640,7 +6620,7 @@ function CalendarPage({
       return mapped;
     } catch (error) {
       if (!silent) {
-        notify("error", error instanceof Error ? error.message : "预览失败");
+        notify("error", error instanceof Error ? error.message : tr("预览失败"));
       }
       return null;
     } finally {
@@ -6692,9 +6672,9 @@ function CalendarPage({
     setDrafts(next);
     setPreviewByDraft(new Map());
     if (next.length) {
-      notify("success", `已生成 ${next.length} 个可用时段，请重新确认`);
+      notify("success", tr("已生成 {{v0}} 个可用时段，请重新确认", { v0: next.length }));
     } else {
-      notify("error", "目标时间内没有符合最短时长的可用片段");
+      notify("error", tr("目标时间内没有符合最短时长的可用片段"));
     }
   };
 
@@ -6705,7 +6685,7 @@ function CalendarPage({
       const checked = await runPreview();
       if (checked === null) return;
       if ([...checked.values()].some((item) => !item.available)) {
-        notify("error", "仍有冲突，请调整或自动拆分后再提交");
+        notify("error", tr("仍有冲突，请调整或自动拆分后再提交"));
         return;
       }
       const segments = drafts.map((draft) => reservationInput(draft, metadata));
@@ -6725,13 +6705,13 @@ function CalendarPage({
       notify(
         "success",
         editingReservation
-          ? `已更新为 ${drafts.length} 条资源占用`
-          : `已提交 ${drafts.length} 条资源占用`
+          ? tr("已更新为 {{v0}} 条资源占用", { v0: drafts.length })
+          : tr("已提交 {{v0}} 条资源占用", { v0: drafts.length })
       );
       clearReservationDetails();
       await loadTimeline(true);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "提交失败");
+      notify("error", error instanceof Error ? error.message : tr("提交失败"));
       if (error instanceof ApiError && Array.isArray(error.details)) {
         setPreviewByDraft(
           previewsByDraftId(
@@ -6909,7 +6889,7 @@ function CalendarPage({
       machineName,
       groupName:
         item.scope === "MACHINE"
-          ? `${machineName} · 整机`
+          ? tr("{{v0}} · 整机", { v0: machineName })
           : resourceGroupName,
       anchor
     });
@@ -6952,23 +6932,22 @@ function CalendarPage({
   };
 
   const syncLabel = refreshing
-    ? "正在更新"
+    ? tr("正在更新")
     : connectionState === "CONNECTED"
-      ? "实时同步"
+      ? tr("实时同步")
       : connectionState === "CONNECTING"
-        ? "正在连接"
-        : "同步已断开";
+        ? tr("正在连接")
+        : tr("同步已断开");
 
   return (
     <div className="calendar-layout composer-open">
       <section className="calendar-main">
         <PageHeader
-          title="资源日历"
+          title={tr("资源日历")}
           actions={(
             <div className="calendar-header-actions">
               <button className="secondary-button" onClick={() => navigate("resources")}>
-                <Server size={16} />全部资源
-              </button>
+                <Server size={16} />{tr("全部资源")}</button>
             </div>
           )}
         />
@@ -6987,7 +6966,7 @@ function CalendarPage({
               })}
             >
               <Clock3 size={14} />
-              <span>服务器时间</span>
+              <span>{tr("服务器时间")}</span>
               <strong>
                 {serverClockReady
                   ? formatChina(new Date(currentTime).toISOString(), {
@@ -6996,7 +6975,7 @@ function CalendarPage({
                       second: "2-digit",
                       hour12: false
                     })
-                  : "同步中"}
+                  : tr("同步中")}
               </strong>
             </div>
             <div className={`live-state ${connectionState.toLowerCase()}${refreshing ? " refreshing" : ""}`}>
@@ -7005,27 +6984,25 @@ function CalendarPage({
           </div>
           <div
             className="calendar-wheel-hint"
-            title="左键拖动：新增占用；右键拖动或 Ctrl + 左键拖动：删除草稿时段；滚轮：上下滚动；Shift + 滚轮：左右滚动；Alt + 滚轮：缩放时间轴"
-            aria-label="时间轴操作：鼠标左键拖动新增占用，鼠标右键拖动或 Control 加鼠标左键拖动删除草稿时段，滚轮上下滚动，Shift 加滚轮左右滚动，Alt 加滚轮缩放"
+            title={tr("左键拖动：新增占用；右键拖动或 Ctrl + 左键拖动：删除草稿时段；滚轮：上下滚动；Shift + 滚轮：左右滚动；Alt + 滚轮：缩放时间轴")}
+            aria-label={tr("时间轴操作：鼠标左键拖动新增占用，鼠标右键拖动或 Control 加鼠标左键拖动删除草稿时段，滚轮上下滚动，Shift 加滚轮左右滚动，Alt 加滚轮缩放")}
           >
-            <span><MouseLeftButtonIcon />拖动 新增</span>
+            <span><MouseLeftButtonIcon />{tr("拖动 新增")}</span>
             <i />
             <span>
-              <MouseRightButtonIcon />拖动
-              <b>/</b>
-              <kbd>Ctrl</kbd>+<MouseLeftButtonIcon />拖动 删除
-            </span>
+              <MouseRightButtonIcon />{tr("拖动")}<b>/</b>
+              <kbd>Ctrl</kbd>+<MouseLeftButtonIcon />{tr("拖动 删除")}</span>
             <i />
-            <span><MouseWheelIcon />上下</span>
+            <span><MouseWheelIcon />{tr("上下")}</span>
             <i />
-            <span><kbd>Shift</kbd> + <MouseWheelIcon />左右</span>
+            <span><kbd>Shift</kbd> + <MouseWheelIcon />{tr("左右")}</span>
             <i />
-            <span><kbd>Alt</kbd> + <MouseWheelIcon />缩放</span>
+            <span><kbd>Alt</kbd> + <MouseWheelIcon />{tr("缩放")}</span>
           </div>
         </div>
         <div className="toolbar">
           <div className="toolbar-group">
-            <button className="icon-button" aria-label="上一时间范围" onClick={() => changeDate(addDays(date, view === "week" ? -7 : -1))}><ChevronLeft size={18} /></button>
+            <button className="icon-button" aria-label={tr("上一时间范围")} onClick={() => changeDate(addDays(date, view === "week" ? -7 : -1))}><ChevronLeft size={18} /></button>
             <CalendarDateButton
               date={date}
               today={serverToday}
@@ -7033,7 +7010,7 @@ function CalendarPage({
                 view === "day"
                   ? formatChina(range.from, {
                       year: "numeric",
-                      month: "long",
+                      month: "short",
                       day: "numeric",
                       weekday: "short"
                     })
@@ -7049,11 +7026,11 @@ function CalendarPage({
               }
               onSelect={changeDate}
             />
-            <button className="icon-button" aria-label="下一时间范围" onClick={() => changeDate(addDays(date, view === "week" ? 7 : 1))}><ChevronRight size={18} /></button>
+            <button className="icon-button" aria-label={tr("下一时间范围")} onClick={() => changeDate(addDays(date, view === "week" ? 7 : 1))}><ChevronRight size={18} /></button>
           </div>
           <div className="segmented">
-            <button className={view === "day" ? "active" : ""} onClick={() => changeView("day")}>一天</button>
-            <button className={view === "week" ? "active" : ""} onClick={() => changeView("week")}>一周</button>
+            <button className={view === "day" ? "active" : ""} onClick={() => changeView("day")}>{tr("一天")}</button>
+            <button className={view === "week" ? "active" : ""} onClick={() => changeView("week")}>{tr("一周")}</button>
           </div>
           {view === "day" && (
             <div className="segmented reservation-mode">
@@ -7065,9 +7042,9 @@ function CalendarPage({
                 }
                 title={
                   editingReservation
-                    ? "编辑占用时不能更改占用模式"
+                    ? tr("编辑占用时不能更改占用模式")
                     : drafts.length
-                      ? "清空当前草稿后可以切换占用模式"
+                      ? tr("清空当前草稿后可以切换占用模式")
                       : undefined
                 }
                 onClick={() => {
@@ -7077,8 +7054,7 @@ function CalendarPage({
                   });
                 }}
               >
-                资源组
-              </button>
+                {tr("资源组")}</button>
               <button
                 className={reservationMode === "MACHINE" ? "active" : ""}
                 disabled={
@@ -7087,9 +7063,9 @@ function CalendarPage({
                 }
                 title={
                   editingReservation
-                    ? "编辑占用时不能更改占用模式"
+                    ? tr("编辑占用时不能更改占用模式")
                     : drafts.length
-                      ? "清空当前草稿后可以切换占用模式"
+                      ? tr("清空当前草稿后可以切换占用模式")
                       : undefined
                 }
                 onClick={() => {
@@ -7097,24 +7073,25 @@ function CalendarPage({
                   writeCalendarPreference({ reservationMode: "MACHINE" });
                 }}
               >
-                整机
-              </button>
+                {tr("整机")}</button>
             </div>
           )}
           {view === "day" && (
-            <div className="timeline-zoom-control" aria-label="时间轴缩放">
+            <div className="timeline-zoom-control" aria-label={tr("时间轴缩放")}>
               <button
                 type="button"
-                aria-label="缩小时间轴"
+                aria-label={tr("缩小时间轴")}
                 disabled={visibleHours === 24}
                 onClick={() => changeTimelineZoom("OUT")}
               >
                 <ZoomOut size={15} />
               </button>
-              <span>{visibleHours}小时</span>
+              <span aria-label={tr("{{v0}} 小时", { v0: visibleHours })}>
+                {visibleHours}h
+              </span>
               <button
                 type="button"
-                aria-label="放大时间轴"
+                aria-label={tr("放大时间轴")}
                 disabled={visibleHours === 6}
                 onClick={() => changeTimelineZoom("IN")}
               >
@@ -7125,21 +7102,21 @@ function CalendarPage({
           <div className="search-box">
             <Search size={16} />
             <input
-              aria-label="搜索资源组或标签"
+              aria-label={tr("搜索资源组或标签")}
               value={search}
               onChange={(event) => {
                 const next = event.target.value;
                 setSearch(next);
                 writeCalendarRoute({ search: next }, true);
               }}
-              placeholder="搜索资源组或标签"
+              placeholder={tr("搜索资源组或标签")}
             />
             {search && (
               <button
                 type="button"
                 className="search-clear-button"
-                aria-label="清除搜索"
-                title="清除搜索"
+                aria-label={tr("清除搜索")}
+                title={tr("清除搜索")}
                 onClick={() => {
                   setSearch("");
                   writeCalendarRoute({ search: "" }, true);
@@ -7150,7 +7127,7 @@ function CalendarPage({
             )}
           </div>
           <select
-            aria-label="筛选机器"
+            aria-label={tr("筛选机器")}
             value={selectedMachine}
             onChange={(event) => {
               setSelectedMachine(event.target.value);
@@ -7160,37 +7137,35 @@ function CalendarPage({
               writeCalendarRoute({ machineId: event.target.value });
             }}
           >
-            <option value="">全部机器</option>
+            <option value="">{tr("全部机器")}</option>
             {machineOptions.map((machine) => <option key={machine.id} value={machine.id}>{machine.name}</option>)}
           </select>
           <button className="secondary-button" disabled={refreshing} onClick={() => void loadTimeline(true)}>
             {refreshing ? <RefreshCw size={16} className="spin" /> : <RefreshCw size={16} />}
-            刷新
-          </button>
+            {tr("刷新")}</button>
         </div>
         <div ref={timelineFrameRef} className="timeline-scroll-frame">
           {initialLoading && !timeline ? (
             <div className="timeline-loading calendar-panel-state">
               <RefreshCw className="spin" />
-              正在同步资源状态
-            </div>
+              {tr("正在同步资源状态")}</div>
           ) : !timeline?.machines.length ? (
             <CalendarEmptyState
               icon={Server}
-              title="暂无可用资源"
-              text="可以前往全部资源查看完整机器列表并申请使用权。"
+              title={tr("暂无可用资源")}
+              text={tr("可以前往全部资源查看完整机器列表并申请使用权。")}
               onOpenResourceCatalog={() => navigate("resources")}
             />
           ) : !timeline.groups.length ? (
             <CalendarEmptyState
               icon={debouncedSearch ? Search : Server}
-              title="没有符合条件的资源组"
+              title={tr("没有符合条件的资源组")}
               text={
                 debouncedSearch
-                  ? "可以调整搜索或筛选条件，或前往全部资源查看完整机器列表。"
+                  ? tr("可以调整搜索或筛选条件，或前往全部资源查看完整机器列表。")
                   : selectedMachine
-                    ? "可以切换机器，或前往全部资源查看完整机器列表。"
-                    : "可以前往全部资源查看完整机器列表。"
+                    ? tr("可以切换机器，或前往全部资源查看完整机器列表。")
+                    : tr("可以前往全部资源查看完整机器列表。")
               }
               onOpenResourceCatalog={() => navigate("resources")}
             />
@@ -7212,7 +7187,7 @@ function CalendarPage({
             <div className="timeline-card" style={{ width: timelineCardWidth }}>
           <div className="timeline-head">
             <div className="resource-head">
-              <span>资源组</span>
+              <span>{tr("资源组")}</span>
             </div>
             <TimelineScale
               range={range}
@@ -7244,7 +7219,10 @@ function CalendarPage({
                   className={`machine-strip${machineCollapsed ? " collapsed" : ""}`}
                   aria-expanded={!machineCollapsed}
                   aria-controls={machineContentsId}
-                  aria-label={`${machineCollapsed ? "展开" : "收起"}${machine.name}的资源组`}
+                  aria-label={tr("{{v0}}{{v1}}的资源组", {
+                    v0: tr(machineCollapsed ? "展开" : "收起"),
+                    v1: machine.name
+                  })}
                   onClick={() => {
                     setCollapsedMachineIds((current) => {
                       const next = new Set(current);
@@ -7262,8 +7240,7 @@ function CalendarPage({
                     <strong>{machine.name}</strong>
                     <code>{machine.address}</code>
                     <span className="machine-group-count">
-                      {machineGroups.length} 组
-                    </span>
+                      {tr("{{count}} 组", { count: machineGroups.length })}</span>
                     <CalendarMachineTags tags={machine.tags} />
                   </span>
                   <span className="machine-strip-summary">
@@ -7277,13 +7254,13 @@ function CalendarPage({
                       }`}
                     >
                       {machine.status === "DISABLED"
-                        ? "停用"
+                        ? tr("已停用")
                         : machineMaintenanceNow
-                          ? "维护"
-                          : "启用"}
+                          ? tr("维护")
+                          : tr("已启用")}
                     </span>
                     <span className="machine-resource-summary">
-                      {machine.resourceSummary || "尚未配置资源"}
+                      {machine.resourceSummary || tr("尚未配置资源")}
                     </span>
                   </span>
                 </button>
@@ -7390,10 +7367,10 @@ function CalendarPage({
                           }`}
                         >
                           {longTermDisabled
-                            ? "停用"
+                            ? tr("已停用")
                             : groupMaintenanceNow
-                              ? "维护"
-                              : "启用"}
+                              ? tr("维护")
+                              : tr("已启用")}
                         </span>
                       </div>
                       <div
@@ -7401,11 +7378,11 @@ function CalendarPage({
                         title={
                           !selectable
                             ? machine.status !== "ACTIVE"
-                              ? "机器当前停用"
+                              ? tr("机器当前停用")
                               : group.status !== "ACTIVE"
-                                ? "资源组当前停用"
+                                ? tr("资源组当前停用")
                                 : reservationMode === "MACHINE"
-                                  ? "机器内存在停用的资源组，当前不能整机占用"
+                                  ? tr("机器内存在停用的资源组，当前不能整机占用")
                                   : undefined
                             : undefined
                         }
@@ -7508,8 +7485,8 @@ function CalendarPage({
                             <PowerOff size={14} />
                             <span>
                               {machine.status === "DISABLED"
-                                ? "机器已停用"
-                                : "资源组已停用"}
+                                ? tr("机器已停用")
+                                : tr("资源组已停用")}
                             </span>
                           </div>
                         )}
@@ -7562,15 +7539,15 @@ function CalendarPage({
                               : null;
                           const label =
                             item.sources.length > 1
-                              ? `${isDisableHistory ? "停用" : "维护"} · ${item.sources.length}项`
+                              ? tr("{{v0}} · {{v1}}项", { v0: isDisableHistory ? "停用" : "维护", v1: item.sources.length })
                               : onlySource?.window.reason ||
                                 (onlySource?.scope === "MACHINE"
                                   ? isDisableHistory
-                                    ? "整机停用"
-                                    : "整机维护"
+                                    ? tr("整机停用")
+                                    : tr("整机维护")
                                   : isDisableHistory
-                                    ? "资源组停用"
-                                    : "资源组维护");
+                                    ? tr("资源组停用")
+                                    : tr("资源组维护"));
                           return (
                           <TimelineBar
                             key={`${group.id}-${item.startAt}-${item.endAt}-${item.sources.map((source) => source.window.id).join("-")}`}
@@ -7631,7 +7608,7 @@ function CalendarPage({
                             <span className="booking-dot" />
                             <span className="booking-bar-copy">
                               <span>
-                                {item.scope === "MACHINE" && "整机 · "}
+                                {item.scope === "MACHINE" && tr("整机 · ")}
                                 {item.applicantName}
                                 {item.applicantEmployeeNumber
                                   ? ` · ${item.applicantEmployeeNumber}`
@@ -7666,7 +7643,7 @@ function CalendarPage({
                               <span className="booking-dot" />
                               <span className="booking-bar-copy">
                                 <span>
-                                  {draft.scope === "MACHINE" && "整机 · "}
+                                  {draft.scope === "MACHINE" && tr("整机 · ")}
                                   {user.displayName}
                                   {user.employeeNumber
                                     ? ` · ${user.employeeNumber}`
@@ -7694,8 +7671,7 @@ function CalendarPage({
                               className="drag-erase-bar"
                             >
                               <X size={12} />
-                              删除草稿
-                            </TimelineBar>
+                              {tr("删除草稿")}</TimelineBar>
                           )}
                         {dragPreview &&
                           isDragTarget &&
@@ -7709,8 +7685,8 @@ function CalendarPage({
                             >
                               <CircleAlert size={12} />
                               {dragPreview.target.scope === "MACHINE"
-                                ? "机器已有资源被占用"
-                                : "已被占用"}
+                                ? tr("机器已有资源被占用")
+                                : tr("已被占用")}
                             </TimelineBar>
                           )}
                       </div>
@@ -7724,8 +7700,7 @@ function CalendarPage({
           })}
           {refreshing && timeline && (
             <div className="timeline-refreshing" aria-live="polite">
-              <RefreshCw size={14} className="spin" />正在更新
-            </div>
+              <RefreshCw size={14} className="spin" />{tr("正在更新")}</div>
           )}
             </div>
           </div>
@@ -7735,7 +7710,7 @@ function CalendarPage({
                 ref={timelineHorizontalScrollRef}
                 className="timeline-horizontal-scroll"
                 onScroll={handleTimelineHorizontalScroll}
-                aria-label="横向滚动时间轴"
+                aria-label={tr("横向滚动时间轴")}
                 tabIndex={0}
               >
                 <div style={{ width: `${timelineZoom * 100}%` }} />
@@ -7748,7 +7723,7 @@ function CalendarPage({
       </section>
       <aside className="booking-drawer" ref={bookingDrawerRef}>
         <div className="drawer-head">
-          <h2>占用详情</h2>
+          <h2>{tr("占用详情")}</h2>
           {(drafts.length > 0 || editingReservation) && (
             <div className="drawer-head-actions">
               <button
@@ -7757,32 +7732,29 @@ function CalendarPage({
                 onClick={() => setManualBookingOpen(true)}
               >
                 <Plus size={14} />
-                新增
-              </button>
+                {tr("新增")}</button>
               <button
                 type="button"
                 className="drawer-clear-button"
                 onClick={() => void clearReservationDetailsWithConfirmation()}
               >
                 <X size={14} />
-                放弃
-              </button>
+                {tr("放弃")}</button>
             </div>
           )}
         </div>
         {!drafts.length && (
           <div className="drawer-empty">
             <Clock3 className="drawer-empty-icon" size={28} />
-            <strong>暂无占用时段</strong>
-            <p>在日历时间轴上拖动，以添加一段占用。</p>
+            <strong>{tr("暂无占用时段")}</strong>
+            <p>{tr("在日历时间轴上拖动，以添加一段占用。")}</p>
             <button
               type="button"
               className="secondary-button drawer-add-button"
               onClick={() => setManualBookingOpen(true)}
             >
               <Plus size={14} />
-              新增占用
-            </button>
+              {tr("新建")}</button>
           </div>
         )}
         {!!drafts.length && (
@@ -7790,12 +7762,12 @@ function CalendarPage({
             {editingReservation && (
               <div className="editing-reservation-banner">
                 <Pencil size={14} />
-                <span>正在编辑占用，原时段会保留到提交成功。</span>
+                <span>{tr("正在编辑占用，原时段会保留到提交成功。")}</span>
               </div>
             )}
             <div className="selected-summary">
               <span>{new Set(drafts.map(reservationTargetKey)).size}</span>
-              <div><strong>个占用目标，{drafts.length} 条占用</strong></div>
+              <div><strong>{tr("个占用目标，")}{drafts.length} {tr("条占用")}</strong></div>
             </div>
             <div className="draft-list">
               {drafts.map((draft) => {
@@ -7807,8 +7779,8 @@ function CalendarPage({
                 const fieldIssues = draftFieldIssuesById.get(draft.id);
                 const targetName =
                   draft.scope === "MACHINE"
-                    ? `${machine?.name ?? "机器"} · 整机`
-                    : group?.name ?? "资源组";
+                    ? tr("{{v0}} · 整机", { v0: machine?.name ?? "机器" })
+                    : group?.name ?? tr("资源组");
                 return (
                   <div
                     className={`draft-card ${
@@ -7829,12 +7801,12 @@ function CalendarPage({
                           : <Cpu size={15} />}
                         <strong>{targetName}</strong>
                         {draft.startMode === "IMMEDIATE" && (
-                          <span className="immediate-start-label">立即开始</span>
+                          <span className="immediate-start-label">{tr("立即开始")}</span>
                         )}
                       </div>
                       <button
                         className="icon-button tiny"
-                        aria-label={`删除 ${targetName} 草稿`}
+                        aria-label={tr("删除 {{v0}} 草稿", { v0: targetName })}
                         onClick={() => {
                           const next = drafts.filter((item) => item.id !== draft.id);
                           setDrafts(next);
@@ -7887,12 +7859,12 @@ function CalendarPage({
                         ? durationText(
                             minuteDifference(draft.startAt, draft.endAt)
                           )
-                        : "时间有误"}
+                        : tr("时间有误")}
                     </div>
                     {result && (
                       result.available
-                        ? <span className="status-label success"><Check size={13} />完整时段可用</span>
-                        : <span className="status-label danger"><CircleAlert size={13} />{result.conflicts.length} 处冲突</span>
+                        ? <span className="status-label success"><Check size={13} />{tr("完整时段可用")}</span>
+                        : <span className="status-label danger"><CircleAlert size={13} />{result.conflicts.length} {tr("处冲突")}</span>
                     )}
                   </div>
                 );
@@ -7903,7 +7875,7 @@ function CalendarPage({
                 {generalDraftIssues.map((issue) => <span key={issue}>{issue}</span>)}
               </div>
             )}
-            <div className="section-label"><span>占用信息</span></div>
+            <div className="section-label"><span>{tr("占用信息")}</span></div>
             <CalendarReservationMetadataFields
               values={metadata}
               onChange={(field, value) =>
@@ -7912,11 +7884,11 @@ function CalendarPage({
             />
               <div className="drawer-actions">
                 {[...previewByDraft.values()].some((item) => !item.available) && (
-                  <button className="secondary-button accent" onClick={applySplit}><Sparkles size={16} />自动拆分</button>
+                  <button className="secondary-button accent" onClick={applySplit}><Sparkles size={16} />{tr("自动拆分")}</button>
                 )}
                 <button className="primary-button" disabled={submitting || previewing || !!draftIssues.length} onClick={() => void submitDrafts()}>
                   {submitting ? <RefreshCw size={16} className="spin" /> : <Check size={16} />}
-                  {editingReservation ? "提交修改" : "提交占用"}
+                  {editingReservation ? tr("提交修改") : tr("提交占用")}
                 </button>
               </div>
           </>
@@ -8015,7 +7987,7 @@ function CalendarWeekOverview({
     <div className="week-overview-scroll">
       <div className="week-overview">
         <div className="week-overview-head">
-          <strong>资源组</strong>
+          <strong>{tr("资源组")}</strong>
           {days.map((day) => (
             <button
               type="button"
@@ -8097,8 +8069,7 @@ function CalendarWeekOverview({
         {refreshing && (
           <div className="timeline-refreshing" aria-live="polite">
             <RefreshCw size={14} className="spin" />
-            正在更新
-          </div>
+            {tr("正在更新")}</div>
         )}
       </div>
     </div>
@@ -8184,7 +8155,7 @@ function CalendarManualBookingModal({
     mode === "MACHINE" ? "MACHINE" : selectedResourceGroupId;
   const resourceOptions =
     mode === "MACHINE"
-      ? [{ id: "MACHINE", label: "整机" }]
+      ? [{ id: "MACHINE", label: tr("整机") }]
       : groupOptions.map((group) => ({ id: group.id, label: group.name }));
   const selectedTargetId =
     mode === "MACHINE" ? selectedMachineId : selectedResourceGroupId;
@@ -8209,7 +8180,7 @@ function CalendarManualBookingModal({
   const issues = calendarDraftFieldIssues(draft, settings, currentTime);
 
   return (
-    <Modal title="新增占用" onClose={onClose}>
+    <Modal title={tr("新增占用")} onClose={onClose}>
       <form
         className="stack-form calendar-manual-form"
         noValidate
@@ -8240,8 +8211,7 @@ function CalendarManualBookingModal({
               setSubmitted(false);
             }}
           >
-            资源组
-          </button>
+            {tr("资源组")}</button>
           <button
             type="button"
             className={mode === "MACHINE" ? "active" : ""}
@@ -8253,8 +8223,7 @@ function CalendarManualBookingModal({
               setSubmitted(false);
             }}
           >
-            整机
-          </button>
+            {tr("整机")}</button>
         </div>
         <CalendarTargetFields
           machines={availableMachines}
@@ -8273,11 +8242,10 @@ function CalendarManualBookingModal({
         />
         {!availableMachines.length && (
           <div className="auth-form-feedback error" role="alert">
-            当前没有可占用的机器
-          </div>
+            {tr("当前没有可占用的机器")}</div>
         )}
         <Field
-          label="开始时间"
+          label={tr("开始时间")}
           error={submitted ? issues.startAt : undefined}
         >
           <input
@@ -8291,7 +8259,7 @@ function CalendarManualBookingModal({
           />
         </Field>
         <Field
-          label="结束时间"
+          label={tr("结束时间")}
           error={submitted ? issues.endAt : undefined}
         >
           <input
@@ -8310,8 +8278,7 @@ function CalendarManualBookingModal({
           disabled={!selectedTargetId}
         >
           <Plus size={15} />
-          加入占用详情
-        </button>
+          {tr("加入占用详情")}</button>
       </form>
     </Modal>
   );
@@ -8334,7 +8301,7 @@ function CalendarTargetFields({
 }) {
   return (
     <>
-      <Field label="机器">
+      <Field label={tr("机器")}>
         <select
           value={machineId}
           onChange={(event) => onMachineChange(event.target.value)}
@@ -8346,7 +8313,7 @@ function CalendarTargetFields({
           ))}
         </select>
       </Field>
-      <Field label="资源组">
+      <Field label={tr("资源组")}>
         <select
           value={resourceId}
           disabled={!machineId}
@@ -8407,10 +8374,10 @@ function CalendarWeekDayCell({
     (item) => item.scope === "MACHINE"
   ).length;
   const summary = occupiedMinutes
-    ? `${(occupiedMinutes / 60).toFixed(1)}小时 · ${reservations.length}段`
+    ? tr("{{v0}}小时 · {{v1}}段", { v0: (occupiedMinutes / 60).toFixed(1), v1: reservations.length })
     : unavailable.length
-      ? "不可用"
-      : "空闲";
+      ? tr("不可用")
+      : tr("空闲");
   const details = [
     ...reservations.map((item) => ({
       id: item.id,
@@ -8419,7 +8386,7 @@ function CalendarWeekDayCell({
       startAt: item.startAt,
       endAt: item.endAt,
       persistent: false,
-      label: `${item.scope === "MACHINE" ? "整机 · " : ""}${item.applicantName}${
+      label: `${item.scope === "MACHINE" ? tr("整机 · ") : ""}${item.applicantName}${
         item.applicantEmployeeNumber
           ? ` · ${item.applicantEmployeeNumber}`
           : ""
@@ -8435,7 +8402,7 @@ function CalendarWeekDayCell({
       startAt: item.startAt,
       endAt: item.endAt,
       persistent: item.kind === "LONG_TERM" && item.endAt >= dayEnd,
-      label: item.reason || (item.kind === "LONG_TERM" ? "停用" : "维护")
+      label: item.reason || (item.kind === "LONG_TERM" ? tr("停用") : tr("维护"))
     }))
   ].sort((left, right) => left.startAt.localeCompare(right.startAt));
 
@@ -8502,11 +8469,9 @@ function CalendarWeekDayCell({
           className={`${day === today ? "today" : ""}${
             occupiedMinutes ? " occupied" : ""
           }${unavailable.length ? " unavailable" : ""}`}
-          aria-label={`${day} ${groupName}，${summary}${
-            machineReservationCount
-              ? `，其中${machineReservationCount}段整机占用`
-              : ""
-          }，点击查看日视图`}
+          aria-label={tr("{{v0}} {{v1}}，{{v2}}{{v3}}，点击查看日视图", { v0: day, v1: groupName, v2: summary, v3: machineReservationCount
+              ? tr("，其中{{v0}}段整机占用", { v0: machineReservationCount })
+              : "" })}
           aria-describedby={
             popoverOpen && details.length ? tooltipId : undefined
           }
@@ -8603,7 +8568,7 @@ function formatWeekDayDetailPeriod({
     });
 
   if (persistent) {
-    return start <= from ? "全天停用" : `${time(Math.max(start, from))}–24:00`;
+    return start <= from ? tr("全天停用") : `${time(Math.max(start, from))}–24:00`;
   }
 
   const startLabel = start <= from ? "00:00" : time(Math.max(start, from));
@@ -8674,7 +8639,7 @@ function TimelineScale({
             key={mark.key}
             style={{ left: `${mark.left}%` }}
             onClick={() => onSelectDay?.(mark.date!)}
-            aria-label={`查看 ${mark.label} 的日视图`}
+            aria-label={tr("查看 {{v0}} 的日视图", { v0: mark.label })}
           >
             {mark.label}
           </button>
@@ -8842,12 +8807,12 @@ function CalendarDateButton({
         <div
           className="calendar-date-popover"
           role="dialog"
-          aria-label="选择日期"
+          aria-label={tr("选择日期")}
         >
           <div className="calendar-date-popover-head">
             <button
               type="button"
-              aria-label="上个月"
+              aria-label={tr("上个月")}
               onClick={() =>
                 setMonth((current) => shiftCalendarMonth(current, -1))
               }
@@ -8857,7 +8822,7 @@ function CalendarDateButton({
             <strong>{calendarMonthLabel(month)}</strong>
             <button
               type="button"
-              aria-label="下个月"
+              aria-label={tr("下个月")}
               onClick={() =>
                 setMonth((current) => shiftCalendarMonth(current, 1))
               }
@@ -8866,7 +8831,7 @@ function CalendarDateButton({
             </button>
           </div>
           <div className="calendar-date-weekdays" aria-hidden="true">
-            {"一二三四五六日".split("").map((weekday) => (
+            {calendarWeekdayLabels().map((weekday) => (
               <span key={weekday}>{weekday}</span>
             ))}
           </div>
@@ -8935,8 +8900,7 @@ function CalendarDateButton({
             className="calendar-date-today"
             onClick={() => selectDate(today)}
           >
-            今天
-          </button>
+            {tr("今天")}</button>
         </div>
       )}
     </div>
@@ -9067,7 +9031,7 @@ function CalendarReservationTimeFields({
       onFocusCapture={onFocusCapture}
       onBlurCapture={onBlurCapture}
     >
-      <Field label="开始时间" error={startError}>
+      <Field label={tr("开始时间")} error={startError}>
         <input
           key={`start-${fieldKey}`}
           type="datetime-local"
@@ -9078,7 +9042,7 @@ function CalendarReservationTimeFields({
           onBlur={(event) => onStartBlur?.(event.currentTarget.value)}
         />
       </Field>
-      <Field label="结束时间" error={endError}>
+      <Field label={tr("结束时间")} error={endError}>
         <input
           key={`end-${fieldKey}`}
           type="datetime-local"
@@ -9104,7 +9068,7 @@ function CalendarReservationMetadataFields({
 }) {
   return (
     <div className="calendar-reservation-metadata-fields">
-      <Field label="标题（选填）">
+      <Field label={tr("标题（选填）")}>
         <input
           name="title"
           maxLength={120}
@@ -9114,7 +9078,7 @@ function CalendarReservationMetadataFields({
           onChange={(event) => onChange?.("title", event.target.value)}
         />
       </Field>
-      <Field label="用途（选填）">
+      <Field label={tr("用途（选填）")}>
         <textarea
           name="purpose"
           maxLength={500}
@@ -9125,7 +9089,7 @@ function CalendarReservationMetadataFields({
           onChange={(event) => onChange?.("purpose", event.target.value)}
         />
       </Field>
-      <Field label="备注（选填）">
+      <Field label={tr("备注（选填）")}>
         <textarea
           name="note"
           maxLength={1000}
@@ -9198,26 +9162,26 @@ function CalendarNearbyReservationsPopover({
         ref={popoverRef}
         className="reservation-popover nearby-reservations-popover"
         role="dialog"
-        aria-label="选择附近占用"
+        aria-label={tr("选择附近占用")}
         tabIndex={-1}
         style={{ left, top }}
         onPointerDown={(event) => event.stopPropagation()}
       >
         <div className="reservation-popover-head">
           <div>
-            <strong>附近有 {nearby.items.length} 条占用</strong>
+            <strong>{tr("附近有")}{nearby.items.length} {tr("条占用")}</strong>
           </div>
           <button
             className="reservation-popover-action"
             type="button"
-            aria-label="关闭"
-            title="关闭"
+            aria-label={tr("关闭")}
+            title={tr("关闭")}
             onClick={onClose}
           >
             <X size={16} />
           </button>
         </div>
-        <p className="nearby-reservations-hint">请选择一条查看完整信息</p>
+        <p className="nearby-reservations-hint">{tr("请选择一条查看完整信息")}</p>
         <div className="nearby-reservations-list">
           {nearby.items.map((detail) => (
             <button
@@ -9245,7 +9209,7 @@ function CalendarNearbyReservationsPopover({
                   })}
                 </time>
                 <strong>
-                  {detail.item.scope === "MACHINE" && "整机 · "}
+                  {detail.item.scope === "MACHINE" && tr("整机 · ")}
                   {detail.item.applicantName}
                   {detail.item.applicantEmployeeNumber
                     ? ` · ${detail.item.applicantEmployeeNumber}`
@@ -9291,7 +9255,7 @@ function CalendarReservationPopover({
     new Date(item.endAt).getTime() > now;
   const withinFirstMinute = active && now - startTime < 60_000;
   const canRelease = item.mine || canManage;
-  const status = upcoming ? "未开始" : active ? "进行中" : "已结束";
+  const status = upcoming ? tr("未开始") : active ? tr("进行中") : tr("已结束");
   const popoverWidth = 320;
   const viewportPadding = 12;
   const anchorGap = 8;
@@ -9337,30 +9301,30 @@ function CalendarReservationPopover({
     const releasingAnotherUser = !item.mine && canManage;
     const confirmed = await dialog.confirm({
       title: releasingAnotherUser
-        ? "释放占用"
+        ? tr("释放占用")
         : action === "cancel"
-          ? "取消占用"
-          : "提前结束占用",
+          ? tr("取消占用")
+          : tr("提前结束占用"),
       message:
         releasingAnotherUser
           ? action === "cancel"
-            ? "释放后会取消该占用、立即腾出时段，并通知使用人。"
+            ? tr("释放后会取消该占用、立即腾出时段，并通知使用人。")
             : withinFirstMinute
-              ? "该占用开始不足一分钟，释放后会撤销整条记录并通知使用人。"
-              : "释放后会立即腾出剩余时段，并通知使用人。"
+              ? tr("该占用开始不足一分钟，释放后会撤销整条记录并通知使用人。")
+              : tr("释放后会立即腾出剩余时段，并通知使用人。")
           : action === "cancel"
-            ? "取消后会立即释放该时段，且无法自动恢复。"
+            ? tr("取消后会立即释放该时段，且无法自动恢复。")
             : withinFirstMinute
-              ? "该占用开始不足一分钟，确认后会撤销整条占用记录并立即释放资源。"
-              : "结束后会立即释放剩余时段，且无法自动恢复。",
+              ? tr("该占用开始不足一分钟，确认后会撤销整条占用记录并立即释放资源。")
+              : tr("结束后会立即释放剩余时段，且无法自动恢复。"),
       confirmLabel:
         releasingAnotherUser
-          ? "确认释放"
+          ? tr("确认释放")
           : action === "cancel"
-            ? "确认取消"
+            ? tr("确认取消")
             : withinFirstMinute
-              ? "确认撤销"
-              : "确认结束",
+              ? tr("确认撤销")
+              : tr("确认结束"),
       tone: "danger"
     });
     if (!confirmed) return;
@@ -9376,9 +9340,9 @@ function CalendarReservationPopover({
       notify(
         "success",
         releasingAnotherUser
-          ? "占用已释放"
+          ? tr("占用已释放")
           : result.message ??
-            (action === "cancel" ? "占用已取消" : "占用已提前结束")
+            (action === "cancel" ? tr("占用已取消") : tr("占用已提前结束"))
       );
       onClose();
       await onChanged();
@@ -9388,10 +9352,10 @@ function CalendarReservationPopover({
         error instanceof Error
           ? error.message
           : releasingAnotherUser
-            ? "释放失败"
+            ? tr("释放失败")
             : action === "cancel"
-              ? "取消失败"
-              : "提前结束失败"
+              ? tr("取消失败")
+              : tr("提前结束失败")
       );
     } finally {
       setBusy(false);
@@ -9407,14 +9371,14 @@ function CalendarReservationPopover({
         ref={popoverRef}
         className="reservation-popover"
         role="dialog"
-        aria-label="占用详情"
+        aria-label={tr("占用详情")}
         tabIndex={-1}
         style={{ left, top }}
         onPointerDown={(event) => event.stopPropagation()}
       >
         <div className="reservation-popover-head">
           <div>
-            <strong>占用详情</strong>
+            <strong>{tr("占用详情")}</strong>
             <span className={`state-chip ${active ? "active" : ""}`}>
               {status}
             </span>
@@ -9425,8 +9389,8 @@ function CalendarReservationPopover({
                 className="reservation-popover-action edit"
                 type="button"
                 disabled={busy}
-                aria-label="编辑占用"
-                title="编辑占用"
+                aria-label={tr("编辑占用")}
+                title={tr("编辑占用")}
                 onClick={onEdit}
               >
                 <Pencil size={16} />
@@ -9437,8 +9401,8 @@ function CalendarReservationPopover({
                 className="reservation-popover-action danger"
                 type="button"
                 disabled={busy}
-                aria-label={item.mine ? "取消占用" : "释放占用"}
-                title={item.mine ? "取消占用" : "释放占用"}
+                aria-label={item.mine ? tr("取消占用") : tr("释放占用")}
+                title={item.mine ? tr("取消占用") : tr("释放占用")}
                 onClick={() => void performAction("cancel")}
               >
                 <Trash2 size={16} />
@@ -9452,16 +9416,16 @@ function CalendarReservationPopover({
                 aria-label={
                   item.mine
                     ? withinFirstMinute
-                      ? "撤销占用"
-                      : "提前结束"
-                    : "释放占用"
+                      ? tr("撤销占用")
+                      : tr("提前结束")
+                    : tr("释放占用")
                 }
                 title={
                   item.mine
                     ? withinFirstMinute
-                      ? "撤销占用"
-                      : "提前结束"
-                    : "释放占用"
+                      ? tr("撤销占用")
+                      : tr("提前结束")
+                    : tr("释放占用")
                 }
                 onClick={() => void performAction("end")}
               >
@@ -9474,8 +9438,8 @@ function CalendarReservationPopover({
               className="reservation-popover-action"
               type="button"
               disabled={busy}
-              aria-label="关闭"
-              title="关闭"
+              aria-label={tr("关闭")}
+              title={tr("关闭")}
               onClick={onClose}
             >
               <X size={16} />
@@ -9484,7 +9448,7 @@ function CalendarReservationPopover({
         </div>
         <dl className="reservation-popover-details">
           <div>
-            <dt>使用人</dt>
+            <dt>{tr("使用人")}</dt>
             <dd>
               {item.applicantName}
               {item.applicantEmployeeNumber
@@ -9492,10 +9456,10 @@ function CalendarReservationPopover({
                 : ""}
             </dd>
           </div>
-          <div><dt>机器</dt><dd>{detail.machineName}</dd></div>
-          <div><dt>范围</dt><dd>{detail.groupName}</dd></div>
+          <div><dt>{tr("机器")}</dt><dd>{detail.machineName}</dd></div>
+          <div><dt>{tr("范围")}</dt><dd>{detail.groupName}</dd></div>
           <div>
-            <dt>时间</dt>
+            <dt>{tr("时间")}</dt>
             <dd>
               {formatChina(item.startAt, {
                 year: "numeric",
@@ -9504,7 +9468,7 @@ function CalendarReservationPopover({
                 hour: "2-digit",
                 minute: "2-digit"
               })}
-              <span className="reservation-popover-time-separator">至</span>
+              <span className="reservation-popover-time-separator">{tr("至")}</span>
               {formatChina(item.endAt, {
                 year: "numeric",
                 month: "2-digit",
@@ -9516,7 +9480,7 @@ function CalendarReservationPopover({
           </div>
           {item.adjustmentType && (
             <div>
-              <dt>原始时间</dt>
+              <dt>{tr("原始时间")}</dt>
               <dd>
                 {formatChina(item.initialStartAt, {
                   year: "numeric",
@@ -9525,7 +9489,7 @@ function CalendarReservationPopover({
                   hour: "2-digit",
                   minute: "2-digit"
                 })}
-                <span className="reservation-popover-time-separator">至</span>
+                <span className="reservation-popover-time-separator">{tr("至")}</span>
                 {formatChina(item.initialEndAt, {
                   year: "numeric",
                   month: "2-digit",
@@ -9539,10 +9503,10 @@ function CalendarReservationPopover({
         </dl>
         {(item.title || item.purpose || item.note || item.adjustmentReason) && (
           <div className="reservation-popover-content">
-            {item.title && <div><span>标题</span><p>{item.title}</p></div>}
-            {item.purpose && <div><span>用途</span><p>{item.purpose}</p></div>}
-            {item.note && <div><span>备注</span><p>{item.note}</p></div>}
-            {item.adjustmentReason && <div><span>调整原因</span><p>{item.adjustmentReason}</p></div>}
+            {item.title && <div><span>{tr("标题")}</span><p>{item.title}</p></div>}
+            {item.purpose && <div><span>{tr("用途")}</span><p>{item.purpose}</p></div>}
+            {item.note && <div><span>{tr("备注")}</span><p>{item.note}</p></div>}
+            {item.adjustmentReason && <div><span>{tr("调整原因")}</span><p>{item.adjustmentReason}</p></div>}
           </div>
         )}
       </article>
@@ -9614,24 +9578,24 @@ function CalendarUnavailabilityPopover({
         style={{ left, top }}
         role="dialog"
         aria-modal="false"
-        aria-label={isDisableHistory ? "停用详情" : "维护详情"}
+        aria-label={isDisableHistory ? tr("停用详情") : tr("维护详情")}
         tabIndex={-1}
       >
         <div className="reservation-popover-head">
           <div>
-            <strong>{isDisableHistory ? "停用详情" : "维护详情"}</strong>
+            <strong>{isDisableHistory ? tr("停用详情") : tr("维护详情")}</strong>
             <span
               className={`state-chip ${isDisableHistory ? "disabled" : "scheduled"}`}
             >
-              {detail.item.sources.length}项{isDisableHistory ? "记录" : "安排"}
+              {detail.item.sources.length}{tr("项")}{isDisableHistory ? tr("记录") : tr("安排")}
             </span>
           </div>
           <div className="reservation-popover-actions">
             <button
               className="reservation-popover-action"
               type="button"
-              aria-label="关闭"
-              title="关闭"
+              aria-label={tr("关闭")}
+              title={tr("关闭")}
               onClick={onClose}
             >
               <X size={16} />
@@ -9639,10 +9603,10 @@ function CalendarUnavailabilityPopover({
           </div>
         </div>
         <dl className="reservation-popover-details">
-          <div><dt>机器</dt><dd>{detail.machineName}</dd></div>
-          <div><dt>资源组</dt><dd>{detail.groupName}</dd></div>
+          <div><dt>{tr("机器")}</dt><dd>{detail.machineName}</dd></div>
+          <div><dt>{tr("资源组")}</dt><dd>{detail.groupName}</dd></div>
           <div>
-            <dt>有效时间</dt>
+            <dt>{tr("有效时间")}</dt>
             <dd>
               {formatChina(detail.item.startAt, {
                 year: "numeric",
@@ -9651,7 +9615,7 @@ function CalendarUnavailabilityPopover({
                 hour: "2-digit",
                 minute: "2-digit"
               })}
-              <span className="reservation-popover-time-separator">至</span>
+              <span className="reservation-popover-time-separator">{tr("至")}</span>
               {formatChina(detail.item.endAt, {
                 year: "numeric",
                 month: "2-digit",
@@ -9672,11 +9636,11 @@ function CalendarUnavailabilityPopover({
                 <strong>
                   {source.scope === "MACHINE"
                     ? isDisableHistory
-                      ? "整机停用"
-                      : "整机维护"
+                      ? tr("整机停用")
+                      : tr("整机维护")
                     : isDisableHistory
-                      ? "资源组停用"
-                      : "资源组维护"}
+                      ? tr("资源组停用")
+                      : tr("资源组维护")}
                 </strong>
               </div>
               <time>
@@ -9687,7 +9651,7 @@ function CalendarUnavailabilityPopover({
                   hour: "2-digit",
                   minute: "2-digit"
                 })}
-                <span>至</span>
+                <span>{tr("至")}</span>
                 {formatChina(source.window.endAt, {
                   year: "numeric",
                   month: "2-digit",
@@ -9696,7 +9660,7 @@ function CalendarUnavailabilityPopover({
                   minute: "2-digit"
                 })}
               </time>
-              <p>{source.window.reason || "未填写原因"}</p>
+              <p>{source.window.reason || tr("未填写原因")}</p>
             </section>
           ))}
         </div>
@@ -9741,7 +9705,7 @@ function MyReservationsPage({
       );
       setReservations(reservationResult.reservations);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "加载失败");
+      notify("error", error instanceof Error ? error.message : tr("加载失败"));
     } finally {
       setLoading(false);
     }
@@ -9756,7 +9720,7 @@ function MyReservationsPage({
     const history: any[] = [];
     for (const reservation of reservations) {
       const state = bookingState(reservation, currentTime);
-      if (state === "进行中" || state === "未开始") {
+      if (state === tr("进行中") || state === tr("未开始")) {
         current.push(reservation);
       } else {
         history.push(reservation);
@@ -9765,7 +9729,7 @@ function MyReservationsPage({
     current.sort((left, right) => {
       const leftState = bookingState(left, currentTime);
       const rightState = bookingState(right, currentTime);
-      if (leftState !== rightState) return leftState === "进行中" ? -1 : 1;
+      if (leftState !== rightState) return leftState === tr("进行中") ? -1 : 1;
       return new Date(left.startAt).getTime() - new Date(right.startAt).getTime();
     });
     history.sort(
@@ -9789,19 +9753,19 @@ function MyReservationsPage({
       notify("success", result.message ?? message);
       await load();
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "操作失败");
+      notify("error", error instanceof Error ? error.message : tr("操作失败"));
     }
   };
 
   return (
     <div className="page-shell my-reservations-page">
-      <PageHeader title="我的占用" />
+      <PageHeader title={tr("我的占用")} />
       <section className="card reservation-list-panel">
         <div className="reservation-list-toolbar">
           <div
             className="segmented reservation-category-tabs"
             role="tablist"
-            aria-label="占用记录分类"
+            aria-label={tr("占用记录分类")}
           >
             <button
               type="button"
@@ -9811,8 +9775,7 @@ function MyReservationsPage({
               onClick={() => setCategory("CURRENT")}
             >
               <Clock3 size={16} />
-              当前占用
-              <span className="reservation-tab-count">
+              {tr("当前占用")}<span className="reservation-tab-count">
                 {categorizedReservations.current.length}
               </span>
             </button>
@@ -9824,8 +9787,7 @@ function MyReservationsPage({
               onClick={() => setCategory("HISTORY")}
             >
               <CalendarDays size={16} />
-              历史记录
-              <span className="reservation-tab-count">
+              {tr("历史记录")}<span className="reservation-tab-count">
                 {categorizedReservations.history.length}
               </span>
             </button>
@@ -9833,16 +9795,15 @@ function MyReservationsPage({
         </div>
         {loading ? (
           <div className="content-loading reservation-list-loading">
-            <RefreshCw className="spin" />正在载入
-          </div>
+            <RefreshCw className="spin" />{tr("正在载入")}</div>
         ) : visibleReservations.length ? (
           <div className="booking-table">
             <div className="table-row table-head">
-              <span>机器 / 资源组</span>
-              <span>占用时间</span>
-              <span>占用时长</span>
-              <span>占用信息</span>
-              <span>状态</span>
+              <span>{tr("机器 / 资源组")}</span>
+              <span>{tr("占用时间")}</span>
+              <span>{tr("占用时长")}</span>
+              <span>{tr("占用信息")}</span>
+              <span>{tr("状态")}</span>
               <span />
             </div>
             {visibleReservations.map((item) => {
@@ -9852,7 +9813,7 @@ function MyReservationsPage({
                 item.endAt
               );
               const withinFirstMinute =
-                state === "进行中" &&
+                state === tr("进行中") &&
                 currentTime - new Date(item.startAt).getTime() < 60_000;
               return (
                 <div className="table-row" key={item.id}>
@@ -9860,7 +9821,11 @@ function MyReservationsPage({
                     <span className="machine-glyph"><Server size={17} /></span>
                     <div>
                       <strong>{item.machineName}</strong>
-                      <span>{item.resourceGroupName}</span>
+                      <span>
+                        {item.scope === "MACHINE"
+                          ? tr("整机")
+                          : item.resourceGroupName}
+                      </span>
                     </div>
                   </div>
                   <div className="time-copy">
@@ -9881,30 +9846,29 @@ function MyReservationsPage({
                     </span>
                     {item.adjustmentType && (
                       <small className="change-note">
-                        <PowerOff size={12} />因维护或停用调整
-                      </small>
+                        <PowerOff size={12} />{tr("因维护或停用调整")}</small>
                     )}
                   </div>
                   <div className="reservation-duration">
                     <strong>
-                      {durationHoursText(
+                      {compactDurationText(
                         minuteDifference(item.startAt, item.endAt)
                       )}
                     </strong>
                   </div>
                   <div className="booking-copy">
-                    <strong>{item.title || "未填写标题"}</strong>
+                    <strong>{item.title || tr("未填写标题")}</strong>
                     <span>{item.purpose || "—"}</span>
                   </div>
-                  <span className={`state-chip ${stateClass(state)}`}>{state}</span>
+                  <span className={`state-chip ${reservationStatusClass(item.status, item.startAt, item.endAt, currentTime)}`}>{state}</span>
                   <div className="row-actions">
-                    {state === "未开始" && (
+                    {state === tr("未开始") && (
                       <>
                         <button
                           type="button"
                           className="icon-button tiny reservation-action-button edit"
-                          title="修改占用"
-                          aria-label="修改占用"
+                          title={tr("修改占用")}
+                          aria-label={tr("修改占用")}
                           onClick={() => onEditReservation(item)}
                         >
                           <Pencil size={15} />
@@ -9912,29 +9876,29 @@ function MyReservationsPage({
                         <button
                           type="button"
                           className="icon-button tiny reservation-action-button danger"
-                          title="取消占用"
-                          aria-label="取消占用"
+                          title={tr("取消占用")}
+                          aria-label={tr("取消占用")}
                           onClick={async () => {
                           if (await dialog.confirm({
-                            title: "取消占用",
-                            message: "确认取消这条占用？取消后该时段会立即释放。",
-                            confirmLabel: "确认取消",
+                            title: tr("取消占用"),
+                            message: tr("确认取消这条占用？取消后该时段会立即释放。"),
+                            confirmLabel: tr("确认取消"),
                             tone: "danger"
                           })) {
-                            await action(`/reservations/${item.id}/cancel`, "占用已取消");
+                            await action(`/reservations/${item.id}/cancel`, tr("占用已取消"));
                           }
                         }}>
                           <X size={15} />
                         </button>
                       </>
                     )}
-                    {state === "进行中" && (
+                    {state === tr("进行中") && (
                       <>
                         <button
                           type="button"
                           className="icon-button tiny reservation-action-button edit"
-                          title="修改占用"
-                          aria-label="修改占用"
+                          title={tr("修改占用")}
+                          aria-label={tr("修改占用")}
                           onClick={() => onEditReservation(item)}
                         >
                           <Pencil size={15} />
@@ -9942,22 +9906,22 @@ function MyReservationsPage({
                         <button
                           type="button"
                           className="icon-button tiny reservation-action-button danger"
-                          title={withinFirstMinute ? "撤销占用" : "提前结束"}
-                          aria-label={withinFirstMinute ? "撤销占用" : "提前结束"}
+                          title={withinFirstMinute ? tr("撤销占用") : tr("提前结束")}
+                          aria-label={withinFirstMinute ? tr("撤销占用") : tr("提前结束")}
                           onClick={async () => {
                             if (await dialog.confirm({
                               title: withinFirstMinute
-                                ? "撤销占用"
-                                : "提前结束占用",
+                                ? tr("撤销占用")
+                                : tr("提前结束占用"),
                               message: withinFirstMinute
-                                ? "该占用开始不足一分钟，确认后会撤销整条占用记录并立即释放资源。"
-                                : "确认现在结束占用并释放剩余时段？",
+                                ? tr("该占用开始不足一分钟，确认后会撤销整条占用记录并立即释放资源。")
+                                : tr("确认现在结束占用并释放剩余时段？"),
                               confirmLabel: withinFirstMinute
-                                ? "确认撤销"
-                                : "提前结束",
+                                ? tr("确认撤销")
+                                : tr("提前结束"),
                               tone: "danger"
                             })) {
-                              await action(`/reservations/${item.id}/end`, "资源已提前释放");
+                              await action(`/reservations/${item.id}/end`, tr("资源已提前释放"));
                             }
                           }}
                         >
@@ -9980,7 +9944,7 @@ function MyReservationsPage({
                 : <CalendarDays size={24} />}
             </div>
             <h3>
-              {category === "CURRENT" ? "暂无当前占用" : "暂无历史记录"}
+              {category === "CURRENT" ? tr("暂无当前占用") : tr("暂无历史记录")}
             </h3>
           </div>
         )}
@@ -9991,10 +9955,6 @@ function MyReservationsPage({
 
 function bookingState(item: any, now: number) {
   return reservationStatusLabel(item.status, item.startAt, item.endAt, now);
-}
-
-function stateClass(state: string) {
-  return ({ "未开始": "upcoming", "进行中": "active", "已结束": "done", "已取消": "cancelled", "因维护取消": "cancelled" } as Record<string, string>)[state] ?? "";
 }
 
 type FeedbackNotify = (kind: "success" | "error", message: string) => void;
@@ -10074,10 +10034,10 @@ function FeedbackImagePicker({
       next.push(candidate);
     }
     onChange(next);
-    if (rejectedType) onError("仅支持 PNG、JPEG 或 WebP 图片");
-    else if (rejectedSize) onError("每张图片必须小于等于 5 MB");
-    else if (rejectedCount) onError(`最多还能选择 ${Math.max(0, maxFiles - files.length)} 张图片`);
-    else if (rejectedTotal) onError("本次图片合计不能超过 20 MB");
+    if (rejectedType) onError(tr("仅支持 PNG、JPEG 或 WebP 图片"));
+    else if (rejectedSize) onError(tr("每张图片必须小于等于 5 MB"));
+    else if (rejectedCount) onError(tr("最多还能选择 {{v0}} 张图片", { v0: Math.max(0, maxFiles - files.length) }));
+    else if (rejectedTotal) onError(tr("本次图片合计不能超过 20 MB"));
   };
 
   const openPicker = () => {
@@ -10117,8 +10077,8 @@ function FeedbackImagePicker({
       >
         <span className="feedback-image-dropzone-icon"><Plus size={18} /></span>
         <span className="feedback-image-dropzone-copy">
-          <strong>{dragging ? "松开即可添加图片" : compact ? "添加评论图片" : "拖拽图片到这里"}</strong>
-          <small>PNG、JPEG、WebP · 单张 5 MB · 合计 20 MB</small>
+          <strong>{dragging ? tr("松开即可添加图片") : compact ? tr("添加评论图片") : tr("拖拽图片到这里")}</strong>
+          <small>{tr("PNG、JPEG、WebP · 单张 5 MB · 合计 20 MB")}</small>
         </span>
         <button
           type="button"
@@ -10126,11 +10086,10 @@ function FeedbackImagePicker({
           disabled={!canAdd}
           onClick={openPicker}
         >
-          选择图片
-        </button>
+          {tr("选择图片")}</button>
       </div>
       {previews.length > 0 && (
-        <div className="feedback-selected-images" aria-label="已选择的图片">
+        <div className="feedback-selected-images" aria-label={tr("已选择的图片")}>
           {previews.map(({ file, url }, index) => (
             <div className="feedback-selected-image" key={`${file.name}-${file.lastModified}-${index}`}>
               <img src={url} alt="" />
@@ -10141,7 +10100,7 @@ function FeedbackImagePicker({
               <button
                 type="button"
                 className="icon-button"
-                aria-label={`移除 ${file.name}`}
+                aria-label={tr("移除 {{v0}}", { v0: file.name })}
                 onClick={() => onChange(files.filter((_, fileIndex) => fileIndex !== index))}
               >
                 <X size={14} />
@@ -10194,7 +10153,7 @@ function FeedbackPage({
       setTickets(result.tickets);
       setNextCursor(result.nextCursor);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "反馈加载失败");
+      notify("error", error instanceof Error ? error.message : tr("反馈加载失败"));
     } finally {
       setLoading(false);
     }
@@ -10217,26 +10176,25 @@ function FeedbackPage({
   return (
     <div className="page-shell feedback-page">
       <PageHeader
-        title="我的反馈"
+        title={tr("我的反馈")}
         actions={
           <button type="button" className="primary-button" onClick={() => setCreating(true)}>
-            <Plus size={16} />提交反馈
-          </button>
+            <Plus size={16} />{tr("新建")}</button>
         }
       />
       <div className="feedback-filter-bar card">
-        <select aria-label="反馈类型" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
-          <option value="">全部类型</option>
-          <option value="ISSUE">问题单</option>
-          <option value="REQUIREMENT">需求单</option>
+        <select aria-label={tr("反馈类型")} value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+          <option value="">{tr("全部类型")}</option>
+          <option value="ISSUE">{tr("问题单")}</option>
+          <option value="REQUIREMENT">{tr("需求单")}</option>
         </select>
-        <select aria-label="反馈状态" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-          <option value="">全部状态</option>
-          {Object.entries(feedbackStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        <select aria-label={tr("反馈状态")} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <option value="">{tr("全部状态")}</option>
+          {Object.entries(feedbackStatusLabels).map(([value, label]) => <option key={value} value={value}>{trDynamic(label)}</option>)}
         </select>
       </div>
       {loading ? (
-        <div className="content-loading"><RefreshCw className="spin" />正在载入</div>
+        <div className="content-loading"><RefreshCw className="spin" />{tr("正在载入")}</div>
       ) : tickets.length ? (
         <>
         <div className="feedback-ticket-list">
@@ -10247,14 +10205,14 @@ function FeedbackPage({
                 <span className="feedback-ticket-title-row">
                   <strong>{ticket.title}</strong>
                   <span className="feedback-intrinsic-badges">
-                    <FeedbackPill value={ticket.type}>{feedbackTypeLabels[ticket.type]}</FeedbackPill>
-                    <FeedbackPill tone="level" value={ticket.level}>{feedbackLevelLabels[ticket.level]}</FeedbackPill>
+                    <FeedbackPill value={ticket.type}>{feedbackTypeLabel(ticket.type)}</FeedbackPill>
+                    <FeedbackPill tone="level" value={ticket.level}>{feedbackLevelLabel(ticket.level)}</FeedbackPill>
                   </span>
                 </span>
-                <small>{formatChina(ticket.updatedAt)} 更新</small>
+                <small>{formatChina(ticket.updatedAt)} {tr("更新")}</small>
               </span>
               <span className="feedback-ticket-status">
-                <FeedbackPill tone="status" value={ticket.status}>{feedbackStatusLabels[ticket.status]}</FeedbackPill>
+                <FeedbackPill tone="status" value={ticket.status}>{feedbackStatusLabel(ticket.status)}</FeedbackPill>
                 <ChevronRight size={18} />
               </span>
             </button>
@@ -10270,13 +10228,13 @@ function FeedbackPage({
               setTickets((current) => [...current, ...result.tickets]);
               setNextCursor(result.nextCursor);
             } catch (error) {
-              notify("error", error instanceof Error ? error.message : "更多反馈加载失败");
+              notify("error", error instanceof Error ? error.message : tr("更多反馈加载失败"));
             }
-          }}>加载更多</button>
+          }}>{tr("加载更多")}</button>
         )}
         </>
       ) : (
-        <EmptyState icon={MessageSquare} title="还没有反馈" />
+        <EmptyState icon={MessageSquare} title={tr("还没有反馈")} />
       )}
       {creating && (
         <FeedbackEditorModal
@@ -10284,7 +10242,7 @@ function FeedbackPage({
           onClose={() => setCreating(false)}
           onSaved={(ticket) => {
             setCreating(false);
-            notify("success", "反馈已提交");
+            notify("success", tr("反馈已提交"));
             onOpen(ticket.id);
           }}
         />
@@ -10305,6 +10263,27 @@ function FeedbackPill({
   return <span className={`feedback-pill ${tone} ${tone}-${value.toLowerCase().replaceAll("_", "-")}`}>{children}</span>;
 }
 
+function feedbackTypeLabel(value: FeedbackType) {
+  return trDynamic(feedbackTypeLabels[value]);
+}
+
+function feedbackLevelLabel(value: FeedbackLevel) {
+  return trDynamic(feedbackLevelLabels[value]);
+}
+
+function feedbackStatusLabel(value: FeedbackStatus) {
+  return trDynamic(feedbackStatusLabels[value]);
+}
+
+function localizedFeedbackTemplate(type: FeedbackType) {
+  const sections = type === "ISSUE"
+    ? [tr("问题描述"), tr("复现步骤"), tr("预期结果"), tr("实际结果"), tr("补充信息")]
+    : [tr("使用场景"), tr("需求描述"), tr("预期效果"), tr("补充信息")];
+  return sections
+    .map((section, index) => `## ${section}\n\n${type === "ISSUE" && index === 1 ? "1. \n" : ""}`)
+    .join("\n");
+}
+
 function FeedbackEditorModal({
   ticket,
   notify,
@@ -10320,15 +10299,21 @@ function FeedbackEditorModal({
   const [type, setType] = useState<FeedbackType>(ticket?.type ?? "ISSUE");
   const [level, setLevel] = useState<FeedbackLevel>(ticket?.level ?? "NORMAL");
   const [title, setTitle] = useState(ticket?.title ?? "");
-  const [bodyMarkdown, setBodyMarkdown] = useState(ticket?.bodyMarkdown ?? feedbackTemplates.ISSUE);
+  const [bodyMarkdown, setBodyMarkdown] = useState(ticket?.bodyMarkdown ?? localizedFeedbackTemplate("ISSUE"));
   const [retainedIds, setRetainedIds] = useState(() => new Set(ticket?.attachments.map((item) => item.id) ?? []));
   const [images, setImages] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const changeType = (next: FeedbackType) => {
     setType(next);
     setLevel("NORMAL");
-    if (!editing && (bodyMarkdown === feedbackTemplates.ISSUE || bodyMarkdown === feedbackTemplates.REQUIREMENT)) {
-      setBodyMarkdown(feedbackTemplates[next]);
+    const defaultTemplates = [
+      feedbackTemplates.ISSUE,
+      feedbackTemplates.REQUIREMENT,
+      localizedFeedbackTemplate("ISSUE"),
+      localizedFeedbackTemplate("REQUIREMENT")
+    ];
+    if (!editing && defaultTemplates.includes(bodyMarkdown)) {
+      setBodyMarkdown(localizedFeedbackTemplate(next));
     }
   };
   const currentAttachments = ticket?.attachments.filter((item) => retainedIds.has(item.id)) ?? [];
@@ -10337,7 +10322,7 @@ function FeedbackEditorModal({
     event.preventDefault();
     if (!title.trim() || !bodyMarkdown.trim()) return;
     if (totalImages > 5) {
-      notify("error", "正文最多包含 5 张图片");
+      notify("error", tr("正文最多包含 5 张图片"));
       return;
     }
     setBusy(true);
@@ -10351,37 +10336,37 @@ function FeedbackEditorModal({
       );
       onSaved(result.ticket);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "反馈保存失败");
+      notify("error", error instanceof Error ? error.message : tr("反馈保存失败"));
     } finally {
       setBusy(false);
     }
   };
   return (
-    <Modal title={editing ? `编辑 ${ticket!.displayNumber}` : "提交反馈"} onClose={onClose} large className="feedback-editor-modal">
+    <Modal title={editing ? tr("编辑 {{v0}}", { v0: ticket!.displayNumber }) : tr("提交反馈")} onClose={onClose} large className="feedback-editor-modal">
       <form className="feedback-editor-form" onSubmit={(event) => void submit(event)}>
         <div className="feedback-editor-scroll">
           <div className="feedback-editor-fields">
             <div className="feedback-editor-row">
-              <Field label="类型">
+              <Field label={tr("类型")}>
                 <select disabled={editing} value={type} onChange={(event) => changeType(event.target.value as FeedbackType)}>
-                  <option value="ISSUE">问题单</option>
-                  <option value="REQUIREMENT">需求单</option>
+                  <option value="ISSUE">{tr("问题单")}</option>
+                  <option value="REQUIREMENT">{tr("需求单")}</option>
                 </select>
               </Field>
-              <Field label="等级">
+              <Field label={tr("等级")}>
                 <select value={level} onChange={(event) => setLevel(event.target.value as FeedbackLevel)}>
-                  {feedbackLevelsFor(type).map((value) => <option key={value} value={value}>{feedbackLevelLabels[value]}</option>)}
+                  {feedbackLevelsFor(type).map((value) => <option key={value} value={value}>{feedbackLevelLabel(value)}</option>)}
                 </select>
               </Field>
             </div>
-            <Field label="标题">
+            <Field label={tr("标题")}>
               <input autoFocus maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} />
             </Field>
-            <Field label="正文">
+            <Field label={tr("正文")}>
               <textarea maxLength={10000} value={bodyMarkdown} onChange={(event) => setBodyMarkdown(event.target.value)} />
             </Field>
             <div className="field">
-              <span>图片（{totalImages}/5）</span>
+              <span>{tr("图片（")}{totalImages}/5）</span>
               <FeedbackImagePicker
                 files={images}
                 onChange={setImages}
@@ -10401,21 +10386,21 @@ function FeedbackEditorModal({
                     const next = new Set(current); next.delete(attachment.id); return next;
                   })}>
                     <img src={attachment.contentUrl} alt="" />
-                    <span><X size={13} />移除</span>
+                    <span><X size={13} />{tr("移除")}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
           <div className="feedback-editor-preview">
-            <strong>预览</strong>
+            <strong>{tr("预览")}</strong>
             <AnnouncementMarkdown markdown={bodyMarkdown} />
           </div>
         </div>
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>取消</button>
+          <button type="button" className="secondary-button" onClick={onClose}>{tr("取消")}</button>
           <button className="primary-button" disabled={busy || !title.trim() || !bodyMarkdown.trim()}>
-            <BusyButtonContent busy={busy}>{editing ? "保存修改" : "提交反馈"}</BusyButtonContent>
+            <BusyButtonContent busy={busy}>{editing ? tr("保存修改") : tr("创建")}</BusyButtonContent>
           </button>
         </div>
       </form>
@@ -10457,26 +10442,26 @@ function FeedbackDetailView({
       setNextStatus("");
       onReadRef.current?.();
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "反馈加载失败");
+      notify("error", error instanceof Error ? error.message : tr("反馈加载失败"));
     } finally {
       setLoading(false);
     }
   }, [admin, id, notify]);
   useEffect(() => { void load(); }, [load, refreshToken]);
 
-  if (loading) return <div className="content-loading"><RefreshCw className="spin" />正在载入</div>;
-  if (!ticket) return <div className="page-shell"><EmptyState icon={CircleAlert} title="反馈不存在" /></div>;
+  if (loading) return <div className="content-loading"><RefreshCw className="spin" />{tr("正在载入")}</div>;
+  if (!ticket) return <div className="page-shell"><EmptyState icon={CircleAlert} title={tr("反馈不存在")} /></div>;
 
   const withdraw = async () => {
-    if (!(await dialog.confirm({ title: "撤回反馈", message: "撤回后反馈将完全只读，且管理员不能恢复。", confirmLabel: "确认撤回", tone: "danger" }))) return;
+    if (!(await dialog.confirm({ title: tr("撤回反馈"), message: tr("撤回后反馈将完全只读，且管理员不能恢复。"), confirmLabel: tr("确认撤回"), tone: "danger" }))) return;
     try {
       const result = await api<{ ticket: FeedbackTicketDetail }>(`/feedback/${id}/withdraw`, {
         method: "POST", body: jsonBody({ expectedVersion: ticket.version })
       });
       setTicket(result.ticket);
-      notify("success", "反馈已撤回");
+      notify("success", tr("反馈已撤回"));
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "撤回失败");
+      notify("error", error instanceof Error ? error.message : tr("撤回失败"));
       if (error instanceof ApiError && error.status === 409) void load();
     }
   };
@@ -10492,9 +10477,9 @@ function FeedbackDetailView({
       setTicket(result.ticket);
       setComment("");
       setCommentImages([]);
-      notify("success", "评论已发送");
+      notify("success", tr("评论已发送"));
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "评论发送失败");
+      notify("error", error instanceof Error ? error.message : tr("评论发送失败"));
     } finally {
       setCommenting(false);
     }
@@ -10511,9 +10496,9 @@ function FeedbackDetailView({
       setTicket(result.ticket);
       setNextStatus("");
       setProcessingNote("");
-      notify("success", "反馈状态已更新");
+      notify("success", tr("反馈状态已更新"));
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "状态更新失败");
+      notify("error", error instanceof Error ? error.message : tr("状态更新失败"));
       if (error instanceof ApiError && error.status === 409) void load();
     } finally {
       setChanging(false);
@@ -10528,9 +10513,9 @@ function FeedbackDetailView({
         method: "PUT", body: jsonBody({ expectedVersion: ticket.version, level })
       });
       setTicket(result.ticket);
-      notify("success", "反馈等级已更新");
+      notify("success", tr("反馈等级已更新"));
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "等级更新失败");
+      notify("error", error instanceof Error ? error.message : tr("等级更新失败"));
       if (error instanceof ApiError && error.status === 409) void load();
     } finally {
       setChanging(false);
@@ -10539,61 +10524,61 @@ function FeedbackDetailView({
 
   return (
     <div className={`page-shell feedback-detail-page${admin ? " admin-feedback-detail" : ""}`}>
-      <button type="button" className="feedback-back-button" onClick={onBack}><ChevronLeft size={16} />返回反馈列表</button>
+      <button type="button" className="feedback-back-button" onClick={onBack}><ChevronLeft size={16} />{tr("返回反馈列表")}</button>
       <section className="card feedback-detail-header">
         <div>
           <span className="feedback-ticket-number">{ticket.displayNumber}</span>
           <div className="feedback-detail-title-row">
             <h1>{ticket.title}</h1>
             <div className="feedback-intrinsic-badges">
-              <FeedbackPill value={ticket.type}>{feedbackTypeLabels[ticket.type]}</FeedbackPill>
-              <FeedbackPill tone="level" value={ticket.level}>{feedbackLevelLabels[ticket.level]}</FeedbackPill>
+              <FeedbackPill value={ticket.type}>{feedbackTypeLabel(ticket.type)}</FeedbackPill>
+              <FeedbackPill tone="level" value={ticket.level}>{feedbackLevelLabel(ticket.level)}</FeedbackPill>
             </div>
           </div>
-          <p>{ticket.submittedByName} · {formatChina(ticket.createdAt)} 提交</p>
+          <p>{ticket.submittedByName} · {formatChina(ticket.createdAt)} {tr("提交")}</p>
         </div>
         <div className="feedback-detail-status">
-          <FeedbackPill tone="status" value={ticket.status}>{feedbackStatusLabels[ticket.status]}</FeedbackPill>
+          <FeedbackPill tone="status" value={ticket.status}>{feedbackStatusLabel(ticket.status)}</FeedbackPill>
         </div>
         {!admin && (ticket.canEdit || ticket.canWithdraw) && (
           <div className="feedback-detail-actions">
-            {ticket.canEdit && <button type="button" className="secondary-button" onClick={() => setEditing(true)}><Pencil size={15} />编辑</button>}
-            {ticket.canWithdraw && <button type="button" className="danger-button" onClick={() => void withdraw()}>撤回</button>}
+            {ticket.canEdit && <button type="button" className="secondary-button" onClick={() => setEditing(true)}><Pencil size={15} />{tr("编辑")}</button>}
+            {ticket.canWithdraw && <button type="button" className="danger-button" onClick={() => void withdraw()}>{tr("撤回")}</button>}
           </div>
         )}
       </section>
       {admin && ticket.status !== "WITHDRAWN" && (
         <section className="card feedback-admin-actions">
           <div>
-            <Field label="调整等级">
+            <Field label={tr("调整等级")}>
               <select disabled={changing} value={ticket.level} onChange={(event) => void changeLevel(event.target.value as FeedbackLevel)}>
-                {feedbackLevelsFor(ticket.type).map((value) => <option key={value} value={value}>{feedbackLevelLabels[value]}</option>)}
+                {feedbackLevelsFor(ticket.type).map((value) => <option key={value} value={value}>{feedbackLevelLabel(value)}</option>)}
               </select>
             </Field>
           </div>
           <div className="feedback-status-change">
-            <Field label="变更状态">
+            <Field label={tr("变更状态")}>
               <select disabled={changing} value={nextStatus} onChange={(event) => setNextStatus(event.target.value as FeedbackStatus)}>
-                <option value="">选择新状态</option>
-                {feedbackStatusesFor(ticket.type).filter((value) => value !== ticket.status).map((value) => <option key={value} value={value}>{feedbackStatusLabels[value]}</option>)}
+                <option value="">{tr("选择新状态")}</option>
+                {feedbackStatusesFor(ticket.type).filter((value) => value !== ticket.status).map((value) => <option key={value} value={value}>{feedbackStatusLabel(value)}</option>)}
               </select>
             </Field>
-            <Field label="处理说明">
+            <Field label={tr("处理说明")}>
               <textarea maxLength={10000} value={processingNote} onChange={(event) => setProcessingNote(event.target.value)} />
             </Field>
             <button type="button" className="primary-button" disabled={changing || !nextStatus || !processingNote.trim()} onClick={() => void changeStatus()}>
-              <BusyButtonContent busy={changing}>更新状态</BusyButtonContent>
+              <BusyButtonContent busy={changing}>{tr("更新状态")}</BusyButtonContent>
             </button>
           </div>
         </section>
       )}
       <section className="card feedback-current-content">
-        <h2>反馈内容</h2>
+        <h2>{tr("反馈内容")}</h2>
         <AnnouncementMarkdown markdown={ticket.bodyMarkdown} />
         <FeedbackAttachments attachments={ticket.attachments} />
       </section>
       <section className="feedback-timeline">
-        <h2>处理时间线</h2>
+        <h2>{tr("处理时间线")}</h2>
         {ticket.activities.map((activity) => (
           <article className="card feedback-activity" key={activity.id}>
             <div className="feedback-activity-marker"><MessageSquare size={15} /></div>
@@ -10604,7 +10589,7 @@ function FeedbackDetailView({
                 <time>{formatChina(activity.createdAt)}</time>
               </header>
               {activity.bodyMarkdown && <AnnouncementMarkdown markdown={activity.bodyMarkdown} />}
-              {activity.changedFields.length > 0 && <p className="feedback-changed-fields">已更新：{activity.changedFields.map(feedbackChangedFieldLabel).join("、")}</p>}
+              {activity.changedFields.length > 0 && <p className="feedback-changed-fields">{tr("已更新：")}{activity.changedFields.map(feedbackChangedFieldLabel).join("、")}</p>}
               <FeedbackAttachments attachments={activity.attachments} />
             </div>
           </article>
@@ -10612,7 +10597,7 @@ function FeedbackDetailView({
       </section>
       {ticket.canComment && (
         <form className="card feedback-comment-form" onSubmit={(event) => void submitComment(event)}>
-          <Field label={admin ? "管理员回复" : "追加评论"}>
+          <Field label={admin ? tr("管理员回复") : tr("追加评论")}>
             <textarea maxLength={10000} value={comment} onChange={(event) => setComment(event.target.value)} />
           </Field>
           <FeedbackImagePicker
@@ -10622,7 +10607,7 @@ function FeedbackDetailView({
             onError={(message) => notify("error", message)}
           />
           <div className="feedback-comment-actions">
-            <button className="primary-button" disabled={commenting || !comment.trim()}><Send size={15} /><BusyButtonContent busy={commenting}>发送评论</BusyButtonContent></button>
+            <button className="primary-button" disabled={commenting || !comment.trim()}><Send size={15} /><BusyButtonContent busy={commenting}>{tr("发送评论")}</BusyButtonContent></button>
           </div>
         </form>
       )}
@@ -10631,7 +10616,7 @@ function FeedbackDetailView({
           ticket={ticket}
           notify={notify}
           onClose={() => setEditing(false)}
-          onSaved={(updated) => { setTicket(updated); setEditing(false); notify("success", "反馈已更新"); }}
+          onSaved={(updated) => { setTicket(updated); setEditing(false); notify("success", tr("反馈已更新")); }}
         />
       )}
     </div>
@@ -10653,17 +10638,17 @@ function FeedbackAttachments({ attachments }: { attachments: FeedbackAttachment[
 }
 
 function feedbackActivityTitle(activity: FeedbackTicketDetail["activities"][number]) {
-  if (activity.kind === "CREATED") return "提交了反馈";
-  if (activity.kind === "COMMENT") return "追加了评论";
-  if (activity.kind === "CONTENT_UPDATED") return "更新了反馈内容";
-  if (activity.kind === "WITHDRAWN") return "撤回了反馈";
-  if (activity.kind === "STATUS_CHANGED" && activity.toStatus) return `将状态改为“${feedbackStatusLabels[activity.toStatus]}”`;
-  if (activity.kind === "LEVEL_CHANGED" && activity.toLevel) return `将等级改为“${feedbackLevelLabels[activity.toLevel]}”`;
-  return "更新了反馈";
+  if (activity.kind === "CREATED") return tr("提交了反馈");
+  if (activity.kind === "COMMENT") return tr("追加了评论");
+  if (activity.kind === "CONTENT_UPDATED") return tr("更新了反馈内容");
+  if (activity.kind === "WITHDRAWN") return tr("撤回了反馈");
+  if (activity.kind === "STATUS_CHANGED" && activity.toStatus) return tr("将状态改为“{{v0}}”", { v0: feedbackStatusLabel(activity.toStatus) });
+  if (activity.kind === "LEVEL_CHANGED" && activity.toLevel) return tr("将等级改为“{{v0}}”", { v0: feedbackLevelLabel(activity.toLevel) });
+  return tr("更新了反馈");
 }
 
 function feedbackChangedFieldLabel(value: string) {
-  return ({ title: "标题", bodyMarkdown: "正文", level: "等级", attachments: "图片" } as Record<string, string>)[value] ?? value;
+  return ({ title: tr("标题"), bodyMarkdown: tr("正文"), level: tr("等级"), attachments: tr("图片") } as Record<string, string>)[value] ?? value;
 }
 
 function FeedbackAdminPanel({
@@ -10699,7 +10684,7 @@ function FeedbackAdminPanel({
       setTickets(result.tickets);
       setNextCursor(result.nextCursor);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "反馈队列加载失败");
+      notify("error", error instanceof Error ? error.message : tr("反馈队列加载失败"));
     } finally {
       setLoading(false);
     }
@@ -10710,14 +10695,14 @@ function FeedbackAdminPanel({
   }
   return (
     <div className="feedback-admin-page">
-      <PageHeader title="反馈处理" />
+      <PageHeader title={tr("反馈处理")} />
       <div className="feedback-filter-bar card feedback-admin-filters">
-        <label className="feedback-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索编号或标题" /></label>
-        <select aria-label="类型" value={type} onChange={(event) => setType(event.target.value)}><option value="">全部类型</option><option value="ISSUE">问题单</option><option value="REQUIREMENT">需求单</option></select>
-        <select aria-label="状态" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">全部状态</option>{Object.entries(feedbackStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-        <select aria-label="等级" value={level} onChange={(event) => setLevel(event.target.value)}><option value="">全部等级</option>{Object.entries(feedbackLevelLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+        <label className="feedback-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={tr("搜索编号或标题")} /></label>
+        <select aria-label={tr("类型")} value={type} onChange={(event) => setType(event.target.value)}><option value="">{tr("全部类型")}</option><option value="ISSUE">{tr("问题单")}</option><option value="REQUIREMENT">{tr("需求单")}</option></select>
+        <select aria-label={tr("状态")} value={status} onChange={(event) => setStatus(event.target.value)}><option value="">{tr("全部状态")}</option>{Object.entries(feedbackStatusLabels).map(([value, label]) => <option key={value} value={value}>{trDynamic(label)}</option>)}</select>
+        <select aria-label={tr("等级")} value={level} onChange={(event) => setLevel(event.target.value)}><option value="">{tr("全部等级")}</option>{Object.entries(feedbackLevelLabels).map(([value, label]) => <option key={value} value={value}>{trDynamic(label)}</option>)}</select>
       </div>
-      {loading ? <div className="content-loading"><RefreshCw className="spin" />正在载入</div> : tickets.length ? (
+      {loading ? <div className="content-loading"><RefreshCw className="spin" />{tr("正在载入")}</div> : tickets.length ? (
         <>
         <div className="card feedback-admin-table">
           {tickets.map((ticket) => (
@@ -10727,14 +10712,14 @@ function FeedbackAdminPanel({
                 <span className="feedback-ticket-title-row">
                   <strong>{ticket.title}</strong>
                   <span className="feedback-intrinsic-badges">
-                    <FeedbackPill value={ticket.type}>{feedbackTypeLabels[ticket.type]}</FeedbackPill>
-                    <FeedbackPill tone="level" value={ticket.level}>{feedbackLevelLabels[ticket.level]}</FeedbackPill>
+                    <FeedbackPill value={ticket.type}>{feedbackTypeLabel(ticket.type)}</FeedbackPill>
+                    <FeedbackPill tone="level" value={ticket.level}>{feedbackLevelLabel(ticket.level)}</FeedbackPill>
                   </span>
                 </span>
                 <small>{ticket.submittedByName} · {formatChina(ticket.updatedAt)}</small>
               </span>
               <span className="feedback-ticket-status">
-                <FeedbackPill tone="status" value={ticket.status}>{feedbackStatusLabels[ticket.status]}</FeedbackPill>
+                <FeedbackPill tone="status" value={ticket.status}>{feedbackStatusLabel(ticket.status)}</FeedbackPill>
               </span>
               <ChevronRight size={17} />
             </button>
@@ -10752,12 +10737,12 @@ function FeedbackAdminPanel({
               setTickets((current) => [...current, ...result.tickets]);
               setNextCursor(result.nextCursor);
             } catch (error) {
-              notify("error", error instanceof Error ? error.message : "更多反馈加载失败");
+              notify("error", error instanceof Error ? error.message : tr("更多反馈加载失败"));
             }
-          }}>加载更多</button>
+          }}>{tr("加载更多")}</button>
         )}
         </>
-      ) : <EmptyState icon={MessageSquare} title="没有匹配的反馈" />}
+      ) : <EmptyState icon={MessageSquare} title={tr("没有匹配的反馈")} />}
     </div>
   );
 }
@@ -10790,7 +10775,7 @@ function NotificationsPage({
       onUnreadCountChange(result.unreadCount);
       onFeedbackUnreadCountChange(result.feedbackUnreadCount);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "通知加载失败");
+      notify("error", error instanceof Error ? error.message : tr("通知加载失败"));
     } finally {
       setLoading(false);
     }
@@ -10833,7 +10818,7 @@ function NotificationsPage({
     try {
       await markRead(item);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "通知状态更新失败");
+      notify("error", error instanceof Error ? error.message : tr("通知状态更新失败"));
     }
     navigate(destination.path);
   };
@@ -10857,11 +10842,11 @@ function NotificationsPage({
       setUnreadCount(0);
       onUnreadCountChange(0);
       onFeedbackUnreadCountChange(0);
-      notify("success", "全部通知已标为已读");
+      notify("success", tr("全部通知已标为已读"));
     } catch (error) {
       notify(
         "error",
-        error instanceof Error ? error.message : "通知状态更新失败"
+        error instanceof Error ? error.message : tr("通知状态更新失败")
       );
     } finally {
       setMarkingAllRead(false);
@@ -10871,12 +10856,12 @@ function NotificationsPage({
   return (
     <div className="page-shell narrow-page">
       <PageHeader
-        title="通知中心"
+        title={tr("通知中心")}
         actions={
           <div className="notification-header-actions">
             <span className="unread-big">
               {unreadCount}
-              <small>未读</small>
+              <small>{tr("未读")}</small>
             </span>
             {unreadCount > 0 && (
               <button
@@ -10888,20 +10873,20 @@ function NotificationsPage({
                 {markingAllRead
                   ? <RefreshCw size={14} className="spin" />
                   : <Check size={14} />}
-                {markingAllRead ? "处理中" : "一键已读"}
+                {markingAllRead ? tr("处理中") : tr("一键已读")}
               </button>
             )}
           </div>
         }
       />
-      {loading ? <div className="content-loading"><RefreshCw className="spin" />正在载入</div> : items.length ? (
+      {loading ? <div className="content-loading"><RefreshCw className="spin" />{tr("正在载入")}</div> : items.length ? (
         <div className="notification-list card">
           {items.map((item) => {
             const destination = resolveNotificationDestination(item);
             const copy = (
               <div className="notification-copy">
-                <div className="notification-title"><strong>{item.title}</strong><span>{formatChina(item.createdAt)}</span></div>
-                <p>{item.body}</p>
+                <div className="notification-title"><strong>{notificationCopy(item, "title")}</strong><span>{formatChina(item.createdAt)}</span></div>
+                <p>{notificationCopy(item, "body")}</p>
               </div>
             );
             return (
@@ -10927,19 +10912,18 @@ function NotificationsPage({
                       } catch (error) {
                         notify(
                           "error",
-                          error instanceof Error ? error.message : "通知状态更新失败"
+                          error instanceof Error ? error.message : tr("通知状态更新失败")
                         );
                       }
                     }}
                   >
-                    <Check size={14} />标为已读
-                  </button>
+                    <Check size={14} />{tr("标为已读")}</button>
                 )}
               </article>
             );
           })}
         </div>
-      ) : <EmptyState icon={Bell} title="暂时没有通知" />}
+      ) : <EmptyState icon={Bell} title={tr("暂时没有通知")} />}
     </div>
   );
 }
@@ -10952,6 +10936,29 @@ function notificationIcon(type: string) {
   if (type.includes("USER") || type.includes("ACCOUNT")) return <UserCheck size={18} />;
   if (type.includes("WATCH")) return <Bell size={18} />;
   return <Info size={18} />;
+}
+
+function notificationCopy(item: NotificationItem, field: "title" | "body") {
+  if (currentLocale() !== "en" || !item.templateKey) return item[field];
+  if (item.templateKey.startsWith("SYSTEM_MESSAGE_V1:") && item.templateParams) {
+    const reference = item.templateParams[field];
+    if (reference && typeof reference === "object" && !Array.isArray(reference)) {
+      const record = reference as Record<string, unknown>;
+      if (typeof record.code === "string") {
+        const params = record.params && typeof record.params === "object" && !Array.isArray(record.params)
+          ? record.params as Record<string, unknown>
+          : {};
+        const translated = translateSystemMessageCode(record.code, params);
+        if (translated) return translated;
+      }
+    }
+  }
+  const compatibleTranslation = translateServerMessage(item[field]);
+  if (compatibleTranslation !== item[field]) return compatibleTranslation;
+  const specificKey = `notification.${item.templateKey}.${field}`;
+  const translated = trDynamic(specificKey, item.templateParams ?? undefined);
+  if (translated !== specificKey) return translated;
+  return trDynamic(`notification.generic.${field}`);
 }
 
 function AdminPage({
@@ -11003,7 +11010,7 @@ function AdminPage({
       setMachines(result.machines);
       return result.machines;
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "机器加载失败");
+      notify("error", error instanceof Error ? error.message : tr("机器加载失败"));
       return [];
     } finally {
       setMachinesLoaded(true);
@@ -11016,7 +11023,7 @@ function AdminPage({
       );
       setUsers(result.users);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "用户加载失败");
+      notify("error", error instanceof Error ? error.message : tr("用户加载失败"));
     }
   }, [isSystemAdmin, notify]);
 
@@ -11051,20 +11058,20 @@ function AdminPage({
   ]);
 
   const tabs = [
-    { id: "machines" as const, label: "资源管理", icon: Server, show: true },
-    { id: "users" as const, label: "用户管理", icon: Users, show: true },
-    { id: "report" as const, label: "使用统计", icon: Activity, show: true },
-    { id: "announcements" as const, label: "系统公告", icon: Megaphone, show: isSystemAdmin },
-    { id: "feedback" as const, label: "反馈处理", icon: MessageSquare, show: isSystemAdmin, badge: feedbackOpenCount },
-    { id: "settings" as const, label: "系统设置", icon: Settings, show: isSystemAdmin },
-    { id: "audit" as const, label: "审计记录", icon: ShieldCheck, show: isSystemAdmin }
+    { id: "machines" as const, label: tr("资源管理"), icon: Server, show: true },
+    { id: "users" as const, label: tr("用户管理"), icon: Users, show: true },
+    { id: "report" as const, label: tr("使用统计"), icon: Activity, show: true },
+    { id: "announcements" as const, label: tr("系统公告"), icon: Megaphone, show: isSystemAdmin },
+    { id: "feedback" as const, label: tr("反馈处理"), icon: MessageSquare, show: isSystemAdmin, badge: feedbackOpenCount },
+    { id: "settings" as const, label: tr("系统设置"), icon: Settings, show: isSystemAdmin },
+    { id: "audit" as const, label: tr("审计记录"), icon: ShieldCheck, show: isSystemAdmin }
   ];
 
   return (
     <div className={`admin-shell${visibleTab === "feedback" ? " feedback-admin-shell" : ""}`}>
       <aside className="admin-sidebar">
         <div>
-          <h2>管理控制台</h2>
+          <h2>{tr("管理控制台")}</h2>
         </div>
         <nav>
           {tabs.filter((item) => item.show).map((item) => (
@@ -11083,28 +11090,26 @@ function AdminPage({
         {visibleTab === "machines" && (
           <>
             <PageHeader
-              title="资源管理"
-              actions={isSystemAdmin ? <button className="primary-button" onClick={() => setNewMachineOpen(true)}><Plus size={16} />新增机器</button> : undefined}
+              title={tr("资源管理")}
+              actions={isSystemAdmin ? <button className="primary-button" onClick={() => setNewMachineOpen(true)}><Plus size={16} />{tr("新建")}</button> : undefined}
             />
             {!machinesLoaded ? (
               <div className="card machine-management-loading" aria-live="polite">
                 <RefreshCw size={18} className="spin" />
-                正在加载机器
-              </div>
+                {tr("正在加载机器")}</div>
             ) : !machines.length ? (
               <section className="card machine-management-empty">
                 <div className="machine-management-empty-icon">
                   <Server size={25} />
                 </div>
-                <h2>暂无可查看的机器</h2>
-                <p>获得机器使用权后，可在这里查看和管理相关资源。</p>
+                <h2>{tr("暂无可查看的机器")}</h2>
+                <p>{tr("获得机器使用权后，可在这里查看和管理相关资源。")}</p>
                 <button
                   type="button"
                   className="secondary-button accent"
                   onClick={onOpenResourceCatalog}
                 >
-                  查看全部资源
-                  <ChevronRight size={16} />
+                  {tr("查看全部资源")}<ChevronRight size={16} />
                 </button>
               </section>
             ) : (
@@ -11115,7 +11120,7 @@ function AdminPage({
                   <input
                     value={machineSearch}
                     onChange={(event) => setMachineSearch(event.target.value)}
-                    placeholder="搜索名称或地址"
+                    placeholder={tr("搜索名称或地址")}
                   />
                 </label>
                 <div className="machine-list-scroll">
@@ -11142,7 +11147,7 @@ function AdminPage({
                         <span className="machine-list-icon"><Server size={18} /></span>
                         <span>
                           <strong>{machine.name}</strong>
-                          <small>{machine.address || "未填写地址"} ｜ {machine.resourceSummary || "尚未配置资源"}</small>
+                          <small>{machine.address || tr("未填写地址")} ｜ {machine.resourceSummary || tr("尚未配置资源")}</small>
                         </span>
                         <ChevronRight size={17} />
                       </button>
@@ -11155,7 +11160,7 @@ function AdminPage({
                         String(machine.name).toLowerCase().includes(query) ||
                         String(machine.address ?? "").toLowerCase().includes(query)
                       );
-                    }) && <div className="mini-empty">没有匹配的机器</div>}
+                    }) && <div className="mini-empty">{tr("没有匹配的机器")}</div>}
                 </div>
               </div>
               {machineId && machines.some((machine) => machine.id === machineId) && (
@@ -11205,7 +11210,7 @@ function AdminPage({
           onClose={() => setNewMachineOpen(false)}
           onSaved={async (createdMachineId) => {
             setNewMachineOpen(false);
-            notify("success", "机器已创建");
+            notify("success", tr("机器已创建"));
             await loadMachines();
             if (createdMachineId) onMachineRoute(createdMachineId, "info");
           }}
@@ -11235,9 +11240,9 @@ function MachineAdminPanel({
 }) {
   const detailRef = useRef<HTMLDivElement>(null);
   const sections: Array<{ id: MachineAdminSection; label: string }> = [
-    { id: "info", label: "机器信息" },
-    { id: "resources", label: "资源设置" },
-    { id: "users", label: "用户与权限" }
+    { id: "info", label: tr("机器信息") },
+    { id: "resources", label: tr("资源设置") },
+    { id: "users", label: tr("用户与权限") }
   ];
 
   useEffect(() => {
@@ -11260,7 +11265,7 @@ function MachineAdminPanel({
   return (
     <div className="machine-detail" ref={detailRef}>
       <div className="machine-context-bar card">
-        <div className="machine-section-tabs" role="tablist" aria-label={`${machine.name} 详情页面`}>
+        <div className="machine-section-tabs" role="tablist" aria-label={tr("{{v0}} 详情页面", { v0: machine.name })}>
           {sections.map((item) => (
             <button
               key={item.id}
@@ -11292,7 +11297,7 @@ function MachineAdminPanel({
           <span className="machine-list-icon"><Server size={18} /></span>
           <div className="machine-context-copy">
             <strong>{machine.name}</strong>
-            <small>{machine.address || "未填写地址"}</small>
+            <small>{machine.address || tr("未填写地址")}</small>
           </div>
         </div>
       </div>
@@ -11353,10 +11358,10 @@ function ExpandableMachineText({ value }: { value: string }) {
 
   return (
     <div className="machine-info-text">
-      <p ref={textRef} className={expanded ? "expanded" : ""}>{value || "未填写"}</p>
+      <p ref={textRef} className={expanded ? "expanded" : ""}>{value || tr("未填写")}</p>
       {(overflowing || expanded) && (
         <button type="button" onClick={() => setExpanded((current) => !current)}>
-          {expanded ? "收起" : "展开"}
+          {expanded ? tr("收起") : tr("展开")}
         </button>
       )}
     </div>
@@ -11419,7 +11424,7 @@ function MachineInfoSection({
       setUnavailabilityWindows(maintenanceResult.maintenance);
       setMaintenanceGroups(groupResult.groups);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "机器信息加载失败");
+      notify("error", error instanceof Error ? error.message : tr("机器信息加载失败"));
     }
   }, [machine.id, notify]);
 
@@ -11439,7 +11444,7 @@ function MachineInfoSection({
   };
 
   if (!detail) {
-    return <div className="content-loading"><RefreshCw className="spin" />正在载入</div>;
+    return <div className="content-loading"><RefreshCw className="spin" />{tr("正在载入")}</div>;
   }
 
   const currentMaintenance = unavailabilityWindows.filter(
@@ -11453,10 +11458,10 @@ function MachineInfoSection({
       new Date(item.startAt).getTime() <= currentTime
   );
   const machineStatus = detail.status === "DISABLED"
-    ? { label: "停用", className: "disabled" }
+    ? { label: tr("已停用"), className: "disabled" }
     : machineMaintenanceNow
-      ? { label: "维护", className: "scheduled" }
-      : { label: "启用", className: "active" };
+      ? { label: tr("维护"), className: "scheduled" }
+      : { label: tr("已启用"), className: "active" };
 
   const handleEnable = async () => {
     try {
@@ -11464,10 +11469,10 @@ function MachineInfoSection({
         method: "POST",
         body: jsonBody({ expectedVersion: detail.version })
       });
-      notify("success", "机器已重新启用");
+      notify("success", tr("机器已重新启用"));
       await Promise.all([load(), reloadMachines()]);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "重新启用失败");
+      notify("error", error instanceof Error ? error.message : tr("重新启用失败"));
     }
   };
 
@@ -11481,29 +11486,29 @@ function MachineInfoSection({
         0
       );
       const countLines = [
-        `资源配置 ${impact.counts.resourcePools ?? 0} 项`,
-        `设备条目 ${impact.counts.resourceItems ?? 0} 项`,
-        `资源组 ${impact.counts.resourceGroups ?? 0} 个`,
-        `成员 ${impact.counts.members ?? 0} 人`,
-        `机器管理员 ${impact.counts.managers ?? 0} 人`,
-        `使用权申请 ${impact.counts.accessRequests ?? 0} 条`,
-        `占用 ${impact.counts.reservations ?? 0} 条`,
-        `维护记录 ${impact.counts.unavailability ?? 0} 条`
+        tr("资源配置 {{v0}} 项", { v0: impact.counts.resourcePools ?? 0 }),
+        tr("设备条目 {{v0}} 项", { v0: impact.counts.resourceItems ?? 0 }),
+        tr("资源组 {{v0}} 个", { v0: impact.counts.resourceGroups ?? 0 }),
+        tr("成员 {{v0}} 人", { v0: impact.counts.members ?? 0 }),
+        tr("机器管理员 {{v0}} 人", { v0: impact.counts.managers ?? 0 }),
+        tr("使用权申请 {{v0}} 条", { v0: impact.counts.accessRequests ?? 0 }),
+        tr("占用 {{v0}} 条", { v0: impact.counts.reservations ?? 0 }),
+        tr("维护记录 {{v0}} 条", { v0: impact.counts.unavailability ?? 0 })
       ].join("\n");
       if (!(await dialog.confirm({
-        title: "永久删除机器",
-        message: `删除后无法恢复 ${detail.name} 的配置和权限。\n${countLines}\n共涉及 ${total} 条记录；占用、审批、维护和审计历史会继续保留，并以“机器已删除”“资源组已删除”等名称显示。`,
-        confirmLabel: "永久删除",
+        title: tr("永久删除机器"),
+        message: tr("删除后无法恢复 {{v0}} 的配置和权限。\n{{v1}}\n共涉及 {{v2}} 条记录；占用、审批、维护和审计历史会继续保留，并以“机器已删除”“资源组已删除”等名称显示。", { v0: detail.name, v1: countLines, v2: total }),
+        confirmLabel: tr("永久删除"),
         tone: "danger"
       }))) return;
       await api(`/admin/machines/${machine.id}`, {
         method: "DELETE",
         body: jsonBody({ expectedVersion: detail.version })
       });
-      notify("success", "机器已永久删除");
+      notify("success", tr("机器已永久删除"));
       await reloadMachines();
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "删除机器失败");
+      notify("error", error instanceof Error ? error.message : tr("删除机器失败"));
     }
   };
 
@@ -11511,50 +11516,49 @@ function MachineInfoSection({
     <div className="machine-section-stack">
       <section className="card panel-card machine-info-panel">
         <SectionHeader
-          title="机器信息"
+          title={tr("机器信息")}
           actions={canManage ? (
             <button className="secondary-button compact" onClick={() => setEditMachine(true)}>
-              <Pencil size={14} />编辑
-            </button>
+              <Pencil size={14} />{tr("编辑")}</button>
           ) : undefined}
         />
         <div className="machine-info-overview">
           <div className="machine-info-identity">
             <span className="machine-info-symbol"><Server size={20} /></span>
             <div>
-              <span>机器名称</span>
+              <span>{tr("机器名称")}</span>
               <strong>{detail.name}</strong>
-              <small>连接地址：{detail.address || "未填写"}</small>
+              <small>{tr("连接地址：")}{detail.address || tr("未填写")}</small>
             </div>
             <span className={`state-chip ${machineStatus.className}`}>
               {machineStatus.label}
             </span>
           </div>
           <div className="machine-info-resource">
-            <span><Gauge size={14} />资源摘要</span>
-            <strong>{detail.resourceSummary || "尚未配置资源"}</strong>
+            <span><Gauge size={14} />{tr("资源摘要")}</span>
+            <strong>{detail.resourceSummary || tr("尚未配置资源")}</strong>
           </div>
         </div>
         <div className="machine-info-tags">
-          <span>标签</span>
+          <span>{tr("标签")}</span>
           <div className="tag-row">
             {detail.tags.length
               ? detail.tags.map((tag: string) => <span key={tag}>{tag}</span>)
-              : <em>未填写</em>}
+              : <em>{tr("未填写")}</em>}
           </div>
         </div>
         <div className="machine-info-details">
           <div className="machine-info-detail">
-            <span><Cpu size={14} />硬件说明</span>
+            <span><Cpu size={14} />{tr("硬件说明")}</span>
             <ExpandableMachineText value={detail.hardwareNotes} />
           </div>
           <div className="machine-info-detail">
-            <span><Info size={14} />连接说明</span>
+            <span><Info size={14} />{tr("连接说明")}</span>
             <ExpandableMachineText value={detail.connectionGuide} />
           </div>
           {canManage && (
             <div className="machine-info-detail management">
-              <span><ShieldCheck size={14} />管理备注</span>
+              <span><ShieldCheck size={14} />{tr("管理备注")}</span>
               <ExpandableMachineText value={detail.managementNotes} />
             </div>
           )}
@@ -11563,7 +11567,7 @@ function MachineInfoSection({
 
       <section className="card panel-card machine-unavailability-panel maintenance-panel">
         <SectionHeader
-          title="维护管理"
+          title={tr("维护管理")}
           actions={
             canManage && detail.status === "ACTIVE" ? (
               <button
@@ -11571,17 +11575,16 @@ function MachineInfoSection({
                 className="secondary-button compact"
                 onClick={openMaintenance}
               >
-                <Plus size={14} />安排维护
-              </button>
+                <Plus size={14} />{tr("安排维护")}</button>
             ) : undefined
           }
         />
         {currentMaintenance.length > 0 && (
           <div className="unavailability-table machine-unavailability-table">
             <div className="unavailability-table-row machine-unavailability-table-row head">
-              <span>范围</span>
-              <span>维护时间</span>
-              <span>原因</span>
+              <span>{tr("范围")}</span>
+              <span>{tr("维护时间")}</span>
+              <span>{tr("原因")}</span>
               <span />
             </div>
             {currentMaintenance.map((item) => (
@@ -11593,9 +11596,9 @@ function MachineInfoSection({
                   className={`unavailability-kind-chip ${
                     item.resourceGroupId ? "group" : "planned"
                   }`}
-                  title={item.resourceGroupName || "整机"}
+                  title={item.resourceGroupName || tr("整机")}
                 >
-                  {item.resourceGroupName || "整机"}
+                  {item.resourceGroupName || tr("整机")}
                 </span>
                 <span
                   className="unavailability-period"
@@ -11611,25 +11614,25 @@ function MachineInfoSection({
                 </span>
                 <span
                   className={`unavailability-reason${item.reason ? "" : " empty"}`}
-                  title={item.reason || "未填写"}
+                  title={item.reason || tr("未填写")}
                 >
-                  {item.reason || "未填写"}
+                  {item.reason || tr("未填写")}
                 </span>
                 {canManage ? (
                   <span className="unavailability-row-action">
-                    <button className="icon-button tiny danger" title="取消维护" onClick={async () => {
+                    <button className="icon-button tiny danger" title={tr("取消维护")} onClick={async () => {
                       if (!(await dialog.confirm({
-                        title: "取消维护",
-                        message: "此前因维护被取消或调整的占用不会自动恢复。",
-                        confirmLabel: "取消维护",
+                        title: tr("取消维护"),
+                        message: tr("此前因维护被取消或调整的占用不会自动恢复。"),
+                        confirmLabel: tr("取消维护"),
                         tone: "danger"
                       }))) return;
                       try {
                         await api(`/admin/maintenance/${item.id}`, { method: "DELETE" });
-                        notify("success", "维护安排已取消");
+                        notify("success", tr("维护安排已取消"));
                         await load();
                       } catch (error) {
-                        notify("error", error instanceof Error ? error.message : "取消维护失败");
+                        notify("error", error instanceof Error ? error.message : tr("取消维护失败"));
                       }
                     }}><X size={14} /></button>
                   </span>
@@ -11639,16 +11642,16 @@ function MachineInfoSection({
           </div>
         )}
         {currentMaintenance.length === 0 && (
-          <div className="unavailability-empty">暂无维护安排</div>
+          <div className="unavailability-empty">{tr("暂无维护安排")}</div>
         )}
       </section>
 
       <section className="card panel-card machine-state-panel">
-        <SectionHeader title="机器状态" />
+        <SectionHeader title={tr("机器状态")} />
         <div className={`machine-disabled-state${detail.status === "ACTIVE" ? " active" : ""}`}>
           <div>
             {detail.status === "ACTIVE" ? <Power size={17} /> : <PowerOff size={17} />}
-            <strong>{detail.status === "ACTIVE" ? "启用" : "停用"}</strong>
+            <strong>{detail.status === "ACTIVE" ? tr("已启用") : tr("已停用")}</strong>
           </div>
           {canManage && (
             <div className="section-header-actions">
@@ -11657,25 +11660,22 @@ function MachineInfoSection({
                   className="secondary-button compact danger"
                   onClick={() => setStopOpen(true)}
                 >
-                  <PowerOff size={14} />停用
-                </button>
+                  <PowerOff size={14} />{tr("停用")}</button>
               ) : (
                 <>
                   <button
                     className="secondary-button compact"
                     onClick={() => void handleEnable()}
                   >
-                    <Power size={14} />重新启用
-                  </button>
+                    <Power size={14} />{tr("重新启用")}</button>
                   {isSystemAdmin && (
                     <button
                       className="secondary-button compact danger"
-                      title="永久删除机器"
-                      aria-label={`永久删除 ${detail.name}`}
+                      title={tr("永久删除机器")}
+                      aria-label={tr("永久删除 {{v0}}", { v0: detail.name })}
                       onClick={() => void handleDelete()}
                     >
-                      <Trash2 size={14} />永久删除
-                    </button>
+                      <Trash2 size={14} />{tr("永久删除")}</button>
                   )}
                 </>
               )}
@@ -11713,7 +11713,7 @@ function MachineInfoSection({
           onClose={() => setEditMachine(false)}
           onSaved={async () => {
             setEditMachine(false);
-            notify("success", "机器资料已更新");
+            notify("success", tr("机器资料已更新"));
             await Promise.all([load(), reloadMachines()]);
           }}
           notify={notify}
@@ -11767,7 +11767,7 @@ function MaintenanceModal({
   const currentMinuteLocal = isoToChinaLocal(currentMinuteStart(currentTime));
   const timeRangeError =
     form.startAt && form.endAt && form.endAt <= form.startAt
-      ? "结束时间必须晚于开始时间"
+      ? tr("结束时间必须晚于开始时间")
       : "";
 
   useEffect(() => {
@@ -11834,7 +11834,7 @@ function MaintenanceModal({
       setPreview(result);
     } catch (error) {
       setPreview(null);
-      notify("error", error instanceof Error ? error.message : "维护影响加载失败");
+      notify("error", error instanceof Error ? error.message : tr("维护影响加载失败"));
     } finally {
       setPreviewing(false);
     }
@@ -11854,7 +11854,7 @@ function MaintenanceModal({
           expectedRevision: preview.revision
         })
       });
-      notify("success", "维护安排已创建");
+      notify("success", tr("维护安排已创建"));
       await onCompleted();
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
@@ -11862,7 +11862,7 @@ function MaintenanceModal({
       }
       notify(
         "error",
-        error instanceof Error ? error.message : "创建维护失败"
+        error instanceof Error ? error.message : tr("创建维护失败")
       );
     } finally {
       setSubmitting(false);
@@ -11871,12 +11871,12 @@ function MaintenanceModal({
 
   return (
     <Modal
-      title={`安排维护：${machine.name}`}
+      title={tr("安排维护：{{v0}}", { v0: machine.name })}
       onClose={onClose}
       wide
     >
       <div className="stack-form machine-disable-modal">
-        <Field label="维护范围">
+        <Field label={tr("维护范围")}>
           <select
             value={targetId}
             onChange={(event) => {
@@ -11884,18 +11884,18 @@ function MaintenanceModal({
               setPreview(null);
             }}
           >
-            <option value="MACHINE">整机</option>
+            <option value="MACHINE">{tr("整机")}</option>
             {groups
               .filter((group) => group.status === "ACTIVE")
               .map((group) => (
                 <option key={group.id} value={group.id}>
-                  资源组 · {group.name}
+                  {tr("资源组 ·")}{group.name}
                 </option>
               ))}
           </select>
         </Field>
         <div className="machine-disable-time-grid">
-          <Field label="开始时间">
+          <Field label={tr("开始时间")}>
             <input
               type="datetime-local"
               value={form.startAt}
@@ -11912,7 +11912,7 @@ function MaintenanceModal({
               }}
             />
           </Field>
-          <Field label="结束时间" error={timeRangeError}>
+          <Field label={tr("结束时间")} error={timeRangeError}>
             <input
               type="datetime-local"
               value={form.endAt}
@@ -11923,7 +11923,7 @@ function MaintenanceModal({
             />
           </Field>
         </div>
-        <Field label="原因（选填）">
+        <Field label={tr("原因（选填）")}>
           <textarea
             value={form.reason}
             maxLength={1000}
@@ -11938,23 +11938,21 @@ function MaintenanceModal({
               <span>
                 <strong>
                   {preview.summary.total
-                    ? `影响 ${preview.summary.total} 条占用`
-                    : "没有受影响的占用"}
+                    ? tr("影响 {{v0}} 条占用", { v0: preview.summary.total })
+                    : tr("没有受影响的占用")}
                 </strong>
                 {preview.summary.total > 0 && (
                   <small>
-                    取消 {preview.summary.cancelled} 条 · 裁切 {preview.summary.trimmed} 条 ·
-                    拆分 {preview.summary.split} 条
-                  </small>
+                    {tr("取消")}{preview.summary.cancelled} {tr("条 · 裁切")}{preview.summary.trimmed} {tr("条 · 拆分")}{preview.summary.split} {tr("条")}</small>
                 )}
                   {preview.affectedReservations.slice(0, 3).map((item) => (
                   <small key={item.id}>
-                    {item.applicantName} · {item.resourceGroupName || "整机"} ·
+                    {item.applicantName} · {item.resourceGroupName || tr("整机")} ·
                     {" "}{formatChinaFullMinute(item.startAt)}
                   </small>
                 ))}
                 {preview.summary.total > 3 && (
-                  <small>另有 {preview.summary.total - 3} 条占用</small>
+                  <small>{tr("另有")}{preview.summary.total - 3} {tr("条占用")}</small>
                 )}
               </span>
             </div>
@@ -11967,16 +11965,14 @@ function MaintenanceModal({
             onClick={onClose}
             disabled={previewing || submitting}
           >
-            取消
-          </button>
+            {tr("取消")}</button>
           <button
             type="button"
             className="secondary-button machine-disable-modal-action"
             onClick={() => void runPreview()}
             disabled={Boolean(timeRangeError) || previewing || submitting}
           >
-            <Eye size={15} />查看影响
-          </button>
+            <Eye size={15} />{tr("查看影响")}</button>
           <button
             type="button"
             className="primary-button machine-disable-modal-action"
@@ -11985,8 +11981,7 @@ function MaintenanceModal({
               Boolean(timeRangeError) || !preview || previewing || submitting
             }
           >
-            创建维护
-          </button>
+            {tr("创建")}</button>
         </div>
       </div>
     </Modal>
@@ -12020,7 +12015,7 @@ function MachineStopModal({
       );
     } catch (error) {
       setPreview(null);
-      notify("error", error instanceof Error ? error.message : "停用影响加载失败");
+      notify("error", error instanceof Error ? error.message : tr("停用影响加载失败"));
     } finally {
       setPreviewing(false);
     }
@@ -12038,24 +12033,24 @@ function MachineStopModal({
           reason
         })
       });
-      notify("success", "机器已停用");
+      notify("success", tr("机器已停用"));
       await onCompleted();
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) setPreview(null);
-      notify("error", error instanceof Error ? error.message : "停用机器失败");
+      notify("error", error instanceof Error ? error.message : tr("停用机器失败"));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Modal title={`停用机器：${machine.name}`} onClose={onClose} wide>
+    <Modal title={tr("停用机器：{{v0}}", { v0: machine.name })} onClose={onClose} wide>
       <div className="stack-form machine-disable-modal">
         <div className="modal-note warning">
           <CircleAlert size={15} />
-          <span>停用后将持续不可用，重新启用前不能创建新的占用。</span>
+          <span>{tr("停用后将持续不可用，重新启用前不能创建新的占用。")}</span>
         </div>
-        <Field label="原因（选填）">
+        <Field label={tr("原因（选填）")}>
           <textarea
             value={reason}
             maxLength={1000}
@@ -12073,14 +12068,12 @@ function MachineStopModal({
               <span>
                 <strong>
                   {preview.summary.total
-                    ? `影响 ${preview.summary.total} 条占用`
-                    : "没有受影响的占用"}
+                    ? tr("影响 {{v0}} 条占用", { v0: preview.summary.total })
+                    : tr("没有受影响的占用")}
                 </strong>
                 {preview.summary.total > 0 && (
                   <small>
-                    取消 {preview.summary.cancelled} 条 · 裁切 {preview.summary.trimmed} 条 ·
-                    拆分 {preview.summary.split} 条
-                  </small>
+                    {tr("取消")}{preview.summary.cancelled} {tr("条 · 裁切")}{preview.summary.trimmed} {tr("条 · 拆分")}{preview.summary.split} {tr("条")}</small>
                 )}
               </span>
             </div>
@@ -12093,24 +12086,21 @@ function MachineStopModal({
             onClick={onClose}
             disabled={previewing || submitting}
           >
-            取消
-          </button>
+            {tr("取消")}</button>
           <button
             type="button"
             className="secondary-button machine-disable-modal-action"
             onClick={() => void runPreview()}
             disabled={previewing || submitting}
           >
-            <Eye size={15} />查看影响
-          </button>
+            <Eye size={15} />{tr("查看影响")}</button>
           <button
             type="button"
             className="danger-button machine-disable-modal-action"
             onClick={() => void submit()}
             disabled={!preview || previewing || submitting}
           >
-            确认停用
-          </button>
+            {tr("确认停用")}</button>
         </div>
       </div>
     </Modal>
@@ -12142,7 +12132,7 @@ function MachineResourcesSection({
       );
       setGroups(groupResult.groups);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "资源设置加载失败");
+      notify("error", error instanceof Error ? error.message : tr("资源设置加载失败"));
     } finally {
       setGroupsLoaded(true);
     }
@@ -12165,7 +12155,7 @@ function MachineResourcesSection({
     } catch (error) {
       notify(
         "error",
-        error instanceof Error ? error.message : "资源配置加载失败"
+        error instanceof Error ? error.message : tr("资源配置加载失败")
       );
     } finally {
       setOpeningResourceEditor(false);
@@ -12183,9 +12173,9 @@ function MachineResourcesSection({
 
   const disableGroup = async (group: ResourceGroup) => {
     const reason = await dialog.prompt({
-      title: "停用资源组",
-      message: `停用 ${group.name} 会立即处理进行中和未来的占用。`,
-      label: "原因（选填）",
+      title: tr("停用资源组"),
+      message: tr("停用 {{v0}} 会立即处理进行中和未来的占用。", { v0: group.name }),
+      label: tr("原因（选填）"),
       multiline: true,
       maxLength: 1000
     });
@@ -12197,11 +12187,11 @@ function MachineResourcesSection({
       }>(`/admin/groups/${group.id}/disable/preview`, { method: "POST" });
       const summary = preview.summary;
       if (!(await dialog.confirm({
-        title: "确认停用",
+        title: tr("确认停用"),
         message: summary.total
-          ? `将影响 ${summary.total} 条占用：取消 ${summary.cancelled} 条、裁切 ${summary.trimmed} 条、拆分 ${summary.split} 条。`
-          : "当前没有受影响的占用。",
-        confirmLabel: "停用",
+          ? tr("将影响 {{v0}} 条占用：取消 {{v1}} 条、裁切 {{v2}} 条、拆分 {{v3}} 条。", { v0: summary.total, v1: summary.cancelled, v2: summary.trimmed, v3: summary.split })
+          : tr("当前没有受影响的占用。"),
+        confirmLabel: tr("停用"),
         tone: "danger"
       }))) return;
       await api(`/admin/groups/${group.id}/disable`, {
@@ -12212,10 +12202,10 @@ function MachineResourcesSection({
           reason
         })
       });
-      notify("success", "资源组已停用");
+      notify("success", tr("资源组已停用"));
       await load();
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "停用失败");
+      notify("error", error instanceof Error ? error.message : tr("停用失败"));
     }
   };
 
@@ -12225,10 +12215,10 @@ function MachineResourcesSection({
         method: "POST",
         body: jsonBody({ expectedVersion: group.version })
       });
-      notify("success", "资源组已重新启用");
+      notify("success", tr("资源组已重新启用"));
       await load();
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "重新启用失败");
+      notify("error", error instanceof Error ? error.message : tr("重新启用失败"));
     }
   };
 
@@ -12242,25 +12232,25 @@ function MachineResourcesSection({
         0
       );
       const countLines = [
-        `资源分配 ${impact.counts.allocations ?? 0} 项`,
-        `占用 ${impact.counts.reservations ?? 0} 条`,
-        `维护记录 ${impact.counts.unavailability ?? 0} 条`,
-        `配置历史 ${impact.counts.revisions ?? 0} 条`
+        tr("资源分配 {{v0}} 项", { v0: impact.counts.allocations ?? 0 }),
+        tr("占用 {{v0}} 条", { v0: impact.counts.reservations ?? 0 }),
+        tr("维护记录 {{v0}} 条", { v0: impact.counts.unavailability ?? 0 }),
+        tr("配置历史 {{v0}} 条", { v0: impact.counts.revisions ?? 0 })
       ].join("\n");
       if (!(await dialog.confirm({
-        title: "永久删除资源组",
-        message: `删除后无法恢复 ${group.name} 的配置。\n${countLines}\n共涉及 ${total} 条记录；占用、维护和审计历史会继续保留，并以“资源组已删除”“资源已删除”等名称显示。`,
-        confirmLabel: "永久删除",
+        title: tr("永久删除资源组"),
+        message: tr("删除后无法恢复 {{v0}} 的配置。\n{{v1}}\n共涉及 {{v2}} 条记录；占用、维护和审计历史会继续保留，并以“资源组已删除”“资源已删除”等名称显示。", { v0: group.name, v1: countLines, v2: total }),
+        confirmLabel: tr("永久删除"),
         tone: "danger"
       }))) return;
       await api(`/admin/groups/${group.id}`, {
         method: "DELETE",
         body: jsonBody({ expectedVersion: group.version })
       });
-      notify("success", "资源组已永久删除");
+      notify("success", tr("资源组已永久删除"));
       await Promise.all([load(), reloadMachines()]);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "删除资源组失败");
+      notify("error", error instanceof Error ? error.message : tr("删除资源组失败"));
     }
   };
 
@@ -12268,20 +12258,19 @@ function MachineResourcesSection({
     <div className="machine-section-stack">
       <section className="card panel-card resource-group-panel">
         <SectionHeader
-          title="资源组"
+          title={tr("资源组")}
           actions={canManage ? (
             <button
               className="secondary-button compact"
               onClick={() => void openResourceEditor()}
               disabled={openingResourceEditor}
             >
-              <Pencil size={14} />编辑资源
-            </button>
+              <Pencil size={14} />{tr("编辑资源")}</button>
           ) : undefined}
         />
         <div className="group-admin-table">
           <div className="group-admin-row head" aria-hidden="true">
-            <span>资源组信息</span><span>状态</span><span />
+            <span>{tr("资源组信息")}</span><span>{tr("状态")}</span><span />
           </div>
           {groups.map((group) => {
             const effectiveStatus =
@@ -12311,29 +12300,29 @@ function MachineResourcesSection({
                     }`}
                   >
                     {effectiveStatus === "DISABLED"
-                      ? "停用"
+                      ? tr("已停用")
                       : effectiveStatus === "MAINTENANCE"
-                        ? "维护"
-                        : "启用"}
+                        ? tr("维护")
+                        : tr("已启用")}
                   </span>
                 </span>
                 <div className="group-admin-actions">
                   {canManage && group.status === "ACTIVE" && (
-                    <button className="icon-button tiny danger" title="停用" onClick={() => void disableGroup(group)}><PowerOff size={14} /></button>
+                    <button className="icon-button tiny danger" title={tr("停用")} onClick={() => void disableGroup(group)}><PowerOff size={14} /></button>
                   )}
                   {canManage && group.status === "DISABLED" && (
                     <>
-                      <button className="icon-button tiny" title="重新启用" onClick={() => void enableGroup(group)}><Power size={14} /></button>
-                      <button className="icon-button tiny danger" title="永久删除" onClick={() => void deleteGroup(group)}><Trash2 size={14} /></button>
+                      <button className="icon-button tiny" title={tr("重新启用")} onClick={() => void enableGroup(group)}><Power size={14} /></button>
+                      <button className="icon-button tiny danger" title={tr("永久删除")} onClick={() => void deleteGroup(group)}><Trash2 size={14} /></button>
                     </>
                   )}
                 </div>
               </div>
             );
           })}
-          {!groupsLoaded && <div className="mini-empty">正在加载资源组</div>}
+          {!groupsLoaded && <div className="mini-empty">{tr("正在加载资源组")}</div>}
           {groupsLoaded && !groups.length && (
-            <div className="mini-empty">尚未配置资源组</div>
+            <div className="mini-empty">{tr("尚未配置资源组")}</div>
           )}
         </div>
       </section>
@@ -12382,7 +12371,7 @@ function MachineUsersSection({
       );
       setAccess(result);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "用户权限加载失败");
+      notify("error", error instanceof Error ? error.message : tr("用户权限加载失败"));
     }
   }, [machine.id, notify]);
 
@@ -12399,38 +12388,38 @@ function MachineUsersSection({
     <div className="machine-section-stack">
       {canManage && access.requests.length > 0 && (
         <section className="card panel-card machine-requests-panel">
-          <SectionHeader title="申请列表" actions={<span className="request-count">{access.requests.length}</span>} />
+          <SectionHeader title={tr("申请列表")} actions={<span className="request-count">{access.requests.length}</span>} />
           <div className="machine-request-list">
             {access.requests.map((item) => (
               <div className="machine-request-row" key={item.id}>
                 <div className="member-identity">
                   <div className="avatar small">{item.displayName.slice(0, 1)}</div>
-                  <span><strong>{item.displayName}</strong><small>@{item.username} · {item.employeeNumber || "暂无工号"}</small></span>
+                  <span><strong>{item.displayName}</strong><small>@{item.username} · {item.employeeNumber || tr("暂无工号")}</small></span>
                 </div>
-                <p>{item.reason || "未填写申请理由"}</p>
+                <p>{item.reason || tr("未填写申请理由")}</p>
                 <time>{formatChinaFullMinute(item.createdAt)}</time>
                 <div className="row-actions">
-                  <button className="icon-button tiny list-icon-action approve" title="通过申请" onClick={async () => {
+                  <button className="icon-button tiny list-icon-action approve" title={tr("通过申请")} onClick={async () => {
                     try {
                       await api(`/admin/machine-access/requests/${item.id}/approve`, {
                         method: "POST",
                         body: jsonBody({ expectedVersion: item.expectedVersion })
                       });
-                      notify("success", `${item.displayName} 已获得机器使用权`);
+                      notify("success", tr("{{v0}} 已获得机器使用权", { v0: item.displayName }));
                     } catch (error) {
-                      notify("error", error instanceof Error ? error.message : "审批失败");
+                      notify("error", error instanceof Error ? error.message : tr("审批失败"));
                     } finally {
                       await refresh();
                     }
                   }}><Check size={15} /></button>
-                  <button className="icon-button tiny list-icon-action danger" title="拒绝申请" onClick={async () => {
+                  <button className="icon-button tiny list-icon-action danger" title={tr("拒绝申请")} onClick={async () => {
                     const reason = await dialog.prompt({
-                      title: "拒绝使用权申请",
-                      message: `拒绝 ${item.displayName} 对 ${machine.name} 的使用权申请。`,
-                      label: "原因（选填）",
+                      title: tr("拒绝使用权申请"),
+                      message: tr("拒绝 {{v0}} 对 {{v1}} 的使用权申请。", { v0: item.displayName, v1: machine.name }),
+                      label: tr("原因（选填）"),
                       multiline: true,
                       maxLength: 500,
-                      confirmLabel: "确认拒绝",
+                      confirmLabel: tr("确认拒绝"),
                       tone: "danger"
                     });
                     if (reason === null) return;
@@ -12439,9 +12428,9 @@ function MachineUsersSection({
                         method: "POST",
                         body: jsonBody({ expectedVersion: item.expectedVersion, reason })
                       });
-                      notify("success", "使用权申请已拒绝");
+                      notify("success", tr("使用权申请已拒绝"));
                     } catch (error) {
-                      notify("error", error instanceof Error ? error.message : "操作失败");
+                      notify("error", error instanceof Error ? error.message : tr("操作失败"));
                     } finally {
                       await refresh();
                     }
@@ -12455,12 +12444,12 @@ function MachineUsersSection({
 
       <section className="card panel-card machine-access-panel">
         <SectionHeader
-          title="用户列表"
-          actions={canManage ? <button className="secondary-button compact" onClick={() => setInviteOpen(true)}><UserPlus size={15} />邀请用户</button> : undefined}
+          title={tr("用户列表")}
+          actions={canManage ? <button className="secondary-button compact" onClick={() => setInviteOpen(true)}><UserPlus size={15} />{tr("邀请")}</button> : undefined}
         />
         <div className="machine-member-list">
           <div className="machine-member-row machine-member-head">
-            <span>用户</span><span>身份</span><span>加入时间</span><span />
+            <span>{tr("用户")}</span><span>{tr("身份")}</span><span>{tr("加入时间")}</span><span />
           </div>
           {access.members.map((member) => (
             <div
@@ -12469,66 +12458,66 @@ function MachineUsersSection({
             >
               <div className="member-identity">
                 <div className="avatar small">{member.displayName.slice(0, 1)}</div>
-                <span><strong>{member.displayName}</strong><small>@{member.username} · {member.employeeNumber || "暂无工号"}</small></span>
+                <span><strong>{member.displayName}</strong><small>@{member.username} · {member.employeeNumber || tr("暂无工号")}</small></span>
               </div>
               <span className={`state-chip ${member.role === "MACHINE_ADMIN" ? "active" : "member"}`}>
-                {member.role === "MACHINE_ADMIN" ? "管理员" : "使用者"}
+                {member.role === "MACHINE_ADMIN" ? tr("管理员") : tr("使用者")}
               </span>
               <span>{formatChinaFullMinute(member.grantedAt)}</span>
               <div className="row-actions">
                 {canManage && isSystemAdmin && member.role === "MEMBER" && (
-                  <button className="icon-button tiny list-icon-action" title="设为管理员" onClick={async () => {
+                  <button className="icon-button tiny list-icon-action" title={tr("设为管理员")} onClick={async () => {
                     try {
                       await api(`/admin/machines/${machine.id}/managers/${member.id}`, { method: "PUT", body: "{}" });
-                      notify("success", `${member.displayName} 已设为机器管理员`);
+                      notify("success", tr("{{v0}} 已设为机器管理员", { v0: member.displayName }));
                       await refresh();
                     } catch (error) {
-                      notify("error", error instanceof Error ? error.message : "设置管理员失败");
+                      notify("error", error instanceof Error ? error.message : tr("设置管理员失败"));
                     }
                   }}><ShieldCheck size={15} /></button>
                 )}
                 {canManage && isSystemAdmin && member.role === "MACHINE_ADMIN" && (
-                  <button className="icon-button tiny list-icon-action" title="取消管理员" onClick={async () => {
+                  <button className="icon-button tiny list-icon-action" title={tr("取消管理员")} onClick={async () => {
                     if (!(await dialog.confirm({
-                      title: "取消管理员身份",
-                      message: `确认取消 ${member.displayName} 的机器管理员身份？该用户仍保留普通使用权。`,
-                      confirmLabel: "确认取消"
+                      title: tr("取消管理员身份"),
+                      message: tr("确认取消 {{v0}} 的机器管理员身份？该用户仍保留普通使用权。", { v0: member.displayName }),
+                      confirmLabel: tr("确认取消")
                     }))) return;
                     try {
                       await api(`/admin/machines/${machine.id}/managers/${member.id}`, { method: "DELETE" });
-                      notify("success", "管理员身份已取消");
+                      notify("success", tr("管理员身份已取消"));
                       await refresh();
                     } catch (error) {
-                      notify("error", error instanceof Error ? error.message : "取消管理员失败");
+                      notify("error", error instanceof Error ? error.message : tr("取消管理员失败"));
                     }
                   }}><ShieldOff size={15} /></button>
                 )}
                 {canManage && (member.role === "MEMBER" || isSystemAdmin) && (
-                  <button className="icon-button tiny list-icon-action danger" title="移除用户" onClick={async () => {
+                  <button className="icon-button tiny list-icon-action danger" title={tr("移除用户")} onClick={async () => {
                     const impact = member.impact;
                     const detail = [
-                      impact.activeReservations && `${impact.activeReservations} 条进行中占用`,
-                      impact.futureReservations && `${impact.futureReservations} 条未来占用`
+                      impact.activeReservations && tr("{{v0}} 条进行中占用", { v0: impact.activeReservations }),
+                      impact.futureReservations && tr("{{v0}} 条未来占用", { v0: impact.futureReservations })
                     ].filter(Boolean).join("、");
                     if (!(await dialog.confirm({
-                      title: "移除用户",
-                      message: `确认将 ${member.displayName} 移出 ${machine.name}？${detail ? `此操作会释放${detail}。` : ""}`,
-                      confirmLabel: "确认移除",
+                      title: tr("移除用户"),
+                      message: tr("确认将 {{v0}} 移出 {{v1}}？{{v2}}", { v0: member.displayName, v1: machine.name, v2: detail ? `此操作会释放${detail}。` : "" }),
+                      confirmLabel: tr("确认移除"),
                       tone: "danger"
                     }))) return;
                     try {
                       await api(`/admin/machines/${machine.id}/members/${member.id}`, { method: "DELETE" });
-                      notify("success", `${member.displayName} 已被移出机器`);
+                      notify("success", tr("{{v0}} 已被移出机器", { v0: member.displayName }));
                       await refresh();
                     } catch (error) {
-                      notify("error", error instanceof Error ? error.message : "移除失败");
+                      notify("error", error instanceof Error ? error.message : tr("移除失败"));
                     }
                   }}><UserMinus size={15} /></button>
                 )}
               </div>
             </div>
           ))}
-          {!access.members.length && <div className="mini-empty">暂时没有显式授权用户</div>}
+          {!access.members.length && <div className="mini-empty">{tr("暂时没有显式授权用户")}</div>}
         </div>
       </section>
       {inviteOpen && canManage && (
@@ -12574,7 +12563,7 @@ function InviteMachineMemberModal({
       } catch (error) {
         notify(
           "error",
-          error instanceof Error ? error.message : "候选用户加载失败"
+          error instanceof Error ? error.message : tr("候选用户加载失败")
         );
       } finally {
         setLoading(false);
@@ -12584,7 +12573,7 @@ function InviteMachineMemberModal({
   }, [machine.id, notify, query]);
 
   return (
-    <Modal title="邀请用户" onClose={onClose}>
+    <Modal title={tr("邀请用户")} onClose={onClose}>
       <div className="stack-form invite-member-modal">
         <label className="search-box">
           <Search size={16} />
@@ -12592,33 +12581,33 @@ function InviteMachineMemberModal({
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索姓名、用户名或工号"
+            placeholder={tr("搜索姓名、用户名或工号")}
           />
         </label>
-        <ContextNotice>添加后，该用户将立即获得这台机器的使用权。</ContextNotice>
+        <ContextNotice>{tr("添加后，该用户将立即获得这台机器的使用权。")}</ContextNotice>
         <div className="invite-candidate-list">
           {loading ? (
-            <div className="mini-empty"><RefreshCw size={15} className="spin" />正在查找</div>
+            <div className="mini-empty"><RefreshCw size={15} className="spin" />{tr("正在查找")}</div>
           ) : users.length ? users.map((user) => (
             <div key={user.id}>
               <div className="member-identity">
                 <div className="avatar small">{user.displayName.slice(0, 1)}</div>
                 <span>
                   <strong>{user.displayName}</strong>
-                  <small>@{user.username} · {user.employeeNumber || "暂无工号"}</small>
+                  <small>@{user.username} · {user.employeeNumber || tr("暂无工号")}</small>
                 </span>
               </div>
               <button
                 type="button"
                 className="icon-button tiny list-icon-action invite"
-                title="邀请用户"
-                aria-label={`邀请 ${user.displayName}`}
+                title={tr("邀请用户")}
+                aria-label={tr("邀请 {{v0}}", { v0: user.displayName })}
                 disabled={Boolean(busyId)}
                 onClick={async () => {
                   if (!(await dialog.confirm({
-                    title: "邀请用户",
-                    message: `添加后，${user.displayName} 将立即获得 ${machine.name} 的使用权。`,
-                    confirmLabel: "确认邀请"
+                    title: tr("邀请用户"),
+                    message: tr("添加后，{{v0}} 将立即获得 {{v1}} 的使用权。", { v0: user.displayName, v1: machine.name }),
+                    confirmLabel: tr("确认邀请")
                   }))) return;
                   setBusyId(user.id);
                   try {
@@ -12626,7 +12615,7 @@ function InviteMachineMemberModal({
                       method: "POST",
                       body: jsonBody({ userId: user.id })
                     });
-                    notify("success", `${user.displayName} 已加入机器`);
+                    notify("success", tr("{{v0}} 已加入机器", { v0: user.displayName }));
                     await onInvited();
                   } catch (error) {
                     if (
@@ -12640,7 +12629,7 @@ function InviteMachineMemberModal({
                     } else {
                       notify(
                         "error",
-                        error instanceof Error ? error.message : "邀请失败"
+                        error instanceof Error ? error.message : tr("邀请失败")
                       );
                     }
                   } finally {
@@ -12651,7 +12640,7 @@ function InviteMachineMemberModal({
                 {busyId === user.id ? <RefreshCw size={14} className="spin" /> : <UserPlus size={14} />}
               </button>
             </div>
-          )) : <div className="mini-empty">没有可邀请的用户</div>}
+          )) : <div className="mini-empty">{tr("没有可邀请的用户")}</div>}
         </div>
       </div>
     </Modal>
@@ -12677,7 +12666,7 @@ function TagEditor({
     }
     if (
       resourceTagDraftIssue(tags, tag) !==
-      "按回车或点击添加当前标签"
+      tr("按回车或点击添加当前标签")
     ) {
       return;
     }
@@ -12694,7 +12683,7 @@ function TagEditor({
           aria-invalid={invalid}
         >
           <input
-            aria-label="输入标签"
+            aria-label={tr("输入标签")}
             value={input}
             onChange={(event) => onChange(tags, event.target.value)}
             onKeyDown={(event) => {
@@ -12715,8 +12704,7 @@ function TagEditor({
           disabled={!input.trim()}
           onClick={addTag}
         >
-          添加
-        </button>
+          {tr("添加")}</button>
       </div>
       {tags.length > 0 && (
         <div className="resource-tag-list">
@@ -12725,7 +12713,7 @@ function TagEditor({
               <span>{tag}</span>
               <button
                 type="button"
-                aria-label={`删除标签 ${tag}`}
+                aria-label={tr("删除标签 {{v0}}", { v0: tag })}
                 onClick={() =>
                   onChange(
                     tags.filter(
@@ -12766,26 +12754,26 @@ function MachineFormModal({
   });
   const tagIssue = resourceTagDraftIssue(form.tags, form.tagInput);
   return (
-    <Modal title={machine ? "编辑机器" : "新增机器"} onClose={onClose} wide>
+    <Modal title={machine ? tr("编辑机器") : tr("新增机器")} onClose={onClose} wide>
       <div className="stack-form machine-form">
         <div className="machine-form-primary">
-          <Field label="机器名称">
+          <Field label={tr("机器名称")}>
             <input
               autoFocus
               value={form.name}
               onChange={(event) => setForm({ ...form, name: event.target.value })}
             />
           </Field>
-          <Field label="连接地址">
+          <Field label={tr("连接地址")}>
             <input
               value={form.address}
               onChange={(event) => setForm({ ...form, address: event.target.value })}
-              placeholder="IP 或主机名"
+              placeholder={tr("IP 或主机名")}
             />
           </Field>
         </div>
         <div className="field">
-          <span>标签</span>
+          <span>{tr("标签")}</span>
           <TagEditor
             tags={form.tags}
             input={form.tagInput}
@@ -12801,14 +12789,14 @@ function MachineFormModal({
           )}
         </div>
         <div className="machine-form-public-notes">
-          <Field label="硬件说明（用户可见）">
+          <Field label={tr("硬件说明（用户可见）")}>
             <textarea
               rows={4}
               value={form.hardwareNotes}
               onChange={(event) => setForm({ ...form, hardwareNotes: event.target.value })}
             />
           </Field>
-          <Field label="连接说明（用户可见）">
+          <Field label={tr("连接说明（用户可见）")}>
             <textarea
               rows={4}
               value={form.connectionGuide}
@@ -12818,8 +12806,8 @@ function MachineFormModal({
         </div>
         <label className="field machine-form-management">
           <span className="machine-form-label">
-            <span>管理备注（仅管理员可见）</span>
-            <small><CircleAlert size={12} />请勿填写密码或密钥</small>
+            <span>{tr("管理备注（仅管理员可见）")}</span>
+            <small><CircleAlert size={12} />{tr("请勿填写密码或密钥")}</small>
           </span>
           <textarea
             rows={4}
@@ -12831,8 +12819,7 @@ function MachineFormModal({
         </label>
         <div className="modal-actions machine-form-actions">
           <button type="button" className="secondary-button" onClick={onClose}>
-            取消
-          </button>
+            {tr("取消")}</button>
           <button
             className="primary-button"
             disabled={Boolean(tagIssue)}
@@ -12853,9 +12840,9 @@ function MachineFormModal({
               );
               await onSaved(result.id ?? machine?.id);
             } catch (error) {
-              notify("error", error instanceof Error ? error.message : "保存失败");
+              notify("error", error instanceof Error ? error.message : tr("保存失败"));
             }
-          }}>{machine ? "保存修改" : "创建机器"}</button>
+          }}>{machine ? tr("保存修改") : tr("创建")}</button>
         </div>
       </div>
     </Modal>
@@ -12873,9 +12860,9 @@ type EditableAllocation =
 
 function resourcePoolKindLabel(kind: ResourcePool["kind"]) {
   return {
-    INDEX_RANGE: "编号范围",
-    ITEM_LIST: "设备列表",
-    CAPACITY: "容量"
+    INDEX_RANGE: tr("编号范围"),
+    ITEM_LIST: tr("设备列表"),
+    CAPACITY: tr("容量")
   }[kind];
 }
 
@@ -12970,7 +12957,7 @@ function resourceGroupDraft(group: ResourceGroup): ResourceGroupDraft {
 }
 
 function resourcePoolDraftSummary(pool: ResourcePoolDraft) {
-  const sharingSuffix = pool.sharingMode === "SHARED" ? " · 共享" : "";
+  const sharingSuffix = pool.sharingMode === "SHARED" ? tr(" · 共享") : "";
   if (pool.kind === "INDEX_RANGE") {
     return `${pool.rangeStart}–${pool.rangeEnd} ${pool.unit}${sharingSuffix}`;
   }
@@ -12995,6 +12982,7 @@ function ResourceConfigurationModal({
   onSaved: () => Promise<void>;
   notify: (kind: "success" | "error", message: string) => void;
 }) {
+  const { i18n } = useTranslation();
   const dialog = useAppDialog();
   const [section, setSection] = useState<"POOLS" | "GROUPS">("POOLS");
   const [draftPools, setDraftPools] = useState<ResourcePoolDraft[]>(
@@ -13019,7 +13007,7 @@ function ResourceConfigurationModal({
   const selectedGroup = draftGroups.find((group) => group.id === selectedGroupId);
   const validationIssues = useMemo(
     () => validateResourceConfigurationDraft(draftPools, draftGroups),
-    [draftGroups, draftPools]
+    [draftGroups, draftPools, i18n.resolvedLanguage]
   );
   const issuesForPool = (poolId: string) =>
     validationIssues.filter(
@@ -13158,9 +13146,9 @@ function ResourceConfigurationModal({
     if (
       pool.expectedVersion > 0 &&
       !(await dialog.confirm({
-        title: "删除资源项",
-        message: `保存配置后将永久删除 ${pool.name}。使用该资源项的资源组也需要在本次编辑中调整。`,
-        confirmLabel: "删除资源项",
+        title: tr("删除资源项"),
+        message: tr("保存配置后将永久删除 {{v0}}。使用该资源项的资源组也需要在本次编辑中调整。", { v0: pool.name }),
+        confirmLabel: tr("删除资源项"),
         tone: "danger"
       }))
     ) {
@@ -13287,19 +13275,19 @@ function ResourceConfigurationModal({
           deletedPools
         })
       });
-      notify("success", "资源配置已保存");
+      notify("success", tr("资源配置已保存"));
       await onSaved();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "资源配置保存失败");
+      setSaveError(error instanceof Error ? error.message : tr("资源配置保存失败"));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Modal title={`编辑资源：${machine.name}`} onClose={onClose} large>
+    <Modal title={tr("编辑资源：{{v0}}", { v0: machine.name })} onClose={onClose} large>
       <div className="resource-config-editor">
-        <div className="resource-config-tabs" role="tablist" aria-label="资源编辑内容">
+        <div className="resource-config-tabs" role="tablist" aria-label={tr("资源编辑内容")}>
           <button
             type="button"
             role="tab"
@@ -13307,8 +13295,7 @@ function ResourceConfigurationModal({
             className={section === "POOLS" ? "active" : ""}
             onClick={() => setSection("POOLS")}
           >
-            资源配置
-          </button>
+            {tr("资源配置")}</button>
           <button
             type="button"
             role="tab"
@@ -13316,8 +13303,7 @@ function ResourceConfigurationModal({
             className={section === "GROUPS" ? "active" : ""}
             onClick={() => setSection("GROUPS")}
           >
-            资源组
-          </button>
+            {tr("资源组")}</button>
         </div>
 
         <div className="resource-config-workspace">
@@ -13328,7 +13314,7 @@ function ResourceConfigurationModal({
               onClick={section === "POOLS" ? addPool : addGroup}
             >
               <Plus size={14} />
-              {section === "POOLS" ? "新增资源项" : "新增资源组"}
+              {tr("新建")}
             </button>
             <div
               onDragLeave={(event) => {
@@ -13348,7 +13334,7 @@ function ResourceConfigurationModal({
                   : selectedGroupId === item.id;
                 const secondary = "kind" in item
                   ? resourcePoolDraftSummary(item)
-                  : `${item.allocations.length} 项资源`;
+                  : tr("{{v0}} 项资源", { v0: item.allocations.length });
                 const issueCount = section === "POOLS"
                   ? issuesForPool(item.id).length
                   : issuesForGroup(item.id).length;
@@ -13369,7 +13355,7 @@ function ResourceConfigurationModal({
                         : ""
                     ].filter(Boolean).join(" ")}
                     draggable
-                    title="拖动调整顺序；也可以按 Alt + 上下方向键"
+                    title={tr("拖动调整顺序；也可以按 Alt + 上下方向键")}
                     onDragStart={(event) => {
                       setDraggingItemId(item.id);
                       event.dataTransfer.effectAllowed = "move";
@@ -13425,14 +13411,13 @@ function ResourceConfigurationModal({
                   >
                     <span className="resource-config-list-name">
                       <GripVertical size={13} aria-hidden="true" />
-                      <strong>{item.name || "未命名"}</strong>
+                      <strong>{item.name || tr("未命名")}</strong>
                     </span>
                     <small>{secondary}</small>
                     {issueCount > 0 && (
                       <span className="resource-config-error-count">
                         <i />
-                        {issueCount} 个问题
-                      </span>
+                        {issueCount} {tr("个问题")}</span>
                     )}
                   </button>
                 );
@@ -13444,12 +13429,11 @@ function ResourceConfigurationModal({
             {section === "POOLS" && selectedPool ? (
               <>
                 <div className="resource-config-form-head">
-                  <strong>{selectedPool.name || "新资源项"}</strong>
+                  <strong>{selectedPool.name || tr("新资源项")}</strong>
                   <div>
                     {issuesForPool(selectedPool.id).length > 0 && (
                       <span className="resource-config-conflict-chip">
-                        {issuesForPool(selectedPool.id).length} 个问题
-                      </span>
+                        {issuesForPool(selectedPool.id).length} {tr("个问题")}</span>
                     )}
                     <button
                       type="button"
@@ -13458,13 +13442,13 @@ function ResourceConfigurationModal({
                     >
                       <Trash2 size={14} />
                       {selectedPool.expectedVersion === 0
-                        ? "删除草稿"
-                        : "删除资源项"}
+                        ? tr("删除草稿")
+                        : tr("删除资源项")}
                     </button>
                   </div>
                 </div>
                 <div className="two-fields">
-                  <Field label="资源项名称">
+                  <Field label={tr("资源项名称")}>
                     <input
                       className={
                         hasPoolFieldIssue(selectedPool.id, "name")
@@ -13480,7 +13464,7 @@ function ResourceConfigurationModal({
                         }))}
                     />
                   </Field>
-                  <Field label="分配方式">
+                  <Field label={tr("分配方式")}>
                     <select
                       value={selectedPool.kind}
                       disabled={selectedPool.expectedVersion > 0}
@@ -13508,14 +13492,14 @@ function ResourceConfigurationModal({
                         );
                       }}
                     >
-                      <option value="INDEX_RANGE">编号范围</option>
-                      <option value="ITEM_LIST">设备列表</option>
-                      <option value="CAPACITY">容量</option>
+                      <option value="INDEX_RANGE">{tr("编号范围")}</option>
+                      <option value="ITEM_LIST">{tr("设备列表")}</option>
+                      <option value="CAPACITY">{tr("容量")}</option>
                     </select>
                   </Field>
                 </div>
                 <div className="two-fields">
-                  <Field label="单位">
+                  <Field label={tr("单位")}>
                     <input
                       className={
                         hasPoolFieldIssue(selectedPool.id, "unit")
@@ -13531,7 +13515,7 @@ function ResourceConfigurationModal({
                         }))}
                     />
                   </Field>
-                  <Field label="使用方式">
+                  <Field label={tr("使用方式")}>
                     <select
                       value={selectedPool.sharingMode}
                       onChange={(event) => {
@@ -13562,14 +13546,14 @@ function ResourceConfigurationModal({
                         }
                       }}
                     >
-                      <option value="EXCLUSIVE">独占分配</option>
-                      <option value="SHARED">共享使用</option>
+                      <option value="EXCLUSIVE">{tr("独占分配")}</option>
+                      <option value="SHARED">{tr("共享使用")}</option>
                     </select>
                   </Field>
                 </div>
                 {selectedPool.kind === "INDEX_RANGE" && (
                   <div className="two-fields">
-                    <Field label="起始编号">
+                    <Field label={tr("起始编号")}>
                       <input
                         type="number"
                         className={
@@ -13589,7 +13573,7 @@ function ResourceConfigurationModal({
                           }))}
                       />
                     </Field>
-                    <Field label="结束编号（包含）">
+                    <Field label={tr("结束编号（包含）")}>
                       <input
                         type="number"
                         className={
@@ -13612,7 +13596,7 @@ function ResourceConfigurationModal({
                   </div>
                 )}
                 {selectedPool.kind === "CAPACITY" && (
-                  <Field label={`总容量${selectedPool.unit ? `（${selectedPool.unit}）` : ""}`}>
+                  <Field label={tr("总容量{{v0}}", { v0: selectedPool.unit ? `（${selectedPool.unit}）` : "" })}>
                     <input
                       type="number"
                       step="0.001"
@@ -13643,11 +13627,11 @@ function ResourceConfigurationModal({
                         : ""
                     ].filter(Boolean).join(" ")}
                   >
-                    <div className="section-label"><span>设备</span></div>
+                    <div className="section-label"><span>{tr("设备")}</span></div>
                     {selectedPool.items.map((item, index) => (
                       <div className="resource-item-row" key={item.id}>
                         <input
-                          aria-label={`设备 ${index + 1} 标识`}
+                          aria-label={tr("设备 {{v0}} 标识", { v0: index + 1 })}
                           value={item.key}
                           onChange={(event) =>
                             updatePool(selectedPool.id, (pool) => ({
@@ -13660,7 +13644,7 @@ function ResourceConfigurationModal({
                             }))}
                         />
                         <input
-                          aria-label={`设备 ${index + 1} 名称`}
+                          aria-label={tr("设备 {{v0}} 名称", { v0: index + 1 })}
                           value={item.label}
                           onChange={(event) =>
                             updatePool(selectedPool.id, (pool) => ({
@@ -13675,7 +13659,7 @@ function ResourceConfigurationModal({
                         <button
                           type="button"
                           className="icon-button tiny danger"
-                          aria-label={`删除设备 ${index + 1}`}
+                          aria-label={tr("删除设备 {{v0}}", { v0: index + 1 })}
                           onClick={() =>
                             updatePool(selectedPool.id, (pool) => ({
                               ...pool,
@@ -13704,11 +13688,10 @@ function ResourceConfigurationModal({
                           ]
                         }))}
                     >
-                      <Plus size={14} />添加设备
-                    </button>
+                      <Plus size={14} />{tr("添加")}</button>
                   </div>
                 )}
-                <Field label="说明">
+                <Field label={tr("说明")}>
                   <textarea
                     rows={3}
                     className={
@@ -13742,12 +13725,11 @@ function ResourceConfigurationModal({
             ) : section === "GROUPS" && selectedGroup ? (
               <>
                 <div className="resource-config-form-head">
-                  <strong>{selectedGroup.name || "新资源组"}</strong>
+                  <strong>{selectedGroup.name || tr("新资源组")}</strong>
                   <div>
                     {issuesForGroup(selectedGroup.id).length > 0 && (
                       <span className="resource-config-conflict-chip">
-                        {issuesForGroup(selectedGroup.id).length} 个问题
-                      </span>
+                        {issuesForGroup(selectedGroup.id).length} {tr("个问题")}</span>
                     )}
                     {selectedGroup.expectedVersion === 0 && (
                       <button
@@ -13755,12 +13737,11 @@ function ResourceConfigurationModal({
                         className="secondary-button compact danger"
                         onClick={() => removeNewGroup(selectedGroup.id)}
                       >
-                        <Trash2 size={14} />删除草稿
-                      </button>
+                        <Trash2 size={14} />{tr("删除草稿")}</button>
                     )}
                   </div>
                 </div>
-                <Field label="资源组名称">
+                <Field label={tr("资源组名称")}>
                   <input
                     className={
                       hasGroupFieldIssue(selectedGroup.id, "name")
@@ -13780,7 +13761,7 @@ function ResourceConfigurationModal({
                   />
                 </Field>
                 <div className="field">
-                  <span>标签</span>
+                  <span>{tr("标签")}</span>
                   <TagEditor
                     tags={selectedGroup.tags}
                     input={selectedGroup.tagInput}
@@ -13794,7 +13775,7 @@ function ResourceConfigurationModal({
                   />
                 </div>
                 <div className="resource-allocation-editor">
-                  <div className="section-label"><span>资源组成</span></div>
+                  <div className="section-label"><span>{tr("资源组成")}</span></div>
                   {draftPools.map((pool) => {
                     const allocation = selectedGroup.allocations.find(
                       (candidate) => candidate.poolId === pool.id
@@ -13819,7 +13800,7 @@ function ResourceConfigurationModal({
                             onChange={() => toggleAllocation(selectedGroup, pool)}
                           />
                           <span>
-                            <strong>{pool.name || "未命名资源项"}</strong>
+                            <strong>{pool.name || tr("未命名资源项")}</strong>
                             <small>
                               {resourcePoolKindLabel(pool.kind)} ·
                               {" "}{resourcePoolDraftSummary(pool)}
@@ -13832,7 +13813,7 @@ function ResourceConfigurationModal({
                             {allocation.ranges.map((range, index) => (
                               <div className="range-allocation-row" key={index}>
                                 <input
-                                  aria-label="起始编号"
+                                  aria-label={tr("起始编号")}
                                   type="number"
                                   value={range.start}
                                   onChange={(event) =>
@@ -13857,7 +13838,7 @@ function ResourceConfigurationModal({
                                 />
                                 <span>—</span>
                                 <input
-                                  aria-label="结束编号"
+                                  aria-label={tr("结束编号")}
                                   type="number"
                                   value={range.end}
                                   onChange={(event) =>
@@ -13881,7 +13862,7 @@ function ResourceConfigurationModal({
                                     )}
                                 />
                                 <input
-                                  aria-label="拓扑标签"
+                                  aria-label={tr("拓扑标签")}
                                   value={range.label}
                                   onChange={(event) =>
                                     updateAllocation(
@@ -13906,7 +13887,7 @@ function ResourceConfigurationModal({
                                 <button
                                   type="button"
                                   className="icon-button tiny danger"
-                                  aria-label={`删除区间 ${index + 1}`}
+                                  aria-label={tr("删除区间 {{v0}}", { v0: index + 1 })}
                                   onClick={() =>
                                     updateAllocation(
                                       selectedGroup.id,
@@ -13948,8 +13929,7 @@ function ResourceConfigurationModal({
                                     : value
                                 )}
                             >
-                              <Plus size={14} />添加区间
-                            </button>
+                              <Plus size={14} />{tr("添加")}</button>
                           </div>
                         )}
                         {allocation?.kind === "ITEM_LIST" &&
@@ -13977,8 +13957,8 @@ function ResourceConfigurationModal({
                                     )}
                                 />
                                 <span>
-                                  <strong>{item.key || "未命名设备"}</strong>
-                                  <small>{item.label || "未填写名称"}</small>
+                                  <strong>{item.key || tr("未命名设备")}</strong>
+                                  <small>{item.label || tr("未填写名称")}</small>
                                 </span>
                               </label>
                             ))}
@@ -13987,7 +13967,7 @@ function ResourceConfigurationModal({
                         {allocation?.kind === "CAPACITY" &&
                           pool.kind === "CAPACITY" &&
                           pool.sharingMode === "EXCLUSIVE" && (
-                          <Field label={`分配数量（${pool.unit || "未填写单位"}）`}>
+                          <Field label={tr("分配数量（{{v0}}）", { v0: pool.unit || "未填写单位" })}>
                             <input
                               type="number"
                               step="0.001"
@@ -14023,7 +14003,7 @@ function ResourceConfigurationModal({
                     );
                   })}
                 </div>
-                <Field label="说明">
+                <Field label={tr("说明")}>
                   <textarea
                     rows={3}
                     className={
@@ -14060,7 +14040,7 @@ function ResourceConfigurationModal({
               </>
             ) : (
               <div className="mini-empty">
-                {section === "POOLS" ? "请新增资源项" : "请新增资源组"}
+                {section === "POOLS" ? tr("请新增资源项") : tr("请新增资源组")}
               </div>
             )}
           </div>
@@ -14070,8 +14050,7 @@ function ResourceConfigurationModal({
           <div className="resource-config-validation-summary" role="status">
             <CircleAlert size={15} />
             <span>
-              当前有 {validationIssues.length} 个问题，请检查红色标记。
-            </span>
+              {tr("当前有")}{validationIssues.length} {tr("个问题，请检查红色标记。")}</span>
           </div>
         )}
         {saveError && (
@@ -14087,15 +14066,14 @@ function ResourceConfigurationModal({
             onClick={onClose}
             disabled={saving}
           >
-            取消
-          </button>
+            {tr("取消")}</button>
           <button
             type="button"
             className="primary-button"
             onClick={() => void save()}
             disabled={saving || validationIssues.length > 0}
           >
-            <BusyButtonContent busy={saving}>保存配置</BusyButtonContent>
+            <BusyButtonContent busy={saving}>{tr("保存配置")}</BusyButtonContent>
           </button>
         </div>
       </div>
@@ -14130,11 +14108,11 @@ function UserAdminPanel({
       await reload();
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        notify("error", "注册信息已被更新，用户列表已刷新。");
+        notify("error", tr("注册信息已被更新，用户列表已刷新。"));
         await reload();
         return;
       }
-      notify("error", error instanceof Error ? error.message : "处理失败");
+      notify("error", error instanceof Error ? error.message : tr("处理失败"));
     }
   };
 
@@ -14160,17 +14138,17 @@ function UserAdminPanel({
         body: "{}"
       });
       const reason = await dialog.prompt({
-        title: "停用账号",
+        title: tr("停用账号"),
         message:
-          `停用 ${preview.user.displayName} 后将结束 ${preview.counts.activeReservations} 条当前占用，并取消 ${preview.counts.futureReservations} 条未来占用。\n` +
-          `该用户在 ${preview.counts.machineMemberships} 台机器中拥有使用权，其中管理 ${preview.counts.machineAdminRoles} 台；这些关系会保留，但停用期间不可使用。` +
+          tr("停用 {{v0}} 后将结束 {{v1}} 条当前占用，并取消 {{v2}} 条未来占用。\n", { v0: preview.user.displayName, v1: preview.counts.activeReservations, v2: preview.counts.futureReservations }) +
+          tr("该用户在 {{v0}} 台机器中拥有使用权，其中管理 {{v1}} 台；这些关系会保留，但停用期间不可使用。", { v0: preview.counts.machineMemberships, v1: preview.counts.machineAdminRoles }) +
           (preview.counts.pendingProfileChanges
-            ? `\n另有 ${preview.counts.pendingProfileChanges} 条资料修改申请将被取消。`
+            ? tr("\n另有 {{v0}} 条资料修改申请将被取消。", { v0: preview.counts.pendingProfileChanges })
             : ""),
-        label: "原因（选填）",
+        label: tr("原因（选填）"),
         multiline: true,
         maxLength: 500,
-        confirmLabel: "确认停用",
+        confirmLabel: tr("确认停用"),
         tone: "danger"
       });
       if (reason === null) return;
@@ -14182,13 +14160,13 @@ function UserAdminPanel({
           reason: reason.trim()
         })
       });
-      notify("success", "账号已停用，相关占用已释放");
+      notify("success", tr("账号已停用，相关占用已释放"));
       await reload();
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         await reload();
       }
-      notify("error", error instanceof Error ? error.message : "更新失败");
+      notify("error", error instanceof Error ? error.message : tr("更新失败"));
     }
   };
   const enableUser = async (user: any) => {
@@ -14197,13 +14175,13 @@ function UserAdminPanel({
         method: "POST",
         body: jsonBody({ expectedVersion: Number(user.version) })
       });
-      notify("success", "账号已重新启用");
+      notify("success", tr("账号已重新启用"));
       await reload();
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         await reload();
       }
-      notify("error", error instanceof Error ? error.message : "更新失败");
+      notify("error", error instanceof Error ? error.message : tr("更新失败"));
     }
   };
   const deleteUser = async (user: any) => {
@@ -14227,19 +14205,19 @@ function UserAdminPanel({
         };
       }>(`/admin/users/${user.id}/deletion-impact`);
       if (impact.user.status !== "DISABLED") {
-        notify("error", "请先停用账号，再进行删除");
+        notify("error", tr("请先停用账号，再进行删除"));
         await reload();
         return;
       }
       const permissionCount =
         impact.counts.machineMemberships + impact.counts.machineAdminRoles;
       if (!(await dialog.confirm({
-        title: "永久删除用户",
+        title: tr("永久删除用户"),
         message:
-          `删除 ${impact.user.displayName} 后无法恢复，用户名、邮箱和工号将被释放。\n` +
-          `将清除 ${permissionCount} 项机器权限、${impact.counts.accessRequests} 条使用权申请和 ${impact.counts.notifications} 条通知。\n` +
-          `将保留 ${impact.counts.reservations} 条占用记录、${impact.counts.feedbackTickets} 条反馈及 ${impact.counts.feedbackActivities} 条反馈活动和 ${impact.counts.auditLogs} 条审计记录，其中用户统一显示为“用户已删除”。`,
-        confirmLabel: "永久删除",
+          tr("删除 {{v0}} 后无法恢复，用户名、邮箱和工号将被释放。\n", { v0: impact.user.displayName }) +
+          tr("将清除 {{v0}} 项机器权限、{{v1}} 条使用权申请和 {{v2}} 条通知。\n", { v0: permissionCount, v1: impact.counts.accessRequests, v2: impact.counts.notifications }) +
+          tr("将保留 {{v0}} 条占用记录、{{v1}} 条反馈及 {{v2}} 条反馈活动和 {{v3}} 条审计记录，其中用户统一显示为“用户已删除”。", { v0: impact.counts.reservations, v1: impact.counts.feedbackTickets, v2: impact.counts.feedbackActivities, v3: impact.counts.auditLogs }),
+        confirmLabel: tr("永久删除"),
         tone: "danger"
       }))) {
         return;
@@ -14248,7 +14226,7 @@ function UserAdminPanel({
         method: "DELETE",
         body: jsonBody({ expectedVersion: impact.user.version })
       });
-      notify("success", "用户已永久删除");
+      notify("success", tr("用户已永久删除"));
       await reload();
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
@@ -14256,7 +14234,7 @@ function UserAdminPanel({
       }
       notify(
         "error",
-        error instanceof Error ? error.message : "删除用户失败"
+        error instanceof Error ? error.message : tr("删除用户失败")
       );
     }
   };
@@ -14269,12 +14247,12 @@ function UserAdminPanel({
     let reason = "";
     if (action === "reject") {
       const enteredReason = await dialog.prompt({
-        title: "不通过资料修改",
-        message: `确认不通过 ${user.displayName} 提交的资料修改？`,
-        label: "原因（选填）",
+        title: tr("不通过资料修改"),
+        message: tr("确认不通过 {{v0}} 提交的资料修改？", { v0: user.displayName }),
+        label: tr("原因（选填）"),
         multiline: true,
         maxLength: 500,
-        confirmLabel: "确认不通过"
+        confirmLabel: tr("确认不通过")
       });
       if (enteredReason === null) return;
       reason = enteredReason.trim();
@@ -14287,18 +14265,18 @@ function UserAdminPanel({
           ...(action === "reject" ? { reason } : {})
         })
       });
-      notify("success", action === "approve" ? "资料修改已通过" : "资料修改未通过");
+      notify("success", action === "approve" ? tr("资料修改已通过") : tr("资料修改未通过"));
       await reload();
     } catch (error) {
       if (
         error instanceof ApiError &&
         error.code === "PROFILE_CHANGE_ALREADY_PROCESSED"
       ) {
-        notify("error", "该资料修改已被处理，申请列表已刷新。");
+        notify("error", tr("该资料修改已被处理，申请列表已刷新。"));
         await reload();
         return;
       }
-      notify("error", error instanceof Error ? error.message : "处理失败");
+      notify("error", error instanceof Error ? error.message : tr("处理失败"));
     }
   };
   const accountUsers = canManage
@@ -14330,25 +14308,25 @@ function UserAdminPanel({
   ) : [];
   return (
     <div className="user-management-page">
-      <PageHeader title="用户管理" />
+      <PageHeader title={tr("用户管理")} />
       <div className="user-management-sections">
         <section className="card panel-card user-list-panel">
           <SectionHeader
-            title="用户列表"
+            title={tr("用户列表")}
             actions={<span className="request-count">{accountUsers.length}</span>}
           />
           <div className="admin-table user-account-table">
             <div className={`admin-table-row user-account-row head${canManage ? "" : " directory"}`}>
-              <span>用户</span><span>工号</span>
+              <span>{tr("用户")}</span><span>{tr("工号")}</span>
               {canManage && (
                 <>
-                  <span>邮箱</span>
-                  <span>最后登录时间</span>
-                  <span>状态</span>
+                  <span>{tr("邮箱")}</span>
+                  <span>{tr("最后登录时间")}</span>
+                  <span>{tr("状态")}</span>
                   <span />
                 </>
               )}
-              {!canManage && <span>状态</span>}
+              {!canManage && <span>{tr("状态")}</span>}
             </div>
             {accountUsers.map((user) => (
               <div
@@ -14363,7 +14341,7 @@ function UserAdminPanel({
                   </span>
                 </div>
                 <strong className="user-account-employee-number">
-                  {user.employeeNumber ?? "暂无工号"}
+                  {user.employeeNumber ?? tr("暂无工号")}
                 </strong>
                 {!canManage && (
                   <span className={`state-chip ${user.status.toLowerCase()}`}>
@@ -14373,12 +14351,12 @@ function UserAdminPanel({
                 {canManage && (
                   <>
                     <span className="user-account-email" title={user.email || undefined}>
-                      {user.email || "未填写邮箱"}
+                      {user.email || tr("未填写邮箱")}
                     </span>
                     <time className="user-account-last-login">
                       {user.lastLoginAt
                         ? formatChinaFullMinute(user.lastLoginAt)
-                        : "从未登录"}
+                        : tr("从未登录")}
                     </time>
                     <span className={`state-chip ${user.status.toLowerCase()}`}>
                       <span
@@ -14386,8 +14364,8 @@ function UserAdminPanel({
                           user.status === "DISABLED"
                             ? [
                                 user.disabledAt
-                                  ? `停用于 ${formatChinaFullMinute(user.disabledAt)}`
-                                  : "账号已停用",
+                                  ? tr("停用于 {{v0}}", { v0: formatChinaFullMinute(user.disabledAt) })
+                                  : tr("账号已停用"),
                                 user.disableReason || ""
                               ].filter(Boolean).join(" · ")
                             : undefined
@@ -14401,8 +14379,8 @@ function UserAdminPanel({
                         <button
                           type="button"
                           className="icon-button tiny list-icon-action danger"
-                          title="停用账号"
-                          aria-label={`停用 ${user.displayName} 并释放相关占用`}
+                          title={tr("停用账号")}
+                          aria-label={tr("停用 {{v0}} 并释放相关占用", { v0: user.displayName })}
                           onClick={() => void disableUser(user)}
                         >
                           <UserX size={14} />
@@ -14413,8 +14391,8 @@ function UserAdminPanel({
                           <button
                             type="button"
                             className="icon-button tiny list-icon-action approve"
-                            title="重新启用"
-                            aria-label={`重新启用 ${user.displayName}`}
+                            title={tr("重新启用")}
+                            aria-label={tr("重新启用 {{v0}}", { v0: user.displayName })}
                             onClick={() => void enableUser(user)}
                           >
                             <UserCheck size={14} />
@@ -14423,8 +14401,8 @@ function UserAdminPanel({
                             <button
                               type="button"
                               className="icon-button tiny list-icon-action danger destructive"
-                              title="永久删除用户"
-                              aria-label={`永久删除 ${user.displayName}`}
+                              title={tr("永久删除用户")}
+                              aria-label={tr("永久删除 {{v0}}", { v0: user.displayName })}
                               onClick={() => void deleteUser(user)}
                             >
                               <Trash2 size={14} />
@@ -14437,8 +14415,8 @@ function UserAdminPanel({
                         <button
                           type="button"
                           className="icon-button tiny list-icon-action"
-                          title="生成重置链接"
-                          aria-label={`为 ${user.displayName} 生成密码重置链接`}
+                          title={tr("生成重置链接")}
+                          aria-label={tr("为 {{v0}} 生成密码重置链接", { v0: user.displayName })}
                           onClick={async () => {
                             try {
                               const result = await api<{
@@ -14460,7 +14438,7 @@ function UserAdminPanel({
                                 "error",
                                 error instanceof Error
                                   ? error.message
-                                  : "重置链接生成失败"
+                                  : tr("重置链接生成失败")
                               );
                             }
                           }}
@@ -14473,20 +14451,20 @@ function UserAdminPanel({
                 )}
               </div>
             ))}
-            {!accountUsers.length && <div className="mini-empty">暂无正式用户</div>}
+            {!accountUsers.length && <div className="mini-empty">{tr("暂无正式用户")}</div>}
           </div>
         </section>
 
         {applications.length > 0 && (
         <section className="card panel-card user-application-panel">
           <SectionHeader
-            title="申请列表"
+            title={tr("申请列表")}
             actions={<span className="request-count">{applications.length}</span>}
           />
           <div className="user-application-list">
             <div className="user-application-row head">
-              <span>申请人</span><span>工号</span><span>邮箱</span>
-              <span>提交时间</span><span>状态</span><span />
+              <span>{tr("申请人")}</span><span>{tr("工号")}</span><span>{tr("邮箱")}</span>
+              <span>{tr("提交时间")}</span><span>{tr("状态")}</span><span />
             </div>
             {applications.map((application) => {
               const user = application.user;
@@ -14503,30 +14481,30 @@ function UserAdminPanel({
                       <small className="application-user-meta">
                         <span>
                           {!isRegistration && profileRequest.displayName !== user.displayName
-                            ? `原姓名：${user.displayName} · @${user.username}`
+                            ? tr("原姓名：{{v0}} · @{{v1}}", { v0: user.displayName, v1: user.username })
                             : `@${user.username}`}
                         </span>
                         {isRegistration && (
-                          <span className="application-new-user-tag">新用户</span>
+                          <span className="application-new-user-tag">{tr("新用户")}</span>
                         )}
                       </small>
                     </span>
                   </div>
                   {!isRegistration && profileRequest.employeeNumber !== user.employeeNumber ? (
                     <div className="application-field-change">
-                      <del>{user.employeeNumber || "无"}</del>
+                      <del>{user.employeeNumber || tr("无")}</del>
                       <ChevronRight size={13} />
                       <strong>{profileRequest.employeeNumber}</strong>
                     </div>
                   ) : (
                     <strong className="application-employee-number">
                       {isRegistration
-                        ? user.pendingEmployeeNumber ?? user.employeeNumber ?? "未填写"
+                        ? user.pendingEmployeeNumber ?? user.employeeNumber ?? tr("未填写")
                         : profileRequest.employeeNumber}
                     </strong>
                   )}
                   <span className="application-email" title={user.email || undefined}>
-                    {user.email || "未填写邮箱"}
+                    {user.email || tr("未填写邮箱")}
                   </span>
                   <time>{formatChinaFullMinute(application.submittedAt)}</time>
                   <span className={`state-chip ${
@@ -14535,8 +14513,8 @@ function UserAdminPanel({
                       : "pending"
                   }`}>
                     {isRegistration && user.status === "CHANGES_REQUESTED"
-                      ? "待修改"
-                      : "待审核"}
+                      ? tr("待修改")
+                      : tr("待审核")}
                   </span>
                   <div className="row-actions application-actions">
                     {isRegistration && (
@@ -14546,8 +14524,8 @@ function UserAdminPanel({
                             <button
                               type="button"
                               className="icon-button tiny list-icon-action approve"
-                              title="通过注册"
-                              aria-label={`通过 ${user.displayName} 的注册`}
+                              title={tr("通过注册")}
+                              aria-label={tr("通过 {{v0}} 的注册", { v0: user.displayName })}
                               onClick={() => void processRegistration(
                                 () => api(`/admin/users/${user.id}/approve`, {
                                   method: "POST",
@@ -14555,7 +14533,7 @@ function UserAdminPanel({
                                     expectedRevision: Number(user.applicationRevision)
                                   })
                                 }),
-                                "账号已批准"
+                                tr("账号已批准")
                               )}
                             >
                               <Check size={15} />
@@ -14563,16 +14541,16 @@ function UserAdminPanel({
                             <button
                               type="button"
                               className="icon-button tiny list-icon-action danger"
-                              title="不通过，要求修改"
-                              aria-label={`${user.displayName} 的注册不通过，要求修改`}
+                              title={tr("不通过，要求修改")}
+                              aria-label={tr("{{v0}} 的注册不通过，要求修改", { v0: user.displayName })}
                               onClick={async () => {
                                 const reason = await dialog.prompt({
-                                  title: "要求修改注册信息",
-                                  message: `提交后，${user.displayName} 可以更新资料并重新进入审核。`,
-                                  label: "需要修改的内容（选填）",
+                                  title: tr("要求修改注册信息"),
+                                  message: tr("提交后，{{v0}} 可以更新资料并重新进入审核。", { v0: user.displayName }),
+                                  label: tr("需要修改的内容（选填）"),
                                   multiline: true,
                                   maxLength: 500,
-                                  confirmLabel: "发送要求"
+                                  confirmLabel: tr("发送要求")
                                 });
                                 if (reason === null) return;
                                 await processRegistration(
@@ -14583,7 +14561,7 @@ function UserAdminPanel({
                                       reason: reason.trim()
                                     })
                                   }),
-                                  "已要求用户修改注册信息"
+                                  tr("已要求用户修改注册信息")
                                 );
                               }}
                             >
@@ -14599,16 +14577,16 @@ function UserAdminPanel({
                         <button
                           type="button"
                           className="icon-button tiny list-icon-action danger destructive"
-                          title="拒绝注册"
-                          aria-label={`拒绝 ${user.displayName} 的注册`}
+                          title={tr("拒绝注册")}
+                          aria-label={tr("拒绝 {{v0}} 的注册", { v0: user.displayName })}
                           onClick={async () => {
                             const reason = await dialog.prompt({
-                              title: "拒绝注册",
-                              message: "拒绝后将立即释放该用户占用的用户名、邮箱和工号。",
-                              label: "原因（选填）",
+                              title: tr("拒绝注册"),
+                              message: tr("拒绝后将立即释放该用户占用的用户名、邮箱和工号。"),
+                              label: tr("原因（选填）"),
                               multiline: true,
                               maxLength: 500,
-                              confirmLabel: "确认拒绝",
+                              confirmLabel: tr("确认拒绝"),
                               tone: "danger"
                             });
                             if (reason === null) return;
@@ -14620,7 +14598,7 @@ function UserAdminPanel({
                                   reason: reason.trim()
                                 })
                               }),
-                              "注册已拒绝"
+                              tr("注册已拒绝")
                             );
                           }}
                         >
@@ -14633,8 +14611,8 @@ function UserAdminPanel({
                         <button
                           type="button"
                           className="icon-button tiny list-icon-action approve"
-                          title="通过资料修改"
-                          aria-label={`通过 ${user.displayName} 的资料修改`}
+                          title={tr("通过资料修改")}
+                          aria-label={tr("通过 {{v0}} 的资料修改", { v0: user.displayName })}
                           onClick={() => void processProfileChange(user, "approve")}
                         >
                           <Check size={15} />
@@ -14642,8 +14620,8 @@ function UserAdminPanel({
                         <button
                           type="button"
                           className="icon-button tiny list-icon-action danger"
-                          title="不通过资料修改"
-                          aria-label={`不通过 ${user.displayName} 的资料修改`}
+                          title={tr("不通过资料修改")}
+                          aria-label={tr("不通过 {{v0}} 的资料修改", { v0: user.displayName })}
                           onClick={() => void processProfileChange(user, "reject")}
                         >
                           <X size={15} />
@@ -14661,16 +14639,14 @@ function UserAdminPanel({
       </div>
       {canManage && passwordResetLink && (
         <Modal
-          title="密码重置链接"
+          title={tr("密码重置链接")}
           onClose={() => setPasswordResetLink(null)}
         >
           <div className="stack-form profile-edit-form">
             <AuthFeedback tone="warning" anchored={false}>
-              请通过可信渠道将链接转交给
-              {passwordResetLink.displayName}。关闭后无法再次查看。
-            </AuthFeedback>
+              {tr("请通过可信渠道将链接转交给")}{passwordResetLink.displayName}{tr("。关闭后无法再次查看。")}</AuthFeedback>
             <label className="field">
-              <span>重置链接</span>
+              <span>{tr("重置链接")}</span>
               <div className="copy-value-row">
                 <input
                   readOnly
@@ -14683,15 +14659,14 @@ function UserAdminPanel({
                   onClick={async () => {
                     try {
                       await copyTextToClipboard(passwordResetLink.resetUrl);
-                      notify("success", "重置链接已复制");
+                      notify("success", tr("重置链接已复制"));
                     } catch {
-                      notify("error", "复制失败，请手动复制链接");
+                      notify("error", tr("复制失败，请手动复制链接"));
                     }
                   }}
                 >
                   <Copy size={14} />
-                  复制
-                </button>
+                  {tr("复制")}</button>
               </div>
             </label>
             <div className="modal-actions">
@@ -14700,8 +14675,7 @@ function UserAdminPanel({
                 className="primary-button"
                 onClick={() => setPasswordResetLink(null)}
               >
-                完成
-              </button>
+                {tr("完成")}</button>
             </div>
           </div>
         </Modal>
@@ -14731,7 +14705,7 @@ function ReportPanel({
       });
       setReport(await api(`/admin/report?${query}`));
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "统计加载失败");
+      notify("error", error instanceof Error ? error.message : tr("统计加载失败"));
     }
   }, [fromDate, machineId, notify, toDate]);
   useEffect(() => { void load(); }, [load]);
@@ -14739,31 +14713,36 @@ function ReportPanel({
   const exportUrl = `/api/v1/admin/report.csv?${new URLSearchParams({
     from: chinaLocalToIso(`${fromDate}T00:00`),
     to: chinaLocalToIso(`${toDate}T00:00`),
+    locale: currentLocale(),
     ...(machineId ? { machineId } : {})
   })}`;
 
   return (
     <div className="report-page">
       <PageHeader
-        title="使用统计"
-        actions={<a className="secondary-button" href={exportUrl}><Download size={16} />导出 CSV</a>}
+        title={tr("使用统计")}
+        actions={<a className="secondary-button" href={exportUrl}><Download size={16} />{tr("导出 CSV")}</a>}
       />
       <div className="report-filters card">
-        <Field label="开始日期"><input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} /></Field>
-        <Field label="结束日期"><input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} /></Field>
-        <Field label="机器"><select value={machineId} onChange={(e) => setMachineId(e.target.value)}><option value="">全部已授权机器</option>{machines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name}</option>)}</select></Field>
-        <button className="primary-button" onClick={() => void load()}><RefreshCw size={15} />刷新统计</button>
+        <Field label={tr("开始日期")}><input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} /></Field>
+        <Field label={tr("结束日期")}><input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} /></Field>
+        <Field label={tr("机器")}><select value={machineId} onChange={(e) => setMachineId(e.target.value)}><option value="">{tr("全部已授权机器")}</option>{machines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name}</option>)}</select></Field>
+        <button className="primary-button" onClick={() => void load()}><RefreshCw size={15} />{tr("刷新统计")}</button>
       </div>
       {report && (
         <div className="report-results">
           <div className="metric-grid">
-            <MetricCard icon={Gauge} label="资源占用率" value={`${report.summary.utilization}%`} />
-            <MetricCard icon={CalendarDays} label="有效占用" value={`${report.summary.reservationCount} 条`} />
-            <MetricCard icon={Clock3} label="占用时长" value={durationHoursText(report.summary.reservedMinutes)} />
+            <MetricCard icon={Gauge} label={tr("资源占用率")} value={`${report.summary.utilization}%`} />
+            <MetricCard
+              icon={CalendarDays}
+              label={tr("有效占用")}
+              value={new Intl.NumberFormat(currentLocale()).format(report.summary.reservationCount)}
+            />
+            <MetricCard icon={Clock3} label={tr("占用时长")} value={compactHoursText(report.summary.reservedMinutes)} />
           </div>
           <div className="report-layout">
             <section className="card report-card">
-              <SectionHeader title="资源组占用率" leadingIcon={Activity} />
+              <SectionHeader title={tr("资源组占用率")} leadingIcon={Activity} />
               <div className="utilization-list">
                 {report.groups.map((row: any) => (
                   <div key={row.resourceGroupId}>
@@ -14771,16 +14750,16 @@ function ReportPanel({
                     <div className="progress"><span style={{ width: `${Math.min(100, row.utilization)}%` }} /></div>
                   </div>
                 ))}
-                {!report.groups.length && <div className="mini-empty">当前范围内没有资源组</div>}
+                {!report.groups.length && <div className="mini-empty">{tr("当前范围内没有资源组")}</div>}
               </div>
             </section>
             <section className="card report-card">
-              <SectionHeader title="用户占用排行" leadingIcon={Users} />
+              <SectionHeader title={tr("用户占用排行")} leadingIcon={Users} />
               <div className="ranking-list">
                 {report.users.map((row: any, index: number) => (
-                    <div key={`${row.displayName}-${row.employeeNumber ?? index}`}><span className="rank">{index + 1}</span><div><strong>{row.displayName}{row.employeeNumber ? ` · ${row.employeeNumber}` : ""}</strong></div><b>{durationHoursText(row.reservedMinutes)}</b></div>
+                    <div key={`${row.displayName}-${row.employeeNumber ?? index}`}><span className="rank">{index + 1}</span><div><strong>{row.displayName}{row.employeeNumber ? ` · ${row.employeeNumber}` : ""}</strong></div><b>{compactHoursText(row.reservedMinutes)}</b></div>
                 ))}
-                {!report.users.length && <div className="mini-empty">当前范围内没有有效占用</div>}
+                {!report.users.length && <div className="mini-empty">{tr("当前范围内没有有效占用")}</div>}
               </div>
             </section>
           </div>
@@ -14832,7 +14811,7 @@ function AnnouncementAdminPanel({
       setLoadError(false);
     } catch (error) {
       setLoadError(true);
-      notify("error", error instanceof Error ? error.message : "公告加载失败");
+      notify("error", error instanceof Error ? error.message : tr("公告加载失败"));
     } finally {
       setLoaded(true);
     }
@@ -14845,9 +14824,9 @@ function AnnouncementAdminPanel({
 
   const withdraw = async (announcement: SystemAnnouncement) => {
     if (!(await dialog.confirm({
-      title: "撤下系统公告",
-      message: `撤下“${announcement.title}”后，尚未查看的用户将不再收到此公告。`,
-      confirmLabel: "确认撤下",
+      title: tr("撤下系统公告"),
+      message: tr("撤下“{{v0}}”后，尚未查看的用户将不再收到此公告。", { v0: announcement.title }),
+      confirmLabel: tr("确认撤下"),
       tone: "danger"
     }))) return;
     try {
@@ -14855,22 +14834,22 @@ function AnnouncementAdminPanel({
         method: "POST",
         body: jsonBody({ expectedVersion: announcement.version })
       });
-      notify("success", "系统公告已撤下");
+      notify("success", tr("系统公告已撤下"));
       await load();
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) await load();
-      notify("error", error instanceof Error ? error.message : "公告撤下失败");
+      notify("error", error instanceof Error ? error.message : tr("公告撤下失败"));
     }
   };
 
   return (
     <div className="announcement-management-page">
       <PageHeader
-        title="系统公告"
+        title={tr("系统公告")}
         actions={
           <div className="announcement-page-actions">
             <label className="settings-toggle-control announcement-history-toggle">
-              <strong>显示已撤下</strong>
+              <strong>{tr("显示已撤下")}</strong>
               <input
                 type="checkbox"
                 checked={showWithdrawn}
@@ -14883,16 +14862,15 @@ function AnnouncementAdminPanel({
               className="primary-button"
               onClick={() => setEditorState({ mode: "CREATE" })}
             >
-              <Plus size={16} />创建公告
-            </button>
+              <Plus size={16} />{tr("新建")}</button>
           </div>
         }
       />
       {!loaded ? (
-        <div className="card announcement-admin-empty">正在加载系统公告…</div>
+        <div className="card announcement-admin-empty">{tr("正在加载系统公告…")}</div>
       ) : loadError ? (
         <div className="card announcement-load-error" role="alert">
-          <span>系统公告加载失败，当前列表可能不是最新状态</span>
+          <span>{tr("系统公告加载失败，当前列表可能不是最新状态")}</span>
           <button
             type="button"
             className="secondary-button"
@@ -14901,8 +14879,7 @@ function AnnouncementAdminPanel({
               void load();
             }}
           >
-            重试
-          </button>
+            {tr("重试")}</button>
         </div>
       ) : visibleAnnouncements.length ? (
         <div className="announcement-admin-list">
@@ -14911,7 +14888,7 @@ function AnnouncementAdminPanel({
               <header>
                 <div>
                   <span className={`state-chip ${announcement.status === "ACTIVE" ? "active" : ""}`}>
-                    {announcement.status === "ACTIVE" ? "展示中" : "已撤下"}
+                    {announcement.status === "ACTIVE" ? tr("展示中") : tr("已撤下")}
                   </span>
                   <h2>{announcement.title}</h2>
                 </div>
@@ -14923,15 +14900,13 @@ function AnnouncementAdminPanel({
                         className="secondary-button"
                         onClick={() => setEditorState({ mode: "EDIT", announcement })}
                       >
-                        编辑
-                      </button>
+                        {tr("编辑")}</button>
                       <button
                         type="button"
                         className="danger-button"
                         onClick={() => void withdraw(announcement)}
                       >
-                        撤下
-                      </button>
+                        {tr("撤下")}</button>
                     </>
                   ) : (
                     <button
@@ -14939,8 +14914,7 @@ function AnnouncementAdminPanel({
                       className="primary-button"
                       onClick={() => setEditorState({ mode: "REACTIVATE", announcement })}
                     >
-                      重新启用
-                    </button>
+                      {tr("重新启用")}</button>
                   )}
                 </div>
               </header>
@@ -14950,9 +14924,9 @@ function AnnouncementAdminPanel({
               />
               <footer>
                 <span>{announcement.createdByName}</span>
-                <time>发布于 {formatChinaFullMinute(announcement.publishedAt)}</time>
+                <time>{tr("发布于")}{formatChinaFullMinute(announcement.publishedAt)}</time>
                 {announcement.withdrawnAt && (
-                  <span>撤下于 {formatChinaFullMinute(announcement.withdrawnAt)}</span>
+                  <span>{tr("撤下于")}{formatChinaFullMinute(announcement.withdrawnAt)}</span>
                 )}
               </footer>
             </article>
@@ -14961,11 +14935,11 @@ function AnnouncementAdminPanel({
       ) : (
         <EmptyState
           icon={Megaphone}
-          title={announcements.length ? "暂无展示中的公告" : "暂无系统公告"}
+          title={announcements.length ? tr("暂无展示中的公告") : tr("暂无系统公告")}
           text={
             announcements.length
-              ? "打开“显示已撤下”可查看历史公告，或创建一条新公告。"
-              : "创建后，用户下次进入系统时会依次看到公告。"
+              ? tr("打开“显示已撤下”可查看历史公告，或创建一条新公告。")
+              : tr("创建后，用户下次进入系统时会依次看到公告。")
           }
         />
       )}
@@ -15021,16 +14995,16 @@ function AnnouncementEditorModal({
 
   const modalTitle =
     effectiveMode === "CREATE"
-      ? "创建系统公告"
+      ? tr("创建系统公告")
       : effectiveMode === "EDIT"
-        ? "编辑系统公告"
-        : "重新启用系统公告";
+        ? tr("编辑系统公告")
+        : tr("重新启用系统公告");
   const submitLabel =
     effectiveMode === "CREATE"
-      ? "发布公告"
+      ? tr("发布公告")
       : effectiveMode === "EDIT"
-        ? "保存并重新发布"
-        : "重新启用";
+        ? tr("保存并重新发布")
+        : tr("重新启用");
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -15045,7 +15019,7 @@ function AnnouncementEditorModal({
           method: "POST",
           body: jsonBody({ title, bodyMarkdown })
         });
-        await onSaved("系统公告已发布");
+        await onSaved(tr("系统公告已发布"));
       } else if (existing) {
         await api(`/admin/announcements/${existing.id}`, {
           method: "PUT",
@@ -15057,7 +15031,7 @@ function AnnouncementEditorModal({
           })
         });
         await onSaved(
-          effectiveMode === "REACTIVATE" ? "系统公告已重新启用" : "系统公告已更新"
+          effectiveMode === "REACTIVATE" ? tr("系统公告已重新启用") : tr("系统公告已更新")
         );
       }
     } catch (error) {
@@ -15071,19 +15045,19 @@ function AnnouncementEditorModal({
           );
           if (!latest) {
             setConflictLoadFailed(true);
-            setConflictMessage("公告已不存在，请关闭编辑器后刷新列表。");
+            setConflictMessage(tr("公告已不存在，请关闭编辑器后刷新列表。"));
             return;
           }
           setExpectedVersion(latest.version);
           setServerStatus(latest.status);
           setConflictMessage(
             latest.status === "WITHDRAWN"
-              ? "公告已被其他管理员撤下。当前草稿已保留；核对后再次提交将重新启用公告。"
-              : "公告已被其他管理员更新。当前草稿已保留；核对后再次提交将覆盖最新版本。"
+              ? tr("公告已被其他管理员撤下。当前草稿已保留；核对后再次提交将重新启用公告。")
+              : tr("公告已被其他管理员更新。当前草稿已保留；核对后再次提交将覆盖最新版本。")
           );
         } catch {
           setConflictLoadFailed(true);
-          setConflictMessage("公告状态已变化，但最新状态加载失败，请关闭编辑器后重试。");
+          setConflictMessage(tr("公告状态已变化，但最新状态加载失败，请关闭编辑器后重试。"));
         }
         return;
       }
@@ -15096,7 +15070,7 @@ function AnnouncementEditorModal({
         });
         return;
       }
-      notify("error", error instanceof Error ? error.message : "公告保存失败");
+      notify("error", error instanceof Error ? error.message : tr("公告保存失败"));
     } finally {
       setSaving(false);
     }
@@ -15106,7 +15080,7 @@ function AnnouncementEditorModal({
     <Modal title={modalTitle} onClose={onClose} large className="announcement-editor-modal">
       <form className="announcement-create-form" onSubmit={(event) => void submit(event)}>
         <div className="announcement-create-fields">
-          <Field label="公告标题" error={fieldErrors.title}>
+          <Field label={tr("公告标题")} error={fieldErrors.title}>
             <input
               autoFocus
               maxLength={120}
@@ -15117,7 +15091,7 @@ function AnnouncementEditorModal({
               }}
             />
           </Field>
-          <Field label="公告内容" error={fieldErrors.bodyMarkdown}>
+          <Field label={tr("公告内容")} error={fieldErrors.bodyMarkdown}>
             <textarea
               maxLength={10_000}
               value={bodyMarkdown}
@@ -15128,20 +15102,18 @@ function AnnouncementEditorModal({
                   bodyMarkdown: undefined
                 }));
               }}
-              placeholder={"支持 Markdown。外链：[说明](https://example.org)\n站内跳转：[查看资源日历](allocube:/calendar)"}
+              placeholder={tr("支持 Markdown。外链：[说明](https://example.org)\n站内跳转：[查看资源日历](allocube:/calendar)")}
             />
             <small>
-              支持段落、列表、粗体、行内代码和链接；站内链接使用
-              <code>[文字](allocube:/路径)</code>，原始 HTML 和其他协议不会渲染。
-            </small>
+              {tr("支持段落、列表、粗体、行内代码和链接；站内链接使用")}<code>{tr("[文字](allocube:/路径)")}</code>{tr("，原始 HTML 和其他协议不会渲染。")}</small>
           </Field>
         </div>
-        <section className="announcement-preview" aria-label="公告预览">
-          <strong>预览</strong>
+        <section className="announcement-preview" aria-label={tr("公告预览")}>
+          <strong>{tr("预览")}</strong>
           {bodyMarkdown.trim() ? (
             <AnnouncementMarkdown markdown={bodyMarkdown} interactive={false} />
           ) : (
-            <span>输入内容后在这里预览</span>
+            <span>{tr("输入内容后在这里预览")}</span>
           )}
         </section>
         {conflictMessage && (
@@ -15154,13 +15126,13 @@ function AnnouncementEditorModal({
           </AuthFeedback>
         )}
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>取消</button>
+          <button type="button" className="secondary-button" onClick={onClose}>{tr("取消")}</button>
           <button
             type="submit"
             className="primary-button"
             disabled={saving || !title.trim() || !bodyMarkdown.trim()}
           >
-            {saving ? "保存中" : submitLabel}
+            {saving ? tr("保存中") : submitLabel}
           </button>
         </div>
       </form>
@@ -15284,7 +15256,7 @@ function SettingsPanel({
       if (error instanceof ApiError && error.status === 409) {
         await loadAdminSettings();
       }
-      const message = error instanceof Error ? error.message : "更新白名单失败";
+      const message = error instanceof Error ? error.message : tr("更新白名单失败");
       if (showFieldError) setEmailDomainError(message);
       notify("error", message);
       return false;
@@ -15298,19 +15270,19 @@ function SettingsPanel({
     try {
       const domain = normalizeAllowedEmailDomain(emailDomainInput);
       if (allowedEmailDomains.includes(domain)) {
-        setEmailDomainError("该邮箱域名已经在白名单中");
+        setEmailDomainError(tr("该邮箱域名已经在白名单中"));
         return;
       }
       if (allowedEmailDomains.length >= 100) {
-        setEmailDomainError("最多可以配置100个邮箱域名");
+        setEmailDomainError(tr("最多可以配置100个邮箱域名"));
         return;
       }
       const next = [...allowedEmailDomains, domain];
-      if (await updateEmailDomains(next, "邮箱域名已添加", true)) {
+      if (await updateEmailDomains(next, tr("邮箱域名已添加"), true)) {
         setEmailDomainInput("");
       }
     } catch {
-      setEmailDomainError(EMAIL_DOMAIN_MESSAGE);
+      setEmailDomainError(tr(EMAIL_DOMAIN_MESSAGE));
     }
   };
 
@@ -15318,7 +15290,7 @@ function SettingsPanel({
     if (savingEmailDomains) return;
     await updateEmailDomains(
       allowedEmailDomains.filter((item) => item !== domain),
-      "邮箱域名已移除"
+      tr("邮箱域名已移除")
     );
   };
 
@@ -15342,12 +15314,12 @@ function SettingsPanel({
         maxBookingMinutes: result.settings.maxBookingMinutes,
         advanceDays: result.settings.advanceDays
       });
-      notify("success", "全局占用规则已更新");
+      notify("success", tr("全局占用规则已更新"));
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         await loadAdminSettings();
       }
-      notify("error", error instanceof Error ? error.message : "保存失败");
+      notify("error", error instanceof Error ? error.message : tr("保存失败"));
     } finally {
       setSavingBooking(false);
     }
@@ -15359,11 +15331,16 @@ function SettingsPanel({
     const normalizedIcpFiling = icpFilingNumber.trim();
     const normalizedPublicSecurityFiling =
       publicSecurityFilingNumber.trim();
-    const originIssue = siteOriginValidationError(normalizedSiteOrigin);
-    const icpIssue = icpFilingValidationError(normalizedIcpFiling);
-    const publicSecurityIssue = publicSecurityFilingValidationError(
+    const rawOriginIssue = siteOriginValidationError(normalizedSiteOrigin);
+    const rawIcpIssue = icpFilingValidationError(normalizedIcpFiling);
+    const rawPublicSecurityIssue = publicSecurityFilingValidationError(
       normalizedPublicSecurityFiling
     );
+    const originIssue = rawOriginIssue ? trDynamic(rawOriginIssue) : null;
+    const icpIssue = rawIcpIssue ? trDynamic(rawIcpIssue) : null;
+    const publicSecurityIssue = rawPublicSecurityIssue
+      ? trDynamic(rawPublicSecurityIssue)
+      : null;
     setSiteOriginError(originIssue ?? "");
     setIcpFilingError(icpIssue ?? "");
     setPublicSecurityFilingError(publicSecurityIssue ?? "");
@@ -15393,14 +15370,14 @@ function SettingsPanel({
       setSiteOriginError("");
       setIcpFilingError("");
       setPublicSecurityFilingError("");
-      notify("success", "站点信息已更新");
+      notify("success", tr("站点信息已更新"));
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         await loadAdminSettings();
       }
       notify(
         "error",
-        error instanceof Error ? error.message : "保存站点信息失败"
+        error instanceof Error ? error.message : tr("保存站点信息失败")
       );
     } finally {
       setSavingSiteProfile(false);
@@ -15425,7 +15402,7 @@ function SettingsPanel({
       setAdminSettings(result.settings);
       notify(
         "success",
-        allowed ? "已允许注册时不填写邮箱" : "注册时必须填写邮箱"
+        allowed ? tr("已允许注册时不填写邮箱") : tr("注册时必须填写邮箱")
       );
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
@@ -15433,7 +15410,7 @@ function SettingsPanel({
       }
       notify(
         "error",
-        error instanceof Error ? error.message : "注册邮箱规则更新失败"
+        error instanceof Error ? error.message : tr("注册邮箱规则更新失败")
       );
     } finally {
       setTogglingEmptyEmail(false);
@@ -15472,9 +15449,9 @@ function SettingsPanel({
     if (
       !enabled &&
       !(await dialog.confirm({
-        title: "停用邮件服务",
-        message: "停用后，全部尚未发送的邮件都会被取消。",
-        confirmLabel: "确认停用",
+        title: tr("停用邮件服务"),
+        message: tr("停用后，全部尚未发送的邮件都会被取消。"),
+        confirmLabel: tr("确认停用"),
         tone: "danger"
       }))
     ) {
@@ -15505,7 +15482,7 @@ function SettingsPanel({
         ...current,
         enabled: result.settings.enabled
       }));
-      notify("success", enabled ? "邮件服务已启用" : "邮件服务已停用");
+      notify("success", enabled ? tr("邮件服务已启用") : tr("邮件服务已停用"));
     } catch (error) {
       setSmtpForm((current) => ({ ...current, enabled: smtp.enabled }));
       if (error instanceof ApiError && error.status === 409) {
@@ -15518,7 +15495,7 @@ function SettingsPanel({
       }
       notify(
         "error",
-        error instanceof Error ? error.message : "邮件服务状态更新失败"
+        error instanceof Error ? error.message : tr("邮件服务状态更新失败")
       );
     } finally {
       setTogglingSmtp(false);
@@ -15527,31 +15504,29 @@ function SettingsPanel({
 
   return (
     <div className="settings-management-page">
-      <PageHeader title="系统设置" />
+      <PageHeader title={tr("系统设置")} />
       <div className="settings-page">
       <section className="settings-card card" aria-labelledby="booking-settings-title">
         <SectionHeader
           id="booking-settings-title"
-          title="资源占用规则"
+          title={tr("资源占用规则")}
           leadingIcon={Clock3}
           className="settings-intro"
         />
         <div className="settings-fields">
-          <Field label="最短占用时长（分钟）"><input type="number" min={1} value={bookingForm.minBookingMinutes} onChange={(e) => setBookingForm({ ...bookingForm, minBookingMinutes: Number(e.target.value) })} /><small>自动拆分时，小于该值的时段会被丢弃。</small></Field>
-          <Field label="单次最长时长（分钟）"><input type="number" min={1} value={bookingForm.maxBookingMinutes} onChange={(e) => setBookingForm({ ...bookingForm, maxBookingMinutes: Number(e.target.value) })} /></Field>
-          <Field label="最远可占用天数"><input type="number" min={1} value={bookingForm.advanceDays} onChange={(e) => setBookingForm({ ...bookingForm, advanceDays: Number(e.target.value) })} /><small>以占用结束时间为准。</small></Field>
+          <Field label={tr("最短占用时长（分钟）")}><input type="number" min={1} value={bookingForm.minBookingMinutes} onChange={(e) => setBookingForm({ ...bookingForm, minBookingMinutes: Number(e.target.value) })} /><small>{tr("自动拆分时，小于该值的时段会被丢弃。")}</small></Field>
+          <Field label={tr("单次最长时长（分钟）")}><input type="number" min={1} value={bookingForm.maxBookingMinutes} onChange={(e) => setBookingForm({ ...bookingForm, maxBookingMinutes: Number(e.target.value) })} /></Field>
+          <Field label={tr("最远可占用天数")}><input type="number" min={1} value={bookingForm.advanceDays} onChange={(e) => setBookingForm({ ...bookingForm, advanceDays: Number(e.target.value) })} /><small>{tr("以占用结束时间为准。")}</small></Field>
         </div>
         <div className="settings-card-footer">
           <ContextNotice className="settings-rule-note">
-            保存后仅影响新的占用，不会改变已经确认的占用。
-          </ContextNotice>
+            {tr("保存后仅影响新的占用，不会改变已经确认的占用。")}</ContextNotice>
           <button
             className="primary-button"
             disabled={!adminSettings || savingBooking || !bookingDirty}
             onClick={() => void saveBookingSettings()}
           >
-            保存规则
-          </button>
+            {tr("保存规则")}</button>
         </div>
       </section>
       <section
@@ -15560,7 +15535,7 @@ function SettingsPanel({
       >
         <SectionHeader
           id="site-profile-settings-title"
-          title="站点信息"
+          title={tr("站点信息")}
           leadingIcon={Globe2}
           className="settings-intro"
         />
@@ -15570,7 +15545,7 @@ function SettingsPanel({
               siteOriginError ? " has-error" : ""
             }`}
           >
-            <span>站点地址</span>
+            <span>{tr("站点地址")}</span>
             <input
               name="site-origin"
               placeholder="https://allocube.your-company.com"
@@ -15602,10 +15577,10 @@ function SettingsPanel({
               icpFilingError ? " has-error" : ""
             }`}
           >
-            <span>ICP备案号（选填）</span>
+            <span>{tr("ICP备案号（选填）")}</span>
             <input
               name="icp-filing-number"
-              placeholder="省ICP备12345678号-1"
+              placeholder={tr("省ICP备12345678号-1")}
               maxLength={100}
               value={icpFilingNumber}
               aria-invalid={Boolean(icpFilingError)}
@@ -15632,10 +15607,10 @@ function SettingsPanel({
               publicSecurityFilingError ? " has-error" : ""
             }`}
           >
-            <span>公安备案号（选填）</span>
+            <span>{tr("公安备案号（选填）")}</span>
             <input
               name="public-security-filing-number"
-              placeholder="省公网安备 11000000000000号"
+              placeholder={tr("省公网安备 11000000000000号")}
               maxLength={100}
               value={publicSecurityFilingNumber}
               aria-invalid={Boolean(publicSecurityFilingError)}
@@ -15667,7 +15642,7 @@ function SettingsPanel({
             }
             onClick={() => void saveSiteProfile()}
           >
-            {savingSiteProfile ? "保存中" : "保存站点信息"}
+            {savingSiteProfile ? tr("保存中") : tr("保存站点信息")}
           </button>
         </div>
       </section>
@@ -15679,7 +15654,7 @@ function SettingsPanel({
       >
         <SectionHeader
           id="smtp-settings-title"
-          title="邮件服务"
+          title={tr("邮件服务")}
           leadingIcon={Mail}
           className="settings-intro"
           actions={smtp ? (
@@ -15695,16 +15670,16 @@ function SettingsPanel({
               >
                 {togglingSmtp
                   ? smtpForm.enabled
-                    ? "正在启用"
-                    : "正在停用"
+                    ? tr("正在启用")
+                    : tr("正在停用")
                   : !smtp.enabled
-                    ? "已停用"
+                    ? tr("已停用")
                   : smtp.operational
-                    ? "运行正常"
-                    : "配置不可用"}
+                    ? tr("运行正常")
+                    : tr("配置不可用")}
               </span>
               <label className="settings-toggle-control">
-                <strong>启用邮件服务</strong>
+                <strong>{tr("启用邮件服务")}</strong>
                 <input
                   type="checkbox"
                   checked={smtpForm.enabled}
@@ -15719,11 +15694,11 @@ function SettingsPanel({
         />
         {smtp ? (
           <div className="smtp-settings-body">
-            <div className="smtp-summary" aria-label="邮件服务状态摘要">
-              <div><span>等待发送</span><strong>{smtp.queue.pending}</strong></div>
-              <div><span>发送失败</span><strong>{smtp.queue.failed}</strong></div>
-              <div><span>密码状态</span><strong>{smtp.passwordStatus === "READY" ? "已安全保存" : smtp.passwordStatus === "UNREADABLE" ? "需要重新输入" : "尚未设置"}</strong></div>
-              <div><span>最近测试</span><strong>{smtp.lastTest ? (smtp.lastTest.status === "SUCCESS" ? "成功" : "失败") : "尚未测试"}</strong></div>
+            <div className="smtp-summary" aria-label={tr("邮件服务状态摘要")}>
+              <div><span>{tr("等待发送")}</span><strong>{smtp.queue.pending}</strong></div>
+              <div><span>{tr("失败")}</span><strong>{smtp.queue.failed}</strong></div>
+              <div><span>{tr("密码状态")}</span><strong>{smtp.passwordStatus === "READY" ? tr("已安全保存") : smtp.passwordStatus === "UNREADABLE" ? tr("需要重新输入") : tr("尚未设置")}</strong></div>
+              <div><span>{tr("最近测试")}</span><strong>{smtp.lastTest ? (smtp.lastTest.status === "SUCCESS" ? tr("成功") : tr("失败")) : tr("尚未测试")}</strong></div>
             </div>
             {(smtp.lastTest?.error || smtp.queue.lastError) && (
               <div className="smtp-warning" role="alert">
@@ -15734,17 +15709,17 @@ function SettingsPanel({
             <div className="mail-service-section registration-email-section">
               <div className="mail-service-section-heading">
                 <ShieldCheck size={16} />
-                <strong>注册邮箱</strong>
+                <strong>{tr("注册邮箱")}</strong>
               </div>
               <div className="email-domain-settings">
                 <div className="registration-email-policy">
-                  <span className="registration-email-field-title">邮箱要求</span>
+                  <span className="registration-email-field-title">{tr("邮箱要求")}</span>
                   <div className="registration-email-policy-control">
-                    <strong>允许空邮箱</strong>
+                    <strong>{tr("允许空邮箱")}</strong>
                     <label className="settings-toggle-control">
                       <input
                         type="checkbox"
-                        aria-label="允许空邮箱"
+                        aria-label={tr("允许空邮箱")}
                         checked={Boolean(
                           adminSettings?.allowRegistrationWithoutEmail
                         )}
@@ -15760,8 +15735,7 @@ function SettingsPanel({
                 </div>
                 <div className="registration-email-domains">
                   <label className="registration-email-field-title" htmlFor="allowed-email-domain">
-                    邮箱域名白名单
-                  </label>
+                    {tr("邮箱域名白名单")}</label>
                   <div
                     className={`email-domain-entry${
                       emailDomainError ? " is-invalid" : ""
@@ -15770,7 +15744,7 @@ function SettingsPanel({
                     <input
                       id="allowed-email-domain"
                       name="allowed-email-domain"
-                      aria-label="邮箱域名"
+                      aria-label={tr("邮箱域名")}
                       placeholder="example.com"
                       value={emailDomainInput}
                       aria-invalid={Boolean(emailDomainError)}
@@ -15798,7 +15772,7 @@ function SettingsPanel({
                       disabled={!emailDomainInput.trim() || savingEmailDomains}
                       onClick={() => void appendEmailDomain()}
                     >
-                      {savingEmailDomains ? "处理中" : "添加"}
+                      {savingEmailDomains ? tr("处理中") : tr("添加")}
                     </button>
                   </div>
                   {emailDomainError && (
@@ -15811,14 +15785,14 @@ function SettingsPanel({
                     </div>
                   )}
                   {allowedEmailDomains.length > 0 && (
-                    <div className="email-domain-list" aria-label="邮箱域名白名单">
+                    <div className="email-domain-list" aria-label={tr("邮箱域名白名单")}>
                       {allowedEmailDomains.map((domain) => (
                         <span className="email-domain-token" key={domain}>
                           <span>{domain}</span>
                           <button
                             type="button"
                             disabled={savingEmailDomains}
-                            aria-label={`移除邮箱域名 ${domain}`}
+                            aria-label={tr("移除邮箱域名 {{v0}}", { v0: domain })}
                             onClick={() => void removeEmailDomain(domain)}
                           >
                             <X size={12} />
@@ -15833,11 +15807,11 @@ function SettingsPanel({
             <div className="mail-service-section smtp-configuration-section">
               <div className="mail-service-section-heading">
                 <Settings size={16} />
-                <strong>发送配置</strong>
+                <strong>{tr("发送配置")}</strong>
               </div>
               <div className="smtp-form-grid">
               <div className="smtp-connection-fields">
-                <Field label="SMTP 服务器">
+                <Field label={tr("SMTP 服务器")}>
                   <input
                     name="smtp-host"
                     value={smtpForm.host}
@@ -15847,7 +15821,7 @@ function SettingsPanel({
                   />
                 </Field>
                 <div className="smtp-connection-options">
-                  <Field label="端口">
+                  <Field label={tr("端口")}>
                     <input
                       name="smtp-port"
                       type="number"
@@ -15859,7 +15833,7 @@ function SettingsPanel({
                       }
                     />
                   </Field>
-                  <Field label="连接加密">
+                  <Field label={tr("连接加密")}>
                     <select
                       name="smtp-security"
                       value={smtpForm.security}
@@ -15877,7 +15851,7 @@ function SettingsPanel({
                 </div>
               </div>
               <div className="smtp-paired-fields">
-                <Field label="SMTP 登录账号">
+                <Field label={tr("SMTP 登录账号")}>
                   <input
                     name="smtp-username"
                     autoComplete="off"
@@ -15888,7 +15862,7 @@ function SettingsPanel({
                   />
                 </Field>
                 <PasswordField
-                  label="SMTP 密码"
+                  label={tr("SMTP 密码")}
                   name="smtp-password"
                   autoComplete="new-password"
                   value={smtpPassword}
@@ -15896,15 +15870,15 @@ function SettingsPanel({
                   onChange={(event) => setSmtpPassword(event.target.value)}
                   placeholder={
                     smtp.passwordStatus === "UNREADABLE"
-                      ? "请重新输入密码"
+                      ? tr("请重新输入密码")
                       : smtp.hasPassword && !clearPassword
-                        ? "已保存密码"
+                        ? tr("已保存密码")
                         : ""
                   }
                 />
               </div>
               <div className="smtp-paired-fields">
-                <Field label="发件人名称">
+                <Field label={tr("发件人名称")}>
                   <input
                     name="smtp-from-name"
                     value={smtpForm.fromName}
@@ -15913,7 +15887,7 @@ function SettingsPanel({
                     }
                   />
                 </Field>
-                <Field label="发件邮箱">
+                <Field label={tr("发件邮箱")}>
                   <input
                     name="smtp-from-address"
                     type="email"
@@ -15927,23 +15901,23 @@ function SettingsPanel({
               </div>
               <div className="smtp-test">
               <div className="smtp-test-copy">
-                <strong>发送测试邮件</strong>
+                <strong>{tr("发送测试邮件")}</strong>
               </div>
               <div
                 className="smtp-test-control"
-                title={smtpDirty ? "请先保存当前修改" : undefined}
+                title={smtpDirty ? tr("请先保存当前修改") : undefined}
               >
                 <input
                   type="email"
                   value={testRecipient}
                   onChange={(event) => setTestRecipient(event.target.value)}
-                  aria-label="测试收件地址"
+                  aria-label={tr("测试收件地址")}
                 />
                 <button
                   className="secondary-button async-button smtp-test-button"
                   disabled={smtpDirty || !smtp.testable || !testRecipient || testingSmtp}
                   aria-busy={testingSmtp}
-                  aria-label={smtpDirty ? "发送测试，请先保存当前修改" : "发送测试"}
+                  aria-label={smtpDirty ? tr("发送测试，请先保存当前修改") : tr("发送测试")}
                   onClick={async () => {
                     try {
                       setTestingSmtp(true);
@@ -15952,10 +15926,10 @@ function SettingsPanel({
                         body: jsonBody({ recipient: testRecipient })
                       });
                       await loadSmtp();
-                      notify("success", "测试邮件已发送，请检查收件箱");
+                      notify("success", tr("测试邮件已发送，请检查收件箱"));
                     } catch (error) {
                       await loadSmtp().catch(() => undefined);
-                      notify("error", error instanceof Error ? error.message : "测试邮件发送失败");
+                      notify("error", error instanceof Error ? error.message : tr("测试邮件发送失败"));
                     } finally {
                       setTestingSmtp(false);
                     }
@@ -15966,7 +15940,7 @@ function SettingsPanel({
                       <RefreshCw size={15} className="spin" />
                     </span>
                   ) : (
-                    <span>发送测试</span>
+                    <span>{tr("发送测试")}</span>
                   )}
                 </button>
               </div>
@@ -15982,11 +15956,11 @@ function SettingsPanel({
                       setSmtpPassword("");
                     }}
                   >
-                    {clearPassword ? "保留现有密码" : "清除已保存密码"}
+                    {clearPassword ? tr("保留现有密码") : tr("清除已保存密码")}
                   </button>
                 )}
                 <span className="smtp-updated-at">
-                  更新于 {formatChina(smtp.updatedAt, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}
+                  {tr("更新于")}{formatChina(smtp.updatedAt, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}
                 </span>
               </div>
               <button
@@ -16013,14 +15987,14 @@ function SettingsPanel({
                     notify(
                       "success",
                       smtp.enabled
-                        ? "邮件配置已保存并立即生效"
-                        : "邮件配置已保存"
+                        ? tr("邮件配置已保存并立即生效")
+                        : tr("邮件配置已保存")
                     );
                   } catch (error) {
                     if (error instanceof ApiError && error.status === 409) {
                       await loadSmtp();
                     }
-                    notify("error", error instanceof Error ? error.message : "邮件配置保存失败");
+                    notify("error", error instanceof Error ? error.message : tr("邮件配置保存失败"));
                   } finally {
                     setSavingSmtp(false);
                   }
@@ -16031,14 +16005,14 @@ function SettingsPanel({
                     <RefreshCw size={15} className="spin" />
                   </span>
                 ) : (
-                  <span>保存邮件配置</span>
+                  <span>{tr("保存邮件配置")}</span>
                 )}
               </button>
               </div>
             </div>
           </div>
         ) : (
-          <div className="mini-empty">正在加载邮件配置…</div>
+          <div className="mini-empty">{tr("正在加载邮件配置…")}</div>
         )}
       </section>
       </div>
@@ -16057,7 +16031,7 @@ function AuditPanel({
   }, [notify]);
   return (
     <div className="audit-management-page">
-      <PageHeader title="审计记录" />
+      <PageHeader title={tr("审计记录")} />
       <div className="card audit-list">
         {logs.map((log) => (
           <div className="audit-row" key={log.id}>
@@ -16066,7 +16040,7 @@ function AuditPanel({
             <time>{formatChina(log.createdAt, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}</time>
           </div>
         ))}
-        {!logs.length && <div className="mini-empty">暂无审计记录</div>}
+        {!logs.length && <div className="mini-empty">{tr("暂无审计记录")}</div>}
       </div>
     </div>
   );
@@ -16142,7 +16116,7 @@ function AppActionDialog({
     }
     const normalized = value.trim();
     if (request.options.required && !normalized) {
-      setError(`请输入${request.options.label.replace(/（.*?）/g, "")}`);
+      setError(tr("请输入{{v0}}", { v0: request.options.label.replace(/（.*?）/g, "") }));
       return;
     }
     const validationError = request.options.validate?.(normalized) ?? "";
@@ -16202,13 +16176,13 @@ function AppActionDialog({
             autoFocus={request.kind === "confirm"}
             onClick={() => onClose(request.kind === "confirm" ? false : null)}
           >
-            {options.cancelLabel ?? "取消"}
+            {options.cancelLabel ?? tr("取消")}
           </button>
           <button
             type="submit"
             className={options.tone === "danger" ? "danger-button" : "primary-button"}
           >
-            {options.confirmLabel ?? "确认"}
+            {options.confirmLabel ?? tr("确认")}
           </button>
         </div>
       </form>
@@ -16312,7 +16286,7 @@ function Modal({
       >
         <header>
           <h2 id={headingId}>{title}</h2>
-          <button type="button" className="icon-button" aria-label="关闭" onClick={onClose}>
+          <button type="button" className="icon-button" aria-label={tr("关闭")} onClick={onClose}>
             <X size={18} />
           </button>
         </header>
@@ -16364,8 +16338,7 @@ function CalendarEmptyState({
         onClick={onOpenResourceCatalog}
       >
         <Server size={15} />
-        全部资源
-      </button>
+        {tr("全部资源")}</button>
     </div>
   );
 }

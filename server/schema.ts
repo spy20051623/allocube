@@ -1,4 +1,4 @@
-export const FINAL_SCHEMA_VERSION = 17;
+export const FINAL_SCHEMA_VERSION = 18;
 
 export const FINAL_SCHEMA_SQL = `
   CREATE TABLE schema_migrations (
@@ -456,6 +456,8 @@ export const FINAL_SCHEMA_SQL = `
     type TEXT NOT NULL,
     title TEXT NOT NULL,
     body TEXT NOT NULL,
+    template_key TEXT,
+    template_params_json TEXT,
     link TEXT NOT NULL DEFAULT '',
     entity_type TEXT,
     entity_id TEXT,

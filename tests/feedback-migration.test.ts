@@ -49,13 +49,24 @@ beforeAll(async () => {
 
 describe("反馈数据库迁移", () => {
   it("从版本 16 原地创建反馈结构并保留既有通知", () => {
-    expect(dbModule.db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 17 });
+    expect(dbModule.db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 18 });
     const tables = new Set((dbModule.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map((row) => row.name));
     expect(tables.has("feedback_tickets")).toBe(true);
     expect(tables.has("feedback_activities")).toBe(true);
     expect(tables.has("feedback_attachments")).toBe(true);
     const columns = (dbModule.db.prepare("PRAGMA table_info(notifications)").all() as Array<{ name: string }>).map((row) => row.name);
-    expect(columns).toEqual(expect.arrayContaining(["entity_type", "entity_id"]));
-    expect(dbModule.db.prepare("SELECT title, body FROM notifications WHERE id = 'notice-16'").get()).toEqual({ title: "旧通知", body: "保留" });
+    expect(columns).toEqual(
+      expect.arrayContaining(["entity_type", "entity_id", "template_key", "template_params_json"])
+    );
+    expect(
+      dbModule.db
+        .prepare("SELECT title, body, template_key, template_params_json FROM notifications WHERE id = 'notice-16'")
+        .get()
+    ).toEqual({
+      title: "旧通知",
+      body: "保留",
+      template_key: null,
+      template_params_json: null
+    });
   });
 });

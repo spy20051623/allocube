@@ -667,8 +667,8 @@ export function registerAdminRoutes(
     );
     queueEmail(
       user.email!,
-      "注册审核未通过",
-      escapeHtml(body.reason || "注册审核未通过。")
+      "注册审核未通过 / Registration not approved",
+      `<p>${escapeHtml(body.reason || "注册审核未通过。")}</p><hr /><p>Your Allocube registration was not approved. Contact an administrator for details.</p>`
     );
     addAudit(auth.user.id, "USER_REJECT", "registration_tombstone", id, undefined, {
       expectedRevision: body.expectedRevision,
@@ -3681,7 +3681,9 @@ export function registerAdminRoutes(
     const machineIds = allowedReportMachineIds(auth.user.id, auth.user.role, query.machineId);
     const report = buildReport(machineIds, query.from, query.to);
     const lines = [
-      ["机器", "资源组", "资源组成", "占用分钟", "可用分钟", "占用率"],
+      query.locale === "en"
+        ? ["Machine", "Resource group", "Resources", "Reserved minutes", "Available minutes", "Utilization"]
+        : ["机器", "资源组", "资源组成", "占用分钟", "可用分钟", "占用率"],
       ...report.groups.map((row) => [
         row.machineName,
         row.groupName,
@@ -4430,7 +4432,8 @@ const reportQuery = z
   .object({
     from: z.string().datetime(),
     to: z.string().datetime(),
-    machineId: z.string().uuid().optional()
+    machineId: z.string().uuid().optional(),
+    locale: z.enum(["zh-CN", "en"]).optional().default("zh-CN")
   })
   .refine((value) => value.from < value.to, {
     message: "统计结束时间必须晚于开始时间"

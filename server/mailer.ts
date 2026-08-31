@@ -1,11 +1,15 @@
 import { randomUUID } from "node:crypto";
 import nodemailer from "nodemailer";
+import serverEnglish from "../src/i18n/server-en.json" with { type: "json" };
+import { createSystemMessageCatalog } from "../src/shared/system-message.js";
 import { db, getPublicSiteOrigin, nowIso } from "./db.js";
 import {
   getSavedSmtpSettings,
   getRuntimeSmtpSettings,
   type RuntimeSmtpSettings
 } from "./smtp-settings.js";
+
+const systemMessages = createSystemMessageCatalog(serverEnglish);
 
 let cachedTransporter:
   | {
@@ -41,6 +45,43 @@ const notificationEmailPreference: Partial<
   USER_APPROVAL: "administration_updates",
   PROFILE_CHANGE_REVIEW: "administration_updates"
 };
+
+const notificationEnglishCopy: Record<string, { title: string; body: string }> = {
+  ACCOUNT_STATUS: { title: "Account status updated", body: "Your Allocube account status has changed." },
+  USER_APPROVAL: { title: "Review required", body: "A registration or profile update is awaiting review." },
+  REGISTRATION_SUBMITTED: { title: "Registration submitted", body: "Your registration has been submitted for review." },
+  USERNAME_CHANGED: { title: "Username updated", body: "Your Allocube username has been updated." },
+  PROFILE_CHANGE_REVIEW: { title: "Profile review", body: "A profile update needs review." },
+  PROFILE_CHANGE_SUBMITTED: { title: "Profile update submitted", body: "Your profile update has been submitted for review." },
+  PROFILE_CHANGE_APPROVED: { title: "Profile update approved", body: "Your profile update was approved." },
+  PROFILE_CHANGE_REJECTED: { title: "Profile update rejected", body: "Your profile update was rejected." },
+  MACHINE_ACCESS_REQUEST: { title: "Access request", body: "A machine access request needs review." },
+  MACHINE_ACCESS_GRANTED: { title: "Machine access granted", body: "You now have access to the requested machine." },
+  MACHINE_ACCESS_REJECTED: { title: "Machine access denied", body: "Your machine access request was denied." },
+  MACHINE_ACCESS_REMOVED: { title: "Machine access removed", body: "Your access to a machine has been removed." },
+  MACHINE_ROLE_CHANGED: { title: "Machine role updated", body: "Your machine administrator role has changed." },
+  RESOURCE_UNAVAILABILITY: { title: "Resource availability changed", body: "Maintenance or a disabled resource affects one or more reservations." },
+  RESERVATION_CANCELLED: { title: "Reservation cancelled", body: "One of your reservations has been cancelled." },
+  RESERVATION_RELEASED_BY_MANAGER: { title: "Reservation ended", body: "A machine administrator released one of your reservations." },
+  RESOURCE_GROUP_CHANGED: { title: "Resource group updated", body: "A resource group used by your reservation has changed." },
+  RESOURCE_GROUP_DELETED: { title: "Resource group deleted", body: "A resource group used by your reservation was deleted." },
+  MACHINE_DELETED: { title: "Machine deleted", body: "A machine associated with your reservation was deleted." },
+  AVAILABILITY_WATCH: { title: "Resource available", body: "A watched resource now has an available time window." },
+  FEEDBACK_CREATED: { title: "New feedback", body: "A new feedback ticket was submitted." },
+  FEEDBACK_UPDATED: { title: "Feedback updated", body: "A feedback ticket was updated." },
+  FEEDBACK_WITHDRAWN: { title: "Feedback withdrawn", body: "A feedback ticket was withdrawn." },
+  FEEDBACK_ADMIN_COMMENT: { title: "Administrator replied", body: "An administrator replied to your feedback." },
+  FEEDBACK_USER_COMMENT: { title: "New feedback comment", body: "A user added a comment to a feedback ticket." },
+  FEEDBACK_STATUS_CHANGED: { title: "Feedback status updated", body: "The status of your feedback has changed." },
+  FEEDBACK_LEVEL_CHANGED: { title: "Feedback level updated", body: "The level of your feedback has changed." }
+};
+
+function englishNotification(type: string) {
+  return notificationEnglishCopy[type] ?? {
+    title: "Allocube notification",
+    body: "Something changed in Allocube. Open it to view the details."
+  };
+}
 
 function notificationEmailEnabled(
   type: string,
@@ -165,16 +206,30 @@ export function createNotification(
     | undefined;
   if (!user) return null;
   const id = randomUUID();
+  const titleTemplate = systemMessages.resolve(title);
+  const bodyTemplate = systemMessages.resolve(body);
+  const templateKey = titleTemplate && bodyTemplate
+    ? `SYSTEM_MESSAGE_V1:${titleTemplate.code}:${bodyTemplate.code}`
+    : `TYPE_V1:${type}`;
+  const templateParams = titleTemplate && bodyTemplate
+    ? {
+        title: titleTemplate,
+        body: bodyTemplate
+      }
+    : {};
   db.prepare(
     `INSERT INTO notifications(
-      id, user_id, type, title, body, link, entity_type, entity_id, created_at
-    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      id, user_id, type, title, body, template_key, template_params_json,
+      link, entity_type, entity_id, created_at
+    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     userId,
     type,
     title,
     body,
+    templateKey,
+    JSON.stringify(templateParams),
     safeLink,
     entity?.type ?? null,
     entity?.id ?? null,
@@ -187,13 +242,28 @@ export function createNotification(
         siteOrigin && safeLink
           ? new URL(safeLink, siteOrigin).toString()
           : "";
+      const fallbackEnglish = englishNotification(type);
+      const english = {
+        title: titleTemplate
+          ? systemMessages.translate(titleTemplate.code, titleTemplate.params) ?? fallbackEnglish.title
+          : fallbackEnglish.title,
+        body: bodyTemplate
+          ? systemMessages.translate(bodyTemplate.code, bodyTemplate.params) ?? fallbackEnglish.body
+          : fallbackEnglish.body
+      };
       queueEmail(
         user.email,
-        title,
+        `${title} / ${english.title}`,
         `<div style="font-family:Arial,'Microsoft YaHei',sans-serif;line-height:1.7;color:#1f2937">
+          <p style="color:#64748b">简体中文</p>
           <h2>${escapeHtml(title)}</h2>
           <p>${escapeHtml(body)}</p>
           ${detailUrl ? `<p><a href="${escapeHtml(detailUrl)}">查看详情</a></p>` : ""}
+          <hr style="border:0;border-top:1px solid #e5e7eb;margin:24px 0" />
+          <p style="color:#64748b">English</p>
+          <h2>${escapeHtml(english.title)}</h2>
+          <p>${escapeHtml(english.body)}</p>
+          ${detailUrl ? `<p><a href="${escapeHtml(detailUrl)}">View details</a></p>` : ""}
         </div>`,
         userId
       );
@@ -253,10 +323,12 @@ export async function sendSmtpTest(toEmail: string) {
         address: settings.fromAddress
       },
       to: toEmail,
-      subject: "Allocube 邮件发送测试",
+      subject: "Allocube 邮件发送测试 / Email delivery test",
       html: `<div style="font-family:Arial,'Microsoft YaHei',sans-serif;line-height:1.7;color:#1f2937">
-        <h2>邮件配置正常</h2>
-        <p>这是一封由 Allocube 发送的测试邮件。</p>
+        <p style="color:#64748b">简体中文</p><h2>邮件配置正常</h2>
+        <p>这是一封由 Allocube 发送的测试邮件。</p><hr />
+        <p style="color:#64748b">English</p><h2>Email delivery is working</h2>
+        <p>This is a test email sent by Allocube.</p>
       </div>`
     });
   } catch (error) {

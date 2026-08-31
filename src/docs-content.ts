@@ -1,3 +1,5 @@
+import { currentLocale, tr, type AppLocale } from "./i18n/index";
+import type { TranslationKey } from "./i18n/resources";
 import apiMarkdown from "../docs/manual/api.md?raw";
 import gettingStartedMarkdown from "../docs/manual/getting-started.md?raw";
 import machineAdminMarkdown from "../docs/manual/machine-admin.md?raw";
@@ -6,6 +8,14 @@ import overviewMarkdown from "../docs/manual/README.md?raw";
 import systemAdminMarkdown from "../docs/manual/system-admin.md?raw";
 import troubleshootingMarkdown from "../docs/manual/troubleshooting.md?raw";
 import userGuideMarkdown from "../docs/manual/user-guide.md?raw";
+import apiMarkdownEn from "../docs/manual/en/api.md?raw";
+import gettingStartedMarkdownEn from "../docs/manual/en/getting-started.md?raw";
+import machineAdminMarkdownEn from "../docs/manual/en/machine-admin.md?raw";
+import operationsMarkdownEn from "../docs/manual/en/operations.md?raw";
+import overviewMarkdownEn from "../docs/manual/en/README.md?raw";
+import systemAdminMarkdownEn from "../docs/manual/en/system-admin.md?raw";
+import troubleshootingMarkdownEn from "../docs/manual/en/troubleshooting.md?raw";
+import userGuideMarkdownEn from "../docs/manual/en/user-guide.md?raw";
 import { docsPath, type DocsSlug } from "./docs-routing";
 
 export const DOCS_ALLOW_RAW_HTML = false;
@@ -24,64 +34,74 @@ export type DocsSection = {
   markdown: string;
 };
 
-export const docsSections: readonly DocsSection[] = [
+function createDocsSections(locale: AppLocale): readonly DocsSection[] {
+  const english = locale === "en";
+  const text = (key: TranslationKey) => tr(key, { lng: locale });
+  return [
   {
     slug: "overview",
-    title: "产品介绍",
-    description: "认识 Allocube 的角色、核心概念和能力边界。",
+    title: text("产品介绍"),
+    description: text("认识 Allocube 的角色、核心概念和能力边界。"),
     path: docsPath("overview"),
-    markdown: overviewMarkdown
+    markdown: english ? overviewMarkdownEn : overviewMarkdown
   },
   {
     slug: "getting-started",
-    title: "开始使用",
-    description: "注册、审核、登录、密码找回和首次使用。",
+    title: text("开始使用"),
+    description: text("注册、审核、登录、密码找回和首次使用。"),
     path: docsPath("getting-started"),
-    markdown: gettingStartedMarkdown
+    markdown: english ? gettingStartedMarkdownEn : gettingStartedMarkdown
   },
   {
     slug: "user-guide",
-    title: "普通用户指南",
-    description: "机器使用权、资源浏览、占用管理、通知和用户信息。",
+    title: text("普通用户指南"),
+    description: text("机器使用权、资源浏览、占用管理、通知和用户信息。"),
     path: docsPath("user-guide"),
-    markdown: userGuideMarkdown
+    markdown: english ? userGuideMarkdownEn : userGuideMarkdown
   },
   {
     slug: "machine-admin",
-    title: "机器管理员指南",
-    description: "成员、申请、资源、维护和占用释放。",
+    title: text("机器管理员指南"),
+    description: text("成员、申请、资源、维护和占用释放。"),
     path: docsPath("machine-admin"),
-    markdown: machineAdminMarkdown
+    markdown: english ? machineAdminMarkdownEn : machineAdminMarkdown
   },
   {
     slug: "system-admin",
-    title: "系统管理员指南",
-    description: "用户、机器、系统公告、系统设置、统计和审计。",
+    title: text("系统管理员指南"),
+    description: text("用户、机器、系统公告、系统设置、统计和审计。"),
     path: docsPath("system-admin"),
-    markdown: systemAdminMarkdown
+    markdown: english ? systemAdminMarkdownEn : systemAdminMarkdown
   },
   {
     slug: "operations",
-    title: "部署与运维",
-    description: "初始化、Docker、升级、备份、安全和健康检查。",
+    title: text("部署与运维"),
+    description: text("初始化、Docker、升级、备份、安全和健康检查。"),
     path: docsPath("operations"),
-    markdown: operationsMarkdown
+    markdown: english ? operationsMarkdownEn : operationsMarkdown
   },
   {
     slug: "api",
-    title: "官方 API",
-    description: "个人访问令牌、认证、查询、两阶段写入和兼容策略。",
+    title: text("官方 API"),
+    description: text("个人访问令牌、认证、查询、两阶段写入和兼容策略。"),
     path: docsPath("api"),
-    markdown: apiMarkdown
+    markdown: english ? apiMarkdownEn : apiMarkdown
   },
   {
     slug: "troubleshooting",
-    title: "故障排查",
-    description: "常见提示、部署问题和 API 调用异常。",
+    title: text("故障排查"),
+    description: text("常见提示、部署问题和 API 调用异常。"),
     path: docsPath("troubleshooting"),
-    markdown: troubleshootingMarkdown
+    markdown: english ? troubleshootingMarkdownEn : troubleshootingMarkdown
   }
-];
+  ];
+}
+
+export const docsSections: readonly DocsSection[] = createDocsSections("zh-CN");
+
+export function getDocsSections(locale = currentLocale()) {
+  return createDocsSections(locale);
+}
 
 export const docsSectionBySlug = new Map(
   docsSections.map((section) => [section.slug, section])

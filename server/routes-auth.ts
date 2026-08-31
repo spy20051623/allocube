@@ -421,10 +421,13 @@ export function registerAuthRoutes(app: FastifyInstance) {
       const challenge = createEmailChallenge(email, "REGISTER", null);
       queueEmail(
         email,
-        "Allocube 注册验证码",
-        `<h2>注册验证码</h2><p>你的验证码是：</p>
+        "Allocube 注册验证码 / Registration verification code",
+        `<p style="color:#64748b">简体中文</p><h2>注册验证码</h2><p>你的验证码是：</p>
          <p style="font-size:28px;font-weight:700;letter-spacing:6px">${challenge.code}</p>
-         <p>验证码 10 分钟内有效，请勿转发。</p>`,
+         <p>验证码 10 分钟内有效，请勿转发。</p><hr />
+         <p style="color:#64748b">English</p><h2>Registration verification code</h2><p>Your verification code is:</p>
+         <p style="font-size:28px;font-weight:700;letter-spacing:6px">${challenge.code}</p>
+         <p>The code is valid for 10 minutes. Do not forward it.</p>`,
         null,
         challenge.expiresAt
       );
@@ -1267,10 +1270,13 @@ export function registerAuthRoutes(app: FastifyInstance) {
     const challenge = createEmailChallenge(email, "EMAIL_CHANGE", auth.user.id);
     queueEmail(
       email,
-      "Allocube 邮箱验证码",
-      `<h2>邮箱验证码</h2><p>你的验证码是：</p>
+      "Allocube 邮箱验证码 / Email verification code",
+      `<p style="color:#64748b">简体中文</p><h2>邮箱验证码</h2><p>你的验证码是：</p>
        <p style="font-size:28px;font-weight:700;letter-spacing:6px">${challenge.code}</p>
-       <p>验证码 10 分钟内有效。</p>`,
+       <p>验证码 10 分钟内有效。</p><hr />
+       <p style="color:#64748b">English</p><h2>Email verification code</h2><p>Your verification code is:</p>
+       <p style="font-size:28px;font-weight:700;letter-spacing:6px">${challenge.code}</p>
+       <p>The code is valid for 10 minutes.</p>`,
       auth.user.id,
       challenge.expiresAt
     );
@@ -1475,17 +1481,17 @@ export function registerAuthRoutes(app: FastifyInstance) {
         if (current.email && configAtSubmit.emailEnabled) {
           queueEmail(
             current.email,
-            "Allocube 邮箱已移除",
+            "Allocube 邮箱已移除 / Email removed",
             targetEmail
-              ? "你的账号已绑定新的通知邮箱。"
-              : "此邮箱已从你的 Allocube 账号中移除。"
+              ? "<p>你的账号已绑定新的通知邮箱。</p><hr /><p>Your account is now linked to a new notification email address.</p>"
+              : "<p>此邮箱已从你的 Allocube 账号中移除。</p><hr /><p>This email address has been removed from your Allocube account.</p>"
           );
         }
         if (targetEmail) {
           queueEmail(
             targetEmail,
-            "Allocube 邮箱已变更",
-            "此邮箱现已成为账号的通知和密码找回邮箱。",
+            "Allocube 邮箱已变更 / Email changed",
+            "<p>此邮箱现已成为账号的通知和密码找回邮箱。</p><hr /><p>This address is now used for account notifications and password recovery.</p>",
             auth.user.id
           );
         }
@@ -1556,9 +1562,11 @@ export function registerAuthRoutes(app: FastifyInstance) {
         const token = createAuthToken(row.id, "PASSWORD_RESET", 30);
         queueEmail(
           row.email,
-          "重置 Allocube 密码",
-          `<h2>重置密码</h2><p>链接将在 30 分钟后失效：</p>
-           <p><a href="${escapeHtml(buildPasswordResetUrl(siteOrigin, token))}">设置新密码</a></p>`,
+          "重置 Allocube 密码 / Reset your Allocube password",
+          `<p style="color:#64748b">简体中文</p><h2>重置密码</h2><p>链接将在 30 分钟后失效：</p>
+           <p><a href="${escapeHtml(buildPasswordResetUrl(siteOrigin, token))}">设置新密码</a></p><hr />
+           <p style="color:#64748b">English</p><h2>Reset password</h2><p>This link expires in 30 minutes:</p>
+           <p><a href="${escapeHtml(buildPasswordResetUrl(siteOrigin, token))}">Set a new password</a></p>`,
           row.id,
           new Date(Date.now() + 30 * 60 * 1000).toISOString()
         );

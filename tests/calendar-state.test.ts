@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { setBeijingTimeMode } from "../src/date.js";
 import {
   calendarDraftFieldIssues,
   calendarDraftIssues,
@@ -153,24 +154,29 @@ describe("资源日历状态", () => {
     ).toBe(3);
   });
 
-  it("日视图默认展示十二小时并按北京时间选择窗口", () => {
-    expect(
-      defaultDayWindowStartMinutes(
-        new Date("2026-07-26T05:59:00.000Z").getTime()
-      )
-    ).toBe(9 * 60);
-    expect(
-      defaultDayWindowStartMinutes(
-        new Date("2026-07-26T06:00:00.000Z").getTime()
-      )
-    ).toBe(12 * 60);
-    expect(
-      defaultDayWindowStartMinutes(
-        new Date("2026-07-26T06:00:00.000Z").getTime(),
-        6
-      )
-    ).toBe(15 * 60);
-    expect(defaultDayWindowStartMinutes(Date.now(), 24)).toBe(0);
+  it("日视图默认展示十二小时并按当前显示时区选择窗口", () => {
+    setBeijingTimeMode(true);
+    try {
+      expect(
+        defaultDayWindowStartMinutes(
+          new Date("2026-07-26T05:59:00.000Z").getTime()
+        )
+      ).toBe(9 * 60);
+      expect(
+        defaultDayWindowStartMinutes(
+          new Date("2026-07-26T06:00:00.000Z").getTime()
+        )
+      ).toBe(12 * 60);
+      expect(
+        defaultDayWindowStartMinutes(
+          new Date("2026-07-26T06:00:00.000Z").getTime(),
+          6
+        )
+      ).toBe(15 * 60);
+      expect(defaultDayWindowStartMinutes(Date.now(), 24)).toBe(0);
+    } finally {
+      setBeijingTimeMode(false);
+    }
   });
 
   it("日视图窗口不会滚动到当天范围之外", () => {

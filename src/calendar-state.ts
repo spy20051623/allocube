@@ -1,4 +1,5 @@
 import { tr } from "./i18n/index";
+import { isBeijingTimeMode } from "./date";
 import type {
   ReservationPreviewItem,
   ReservationSegmentInput
@@ -194,7 +195,7 @@ export function defaultDayWindowStartMinutes(
   visibleHours = 12
 ) {
   const hourPart = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Shanghai",
+    ...(isBeijingTimeMode() ? { timeZone: "Asia/Shanghai" } : {}),
     hour: "2-digit",
     hourCycle: "h23"
   })

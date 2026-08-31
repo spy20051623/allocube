@@ -1,10 +1,55 @@
 import { currentLocale, tr } from "./i18n/index";
 const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
+let beijingTimeMode = false;
+
+export function setBeijingTimeMode(enabled: boolean) {
+  beijingTimeMode = enabled;
+}
+
+export function isBeijingTimeMode() {
+  return beijingTimeMode;
+}
+
+export function isUtcPlus8Offset(offsetMinutes: number) {
+  return offsetMinutes === -480;
+}
+
+export function clientUsesUtcPlus8(at: string | number | Date = Date.now()) {
+  const date = new Date(at);
+  return Number.isFinite(date.getTime()) && isUtcPlus8Offset(date.getTimezoneOffset());
+}
+
+function localParts(date: Date) {
+  return [
+    date.getFullYear(),
+    date.getMonth() + 1,
+    date.getDate(),
+    date.getHours(),
+    date.getMinutes()
+  ];
+}
+
+function localDateTime(parts: number[]) {
+  const [year, month, day, hour, minute] = parts;
+  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
+  return localParts(date).every((value, index) => value === parts[index])
+    ? date
+    : null;
+}
 
 export function chinaLocalToIso(value: string) {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
   if (!match) return "";
   const [, year, month, day, hour, minute] = match;
+  if (!beijingTimeMode) {
+    return localDateTime([
+      Number(year),
+      Number(month),
+      Number(day),
+      Number(hour),
+      Number(minute)
+    ])?.toISOString() ?? "";
+  }
   return new Date(
     Date.UTC(
       Number(year),
@@ -17,8 +62,13 @@ export function chinaLocalToIso(value: string) {
 }
 
 export function isoToChinaLocal(value: string) {
-  const time = new Date(value).getTime();
+  const source = new Date(value);
+  const time = source.getTime();
   if (!Number.isFinite(time)) return "";
+  if (!beijingTimeMode) {
+    const [year, month, day, hour, minute] = localParts(source);
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
   return new Date(time + SHANGHAI_OFFSET_MS).toISOString().slice(0, 16);
 }
 
@@ -27,10 +77,11 @@ export function todayChina() {
 }
 
 export function addDays(date: string, days: number) {
-  const base = chinaLocalToIso(`${date}T00:00`);
-  return isoToChinaLocal(
-    new Date(new Date(base).getTime() + days * 24 * 60 * 60 * 1000).toISOString()
-  ).slice(0, 10);
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return date;
+  return new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + days)
+  ).toISOString().slice(0, 10);
 }
 
 export function shiftCalendarMonth(date: string, offset: number) {
@@ -80,6 +131,24 @@ export function calendarWeekdayLabels() {
 }
 
 export function formatChina(
+  value: string,
+  options: Intl.DateTimeFormatOptions = {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }
+) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Intl.DateTimeFormat(currentLocale(), {
+    ...(beijingTimeMode ? { timeZone: "Asia/Shanghai" } : {}),
+    ...options
+  }).format(date);
+}
+
+export function formatBeijing(
   value: string,
   options: Intl.DateTimeFormatOptions = {
     month: "2-digit",
@@ -186,8 +255,10 @@ function englishUnit(value: number, unit: "minute" | "hour", fractionDigits = 0)
 }
 
 export function mondayOf(date: string) {
-  const iso = chinaLocalToIso(`${date}T00:00`);
-  const shifted = new Date(new Date(iso).getTime() + SHANGHAI_OFFSET_MS);
-  const day = shifted.getUTCDay() || 7;
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return date;
+  const day = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  ).getUTCDay() || 7;
   return addDays(date, 1 - day);
 }

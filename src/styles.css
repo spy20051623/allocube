@@ -1255,6 +1255,54 @@ textarea::placeholder {
   font-weight: 650;
 }
 
+.server-clock > i {
+  width: 1px;
+  height: 12px;
+  margin: 0 2px;
+  background: #d5dbe5;
+}
+
+.time-zone-toggle {
+  min-width: 48px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid #d5dce8;
+  border-radius: 999px;
+  color: #5d6b80;
+  background: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.time-zone-toggle:hover {
+  border-color: #aebcda;
+  color: var(--blue);
+  background: #f5f7ff;
+}
+
+.time-zone-toggle.active {
+  border-color: #9caee2;
+  color: #3154ae;
+  background: #eaf0ff;
+  box-shadow: inset 0 0 0 1px rgb(65 98 180 / 8%);
+}
+
+.time-zone-toggle:focus-visible {
+  outline: 2px solid rgb(59 91 179 / 28%);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .time-zone-toggle {
+    transition: none;
+  }
+}
+
 .server-clock.synchronizing {
   color: #8a94a6;
 }

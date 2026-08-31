@@ -182,15 +182,18 @@ import {
   calendarWeekdayLabels,
   chinaDateDayOffset,
   chinaLocalToIso,
+  clientUsesUtcPlus8,
   compactDurationText,
   compactHoursText,
   durationText,
+  formatBeijing,
   formatChina,
   formatChinaDate,
   formatChinaFullMinute,
   isoToChinaLocal,
   minuteDifference,
   mondayOf,
+  setBeijingTimeMode as setDateBeijingTimeMode,
   shiftCalendarMonth,
   todayChina
 } from "./date";
@@ -569,6 +572,12 @@ export function App() {
   const [feedbackUnreadCount, setFeedbackUnreadCount] = useState(0);
   const [feedbackRefreshToken, setFeedbackRefreshToken] = useState(0);
   const [announcementRefreshToken, setAnnouncementRefreshToken] = useState(0);
+  const [beijingTimeMode, setBeijingTimeMode] = useState(false);
+
+  const updateBeijingTimeMode = useCallback((enabled: boolean) => {
+    setDateBeijingTimeMode(enabled);
+    setBeijingTimeMode(enabled);
+  }, []);
 
   const notify = useCallback((kind: "success" | "error", message: string) => {
     setToast({ kind, message });
@@ -784,6 +793,7 @@ export function App() {
       await api("/auth/logout", { method: "POST", body: "{}" });
     } finally {
       setCsrfToken("");
+      updateBeijingTimeMode(false);
       setBootstrap(null);
       setUnreadNotificationCount(0);
       setFeedbackUnreadCount(0);
@@ -837,6 +847,8 @@ export function App() {
               settings={bootstrap.settings}
               notify={notify}
               navigate={navigate}
+              beijingTimeMode={beijingTimeMode}
+              onBeijingTimeModeChange={updateBeijingTimeMode}
             />
           )}
           {visiblePage === "resources" && (
@@ -5499,12 +5511,16 @@ function CalendarPage({
   user,
   settings,
   notify,
-  navigate
+  navigate,
+  beijingTimeMode,
+  onBeijingTimeModeChange
 }: {
   user: AuthUser;
   settings: DashboardBootstrap["settings"];
   notify: (kind: "success" | "error", message: string) => void;
   navigate: (page: Page) => void;
+  beijingTimeMode: boolean;
+  onBeijingTimeModeChange: (enabled: boolean) => void;
 }) {
   const { i18n } = useTranslation();
   const dialog = useAppDialog();
@@ -6938,6 +6954,18 @@ function CalendarPage({
       : connectionState === "CONNECTING"
         ? tr("正在连接")
         : tr("同步已断开");
+  const serverClockIso = new Date(currentTime).toISOString();
+  const showBeijingCompanion =
+    serverClockReady && !beijingTimeMode && !clientUsesUtcPlus8(currentTime);
+  const toggleBeijingTimeMode = () => {
+    const rangeCenter = new Date(
+      (new Date(range.from).getTime() + new Date(range.to).getTime()) / 2
+    ).toISOString();
+    const nextMode = !beijingTimeMode;
+    onBeijingTimeModeChange(nextMode);
+    const nextDate = isoToChinaLocal(rangeCenter).slice(0, 10);
+    if (nextDate && nextDate !== date) changeDate(nextDate);
+  };
 
   return (
     <div className="calendar-layout composer-open">
@@ -6955,7 +6983,7 @@ function CalendarPage({
           <div className="calendar-title-status">
             <div
               className={`server-clock${serverClockReady ? "" : " synchronizing"}`}
-              title={formatChina(new Date(currentTime).toISOString(), {
+              title={formatChina(serverClockIso, {
                 year: "numeric",
                 month: "2-digit",
                 day: "2-digit",
@@ -6969,7 +6997,7 @@ function CalendarPage({
               <span>{tr("服务器时间")}</span>
               <strong>
                 {serverClockReady
-                  ? formatChina(new Date(currentTime).toISOString(), {
+                  ? formatChina(serverClockIso, {
                       hour: "2-digit",
                       minute: "2-digit",
                       second: "2-digit",
@@ -6977,7 +7005,30 @@ function CalendarPage({
                     })
                   : tr("同步中")}
               </strong>
+              {showBeijingCompanion && (
+                <>
+                  <i aria-hidden="true" />
+                  <span>{tr("北京")}</span>
+                  <strong>
+                    {formatBeijing(serverClockIso, {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                      hour12: false
+                    })}
+                  </strong>
+                </>
+              )}
             </div>
+            <button
+              type="button"
+              className={`time-zone-toggle${beijingTimeMode ? " active" : ""}`}
+              aria-pressed={beijingTimeMode}
+              title={beijingTimeMode ? tr("切换为当地时间") : tr("切换为北京时间")}
+              onClick={toggleBeijingTimeMode}
+            >
+              {beijingTimeMode ? tr("北京") : tr("当地")}
+            </button>
             <div className={`live-state ${connectionState.toLowerCase()}${refreshing ? " refreshing" : ""}`}>
               <span />{syncLabel}
             </div>

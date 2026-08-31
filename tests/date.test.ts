@@ -1,22 +1,32 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  addDays,
   calendarMonthDates,
   calendarMonthLabel,
   calendarWeekdayLabels,
   chinaDateDayOffset,
+  chinaLocalToIso,
+  clientUsesUtcPlus8,
   compactDurationText,
   compactHoursText,
   durationHoursText,
   durationText,
+  formatBeijing,
   formatChina,
   formatChinaDate,
   formatChinaFullMinute,
   isoToChinaLocal,
+  isBeijingTimeMode,
+  isUtcPlus8Offset,
+  setBeijingTimeMode,
   shiftCalendarMonth
 } from "../src/date.js";
 import i18n, { initializeI18n } from "../src/i18n/index.js";
 
 describe("北京时间显示", () => {
+  beforeEach(() => setBeijingTimeMode(true));
+  afterEach(() => setBeijingTimeMode(false));
+
   it("完整显示年月日时分", () => {
     expect(durationHoursText(30)).toBe("0.5 小时");
     expect(durationHoursText(120)).toBe("2.0 小时");
@@ -72,5 +82,33 @@ describe("北京时间显示", () => {
     } finally {
       await i18n.changeLanguage("zh-CN");
     }
+  });
+
+  it("默认模式使用客户端系统时区，并可切换为北京时间", () => {
+    setBeijingTimeMode(false);
+    const localDate = new Date(2026, 6, 25, 23, 8, 0, 0);
+    const instant = localDate.toISOString();
+    expect(isBeijingTimeMode()).toBe(false);
+    expect(isoToChinaLocal(instant)).toBe("2026-07-25T23:08");
+    expect(chinaLocalToIso("2026-07-25T23:08")).toBe(instant);
+    expect(clientUsesUtcPlus8(instant)).toBe(
+      localDate.getTimezoneOffset() === -480
+    );
+    expect(isUtcPlus8Offset(-480)).toBe(true);
+    expect(isUtcPlus8Offset(0)).toBe(false);
+    expect(isUtcPlus8Offset(300)).toBe(false);
+
+    setBeijingTimeMode(true);
+    expect(isBeijingTimeMode()).toBe(true);
+    expect(formatBeijing("2026-07-25T15:08:42.000Z", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    })).toContain("23:08");
+  });
+
+  it("日期加减使用日历日而不是固定 24 小时", () => {
+    expect(addDays("2026-03-08", 1)).toBe("2026-03-09");
+    expect(addDays("2026-11-01", 1)).toBe("2026-11-02");
   });
 });

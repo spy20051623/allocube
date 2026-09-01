@@ -7,6 +7,7 @@ import {
 } from "./i18n/index";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "./i18n/LanguageSwitcher";
+import { SelectControl, type SelectControlOption } from "./SelectControl";
 import {
   Activity,
   Bell,
@@ -3928,30 +3929,26 @@ function ApiTokenCreateModal({
             }}
           />
         </Field>
-        <Field label={tr("访问权限")}>
-          <select
-            value={accessLevel}
-            onChange={(event) =>
-              setAccessLevel(event.target.value as "READ_ONLY" | "READ_WRITE")
-            }
-          >
-            <option value="READ_ONLY">{tr("只读：查询资源和本人占用")}</option>
-            <option value="READ_WRITE">{tr("读写：可预检并提交本人占用操作")}</option>
-          </select>
-        </Field>
-        <Field label={tr("有效期")}>
-          <select
-            value={expiry}
-            onChange={(event) =>
-              setExpiry(event.target.value as "NEVER" | "30" | "90" | "365")
-            }
-          >
-            <option value="NEVER">{tr("永不过期")}</option>
-            <option value="30">{tr("30 天")}</option>
-            <option value="90">{tr("90 天")}</option>
-            <option value="365">{tr("365 天")}</option>
-          </select>
-        </Field>
+        <ChoiceField
+          label={tr("访问权限")}
+          value={accessLevel}
+          options={[
+            { value: "READ_ONLY", label: tr("只读：查询资源和本人占用") },
+            { value: "READ_WRITE", label: tr("读写：可预检并提交本人占用操作") }
+          ]}
+          onChange={(value) => setAccessLevel(value as "READ_ONLY" | "READ_WRITE")}
+        />
+        <ChoiceField
+          label={tr("有效期")}
+          value={expiry}
+          options={[
+            { value: "NEVER", label: tr("永不过期") },
+            { value: "30", label: tr("30 天") },
+            { value: "90", label: tr("90 天") },
+            { value: "365", label: tr("365 天") }
+          ]}
+          onChange={(value) => setExpiry(value as "NEVER" | "30" | "90" | "365")}
+        />
         <Field label={tr("当前密码")}>
           <PasswordInput
             autoComplete="current-password"
@@ -7174,20 +7171,22 @@ function CalendarPage({
               </button>
             )}
           </div>
-          <select
-            aria-label={tr("筛选机器")}
+          <SelectControl
             value={selectedMachine}
-            onChange={(event) => {
-              setSelectedMachine(event.target.value);
+            ariaLabel={tr("筛选机器")}
+            compact
+            options={[
+              { value: "", label: tr("全部机器") },
+              ...machineOptions.map((machine) => ({ value: machine.id, label: machine.name }))
+            ]}
+            onChange={(value) => {
+              setSelectedMachine(value);
               writeCalendarPreference({
-                machineId: event.target.value || undefined
+                machineId: value || undefined
               });
-              writeCalendarRoute({ machineId: event.target.value });
+              writeCalendarRoute({ machineId: value });
             }}
-          >
-            <option value="">{tr("全部机器")}</option>
-            {machineOptions.map((machine) => <option key={machine.id} value={machine.id}>{machine.name}</option>)}
-          </select>
+          />
           <button className="secondary-button" disabled={refreshing} onClick={() => void loadTimeline(true)}>
             {refreshing ? <RefreshCw size={16} className="spin" /> : <RefreshCw size={16} />}
             {tr("刷新")}</button>
@@ -8349,31 +8348,19 @@ function CalendarTargetFields({
 }) {
   return (
     <>
-      <Field label={tr("机器")}>
-        <select
-          value={machineId}
-          onChange={(event) => onMachineChange(event.target.value)}
-        >
-          {machines.map((machine) => (
-            <option key={machine.id} value={machine.id}>
-              {machine.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label={tr("资源组")}>
-        <select
-          value={resourceId}
-          disabled={!machineId}
-          onChange={(event) => onResourceChange(event.target.value)}
-        >
-          {resourceOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </Field>
+      <ChoiceField
+        label={tr("机器")}
+        value={machineId}
+        options={machines.map((machine) => ({ value: machine.id, label: machine.name }))}
+        onChange={onMachineChange}
+      />
+      <ChoiceField
+        label={tr("资源组")}
+        value={resourceId}
+        disabled={!machineId}
+        options={resourceOptions.map((option) => ({ value: option.id, label: option.label }))}
+        onChange={onResourceChange}
+      />
     </>
   );
 }
@@ -10231,15 +10218,28 @@ function FeedbackPage({
         }
       />
       <div className="feedback-filter-bar card">
-        <select aria-label={tr("反馈类型")} value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
-          <option value="">{tr("全部类型")}</option>
-          <option value="ISSUE">{tr("问题单")}</option>
-          <option value="REQUIREMENT">{tr("需求单")}</option>
-        </select>
-        <select aria-label={tr("反馈状态")} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-          <option value="">{tr("全部状态")}</option>
-          {Object.entries(feedbackStatusLabels).map(([value, label]) => <option key={value} value={value}>{trDynamic(label)}</option>)}
-        </select>
+        <SelectControl
+          ariaLabel={tr("反馈类型")}
+          value={typeFilter}
+          options={[
+            { value: "", label: tr("全部类型") },
+            { value: "ISSUE", label: tr("问题单") },
+            { value: "REQUIREMENT", label: tr("需求单") }
+          ]}
+          onChange={setTypeFilter}
+        />
+        <SelectControl
+          ariaLabel={tr("反馈状态")}
+          value={statusFilter}
+          options={[
+            { value: "", label: tr("全部状态") },
+            ...Object.entries(feedbackStatusLabels).map(([value, label]) => ({
+              value,
+              label: trDynamic(label)
+            }))
+          ]}
+          onChange={setStatusFilter}
+        />
       </div>
       {loading ? (
         <div className="content-loading"><RefreshCw className="spin" />{tr("正在载入")}</div>
@@ -10395,17 +10395,25 @@ function FeedbackEditorModal({
         <div className="feedback-editor-scroll">
           <div className="feedback-editor-fields">
             <div className="feedback-editor-row">
-              <Field label={tr("类型")}>
-                <select disabled={editing} value={type} onChange={(event) => changeType(event.target.value as FeedbackType)}>
-                  <option value="ISSUE">{tr("问题单")}</option>
-                  <option value="REQUIREMENT">{tr("需求单")}</option>
-                </select>
-              </Field>
-              <Field label={tr("等级")}>
-                <select value={level} onChange={(event) => setLevel(event.target.value as FeedbackLevel)}>
-                  {feedbackLevelsFor(type).map((value) => <option key={value} value={value}>{feedbackLevelLabel(value)}</option>)}
-                </select>
-              </Field>
+              <ChoiceField
+                label={tr("类型")}
+                disabled={editing}
+                value={type}
+                options={[
+                  { value: "ISSUE", label: tr("问题单") },
+                  { value: "REQUIREMENT", label: tr("需求单") }
+                ]}
+                onChange={(value) => changeType(value as FeedbackType)}
+              />
+              <ChoiceField
+                label={tr("等级")}
+                value={level}
+                options={feedbackLevelsFor(type).map((value) => ({
+                  value,
+                  label: feedbackLevelLabel(value)
+                }))}
+                onChange={(value) => setLevel(value as FeedbackLevel)}
+              />
             </div>
             <Field label={tr("标题")}>
               <input autoFocus maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} />
@@ -10598,19 +10606,30 @@ function FeedbackDetailView({
       {admin && ticket.status !== "WITHDRAWN" && (
         <section className="card feedback-admin-actions">
           <div>
-            <Field label={tr("调整等级")}>
-              <select disabled={changing} value={ticket.level} onChange={(event) => void changeLevel(event.target.value as FeedbackLevel)}>
-                {feedbackLevelsFor(ticket.type).map((value) => <option key={value} value={value}>{feedbackLevelLabel(value)}</option>)}
-              </select>
-            </Field>
+            <ChoiceField
+              label={tr("调整等级")}
+              disabled={changing}
+              value={ticket.level}
+              options={feedbackLevelsFor(ticket.type).map((value) => ({
+                value,
+                label: feedbackLevelLabel(value)
+              }))}
+              onChange={(value) => void changeLevel(value as FeedbackLevel)}
+            />
           </div>
           <div className="feedback-status-change">
-            <Field label={tr("变更状态")}>
-              <select disabled={changing} value={nextStatus} onChange={(event) => setNextStatus(event.target.value as FeedbackStatus)}>
-                <option value="">{tr("选择新状态")}</option>
-                {feedbackStatusesFor(ticket.type).filter((value) => value !== ticket.status).map((value) => <option key={value} value={value}>{feedbackStatusLabel(value)}</option>)}
-              </select>
-            </Field>
+            <ChoiceField
+              label={tr("变更状态")}
+              disabled={changing}
+              value={nextStatus}
+              options={[
+                { value: "", label: tr("选择新状态") },
+                ...feedbackStatusesFor(ticket.type)
+                  .filter((value) => value !== ticket.status)
+                  .map((value) => ({ value, label: feedbackStatusLabel(value) }))
+              ]}
+              onChange={(value) => setNextStatus(value as FeedbackStatus)}
+            />
             <Field label={tr("处理说明")}>
               <textarea maxLength={10000} value={processingNote} onChange={(event) => setProcessingNote(event.target.value)} />
             </Field>
@@ -10746,9 +10765,40 @@ function FeedbackAdminPanel({
       <PageHeader title={tr("反馈处理")} />
       <div className="feedback-filter-bar card feedback-admin-filters">
         <label className="feedback-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={tr("搜索编号或标题")} /></label>
-        <select aria-label={tr("类型")} value={type} onChange={(event) => setType(event.target.value)}><option value="">{tr("全部类型")}</option><option value="ISSUE">{tr("问题单")}</option><option value="REQUIREMENT">{tr("需求单")}</option></select>
-        <select aria-label={tr("状态")} value={status} onChange={(event) => setStatus(event.target.value)}><option value="">{tr("全部状态")}</option>{Object.entries(feedbackStatusLabels).map(([value, label]) => <option key={value} value={value}>{trDynamic(label)}</option>)}</select>
-        <select aria-label={tr("等级")} value={level} onChange={(event) => setLevel(event.target.value)}><option value="">{tr("全部等级")}</option>{Object.entries(feedbackLevelLabels).map(([value, label]) => <option key={value} value={value}>{trDynamic(label)}</option>)}</select>
+        <SelectControl
+          ariaLabel={tr("类型")}
+          value={type}
+          options={[
+            { value: "", label: tr("全部类型") },
+            { value: "ISSUE", label: tr("问题单") },
+            { value: "REQUIREMENT", label: tr("需求单") }
+          ]}
+          onChange={setType}
+        />
+        <SelectControl
+          ariaLabel={tr("状态")}
+          value={status}
+          options={[
+            { value: "", label: tr("全部状态") },
+            ...Object.entries(feedbackStatusLabels).map(([value, label]) => ({
+              value,
+              label: trDynamic(label)
+            }))
+          ]}
+          onChange={setStatus}
+        />
+        <SelectControl
+          ariaLabel={tr("等级")}
+          value={level}
+          options={[
+            { value: "", label: tr("全部等级") },
+            ...Object.entries(feedbackLevelLabels).map(([value, label]) => ({
+              value,
+              label: trDynamic(label)
+            }))
+          ]}
+          onChange={setLevel}
+        />
       </div>
       {loading ? <div className="content-loading"><RefreshCw className="spin" />{tr("正在载入")}</div> : tickets.length ? (
         <>
@@ -11924,24 +11974,23 @@ function MaintenanceModal({
       wide
     >
       <div className="stack-form machine-disable-modal">
-        <Field label={tr("维护范围")}>
-          <select
-            value={targetId}
-            onChange={(event) => {
-              setTargetId(event.target.value);
-              setPreview(null);
-            }}
-          >
-            <option value="MACHINE">{tr("整机")}</option>
-            {groups
+        <ChoiceField
+          label={tr("维护范围")}
+          value={targetId}
+          options={[
+            { value: "MACHINE", label: tr("整机") },
+            ...groups
               .filter((group) => group.status === "ACTIVE")
-              .map((group) => (
-                <option key={group.id} value={group.id}>
-                  {tr("资源组 ·")}{group.name}
-                </option>
-              ))}
-          </select>
-        </Field>
+              .map((group) => ({
+                value: group.id,
+                label: `${tr("资源组 ·")}${group.name}`
+              }))
+          ]}
+          onChange={(value) => {
+            setTargetId(value);
+            setPreview(null);
+          }}
+        />
         <div className="machine-disable-time-grid">
           <Field label={tr("开始时间")}>
             <input
@@ -13512,39 +13561,39 @@ function ResourceConfigurationModal({
                         }))}
                     />
                   </Field>
-                  <Field label={tr("分配方式")}>
-                    <select
-                      value={selectedPool.kind}
-                      disabled={selectedPool.expectedVersion > 0}
-                      onChange={(event) => {
-                        const kind = event.target.value as ResourcePool["kind"];
-                        updatePool(selectedPool.id, (pool) => ({
-                          ...pool,
-                          kind,
-                          items: kind === "ITEM_LIST" && !pool.items.length
-                            ? [{
-                                id: createClientId(),
-                                key: "",
-                                label: ""
-                              }]
-                            : pool.items
-                        }));
-                        setDraftGroups((current) =>
-                          current.map((group) => ({
-                            ...group,
-                            allocations: group.allocations.filter(
-                              (allocation) =>
-                                allocation.poolId !== selectedPool.id
-                            )
-                          }))
-                        );
-                      }}
-                    >
-                      <option value="INDEX_RANGE">{tr("编号范围")}</option>
-                      <option value="ITEM_LIST">{tr("设备列表")}</option>
-                      <option value="CAPACITY">{tr("容量")}</option>
-                    </select>
-                  </Field>
+                  <ChoiceField
+                    label={tr("分配方式")}
+                    value={selectedPool.kind}
+                    disabled={selectedPool.expectedVersion > 0}
+                    options={[
+                      { value: "INDEX_RANGE", label: tr("编号范围") },
+                      { value: "ITEM_LIST", label: tr("设备列表") },
+                      { value: "CAPACITY", label: tr("容量") }
+                    ]}
+                    onChange={(value) => {
+                      const kind = value as ResourcePool["kind"];
+                      updatePool(selectedPool.id, (pool) => ({
+                        ...pool,
+                        kind,
+                        items: kind === "ITEM_LIST" && !pool.items.length
+                          ? [{
+                              id: createClientId(),
+                              key: "",
+                              label: ""
+                            }]
+                          : pool.items
+                      }));
+                      setDraftGroups((current) =>
+                        current.map((group) => ({
+                          ...group,
+                          allocations: group.allocations.filter(
+                            (allocation) =>
+                              allocation.poolId !== selectedPool.id
+                          )
+                        }))
+                      );
+                    }}
+                  />
                 </div>
                 <div className="two-fields">
                   <Field label={tr("单位")}>
@@ -13563,41 +13612,40 @@ function ResourceConfigurationModal({
                         }))}
                     />
                   </Field>
-                  <Field label={tr("使用方式")}>
-                    <select
-                      value={selectedPool.sharingMode}
-                      onChange={(event) => {
-                        const sharingMode =
-                          event.target.value as ResourcePool["sharingMode"];
-                        updatePool(selectedPool.id, (pool) => ({
-                          ...pool,
-                          sharingMode
-                        }));
-                        if (
-                          sharingMode === "SHARED" &&
-                          selectedPool.kind === "CAPACITY"
-                        ) {
-                          setDraftGroups((current) =>
-                            current.map((group) => ({
-                              ...group,
-                              allocations: group.allocations.map((allocation) =>
-                                allocation.poolId === selectedPool.id &&
-                                allocation.kind === "CAPACITY"
-                                  ? {
-                                      ...allocation,
-                                      quantity: selectedPool.capacity
-                                    }
-                                  : allocation
-                              )
-                            }))
-                          );
-                        }
-                      }}
-                    >
-                      <option value="EXCLUSIVE">{tr("独占分配")}</option>
-                      <option value="SHARED">{tr("共享使用")}</option>
-                    </select>
-                  </Field>
+                  <ChoiceField
+                    label={tr("使用方式")}
+                    value={selectedPool.sharingMode}
+                    options={[
+                      { value: "EXCLUSIVE", label: tr("独占分配") },
+                      { value: "SHARED", label: tr("共享使用") }
+                    ]}
+                    onChange={(value) => {
+                      const sharingMode = value as ResourcePool["sharingMode"];
+                      updatePool(selectedPool.id, (pool) => ({
+                        ...pool,
+                        sharingMode
+                      }));
+                      if (
+                        sharingMode === "SHARED" &&
+                        selectedPool.kind === "CAPACITY"
+                      ) {
+                        setDraftGroups((current) =>
+                          current.map((group) => ({
+                            ...group,
+                            allocations: group.allocations.map((allocation) =>
+                              allocation.poolId === selectedPool.id &&
+                              allocation.kind === "CAPACITY"
+                                ? {
+                                    ...allocation,
+                                    quantity: selectedPool.capacity
+                                  }
+                                : allocation
+                            )
+                          }))
+                        );
+                      }
+                    }}
+                  />
                 </div>
                 {selectedPool.kind === "INDEX_RANGE" && (
                   <div className="two-fields">
@@ -14774,7 +14822,15 @@ function ReportPanel({
       <div className="report-filters card">
         <Field label={tr("开始日期")}><input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} /></Field>
         <Field label={tr("结束日期")}><input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} /></Field>
-        <Field label={tr("机器")}><select value={machineId} onChange={(e) => setMachineId(e.target.value)}><option value="">{tr("全部已授权机器")}</option>{machines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name}</option>)}</select></Field>
+        <ChoiceField
+          label={tr("机器")}
+          value={machineId}
+          options={[
+            { value: "", label: tr("全部已授权机器") },
+            ...machines.map((machine) => ({ value: machine.id, label: machine.name }))
+          ]}
+          onChange={setMachineId}
+        />
         <button className="primary-button" onClick={() => void load()}><RefreshCw size={15} />{tr("刷新统计")}</button>
       </div>
       {report && (
@@ -15881,21 +15937,21 @@ function SettingsPanel({
                       }
                     />
                   </Field>
-                  <Field label={tr("连接加密")}>
-                    <select
-                      name="smtp-security"
-                      value={smtpForm.security}
-                      onChange={(event) =>
-                        setSmtpForm({
-                          ...smtpForm,
-                          security: event.target.value as "IMPLICIT_TLS" | "STARTTLS"
-                        })
-                      }
-                    >
-                      <option value="IMPLICIT_TLS">SSL/TLS</option>
-                      <option value="STARTTLS">STARTTLS</option>
-                    </select>
-                  </Field>
+                  <ChoiceField
+                    label={tr("连接加密")}
+                    name="smtp-security"
+                    value={smtpForm.security}
+                    options={[
+                      { value: "IMPLICIT_TLS", label: "SSL/TLS" },
+                      { value: "STARTTLS", label: "STARTTLS" }
+                    ]}
+                    onChange={(value) =>
+                      setSmtpForm({
+                        ...smtpForm,
+                        security: value as "IMPLICIT_TLS" | "STARTTLS"
+                      })
+                    }
+                  />
                 </div>
               </div>
               <div className="smtp-paired-fields">
@@ -16235,6 +16291,36 @@ function AppActionDialog({
         </div>
       </form>
     </Modal>
+  );
+}
+
+function ChoiceField({
+  label,
+  value,
+  options,
+  onChange,
+  disabled,
+  name
+}: {
+  label: string;
+  value: string;
+  options: SelectControlOption[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  name?: string;
+}) {
+  return (
+    <div className="field">
+      <span>{label}</span>
+      <SelectControl
+        ariaLabel={label}
+        value={value}
+        options={options}
+        onChange={onChange}
+        disabled={disabled}
+        name={name}
+      />
+    </div>
   );
 }
 

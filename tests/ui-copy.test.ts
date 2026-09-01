@@ -382,8 +382,9 @@ describe("角色化界面文案", () => {
     const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("function CalendarTargetFields");
     expect(source).toContain("<CalendarTargetFields");
-    expect(source).toContain('<Field label="机器">');
-    expect(source).toContain('<Field label="资源组">');
+    expect(source).toContain('label="机器"');
+    expect(source).toContain('label="资源组"');
+    expect(source).toContain("<ChoiceField");
     expect(source).toContain('{ id: "MACHINE", label: "整机" }');
   });
 
@@ -638,8 +639,9 @@ describe("角色化界面文案", () => {
     expect(resourcesPage).not.toContain('title="计划停用"');
     expect(resourcesPage).not.toContain("GroupUnavailabilityModal");
     expect(source).toContain("function ResourceConfigurationModal");
-    expect(source).toContain('<option value="EXCLUSIVE">独占分配</option>');
-    expect(source).toContain('<option value="SHARED">共享使用</option>');
+    expect(source).toContain('{ value: "EXCLUSIVE", label: "独占分配" }');
+    expect(source).toContain('{ value: "SHARED", label: "共享使用" }');
+    expect(source).not.toContain("<select");
     expect(source).toContain('sharingMode: "EXCLUSIVE"');
     expect(source).toContain("deletedPools");
     expect(source).toContain('"删除资源项"');

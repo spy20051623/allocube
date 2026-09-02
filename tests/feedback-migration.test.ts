@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { beforeAll, describe, expect, it } from "vitest";
-import { FINAL_SCHEMA_SQL } from "../server/schema.js";
+import { FINAL_SCHEMA_SQL, FINAL_SCHEMA_VERSION } from "../server/schema.js";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-feedback-migration-"));
 const databasePath = path.join(directory, "version-16.sqlite");
@@ -49,7 +49,7 @@ beforeAll(async () => {
 
 describe("反馈数据库迁移", () => {
   it("从版本 16 原地创建反馈结构并保留既有通知", () => {
-    expect(dbModule.db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 18 });
+    expect(dbModule.db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: FINAL_SCHEMA_VERSION });
     const tables = new Set((dbModule.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map((row) => row.name));
     expect(tables.has("feedback_tickets")).toBe(true);
     expect(tables.has("feedback_activities")).toBe(true);

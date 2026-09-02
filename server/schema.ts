@@ -1,4 +1,4 @@
-export const FINAL_SCHEMA_VERSION = 18;
+export const FINAL_SCHEMA_VERSION = 19;
 
 export const FINAL_SCHEMA_SQL = `
   CREATE TABLE schema_migrations (
@@ -479,6 +479,16 @@ export const FINAL_SCHEMA_SQL = `
     administration_updates INTEGER NOT NULL DEFAULT 1
       CHECK(administration_updates IN (0, 1)),
     updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE admin_request_email_reminders (
+    admin_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    request_kind TEXT NOT NULL
+      CHECK(request_kind IN ('REGISTRATION', 'PROFILE_CHANGE', 'MACHINE_ACCESS')),
+    request_id TEXT NOT NULL,
+    request_version INTEGER NOT NULL CHECK(request_version > 0),
+    queued_at TEXT NOT NULL,
+    PRIMARY KEY(admin_user_id, request_kind, request_id, request_version)
   );
 
   CREATE TABLE email_outbox (

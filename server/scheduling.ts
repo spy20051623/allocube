@@ -857,7 +857,8 @@ export function cancelReservation(
         "RESERVATION_CANCELLED",
         "占用已被管理员取消",
         reason || "机器管理员取消了你的资源占用。",
-        "/reservations"
+        "/reservations",
+        { emailPolicy: "RESERVATION_IMPACT" }
       );
     }
     addAudit(
@@ -948,7 +949,8 @@ export function endReservationEarly(
         "RESERVATION_RELEASED_BY_MANAGER",
         "占用已被管理员释放",
         reason || "机器管理员释放了你的资源占用。",
-        "/reservations"
+        "/reservations",
+        { emailPolicy: "RESERVATION_IMPACT" }
       );
     }
     bumpScheduleRevision();

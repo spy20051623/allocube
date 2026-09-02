@@ -849,4 +849,20 @@ describe("角色化界面文案", () => {
       /\.announcement-management-page,[\s\S]*?\{[^}]*height:\s*100%;[^}]*overflow-y:\s*auto/s
     );
   });
+
+  it("邮件偏好以三项等宽布局展示，并将必要邮件锁定开启", () => {
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const styles = readText(new URL("../src/styles.css", import.meta.url), "utf8");
+    const profile = source.slice(
+      source.indexOf("function AccountProfilePage"),
+      source.indexOf("function UsernameEditModal")
+    );
+    expect(profile).toContain('key: "administrationUpdates"');
+    expect(profile).not.toContain('user.role === "SYSTEM_ADMIN" || bootstrap.managedMachineIds.length');
+    expect(profile).toContain("profile-email-preference-locked");
+    expect(profile).toMatch(/type="checkbox"\s+checked\s+disabled\s+readOnly/s);
+    expect(styles).toMatch(
+      /\.profile-email-preferences-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s
+    );
+  });
 });

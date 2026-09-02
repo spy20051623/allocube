@@ -3291,47 +3291,18 @@ function AccountProfilePage({
   }> = [
     {
       key: "reservationUpdates",
-      label: tr("占用与资源"),
+      label: tr("排期影响"),
       details: [
-        tr("占用取消或调整"),
-        tr("资源组配置更新"),
-        tr("机器或资源组删除")
+        tr("管理员取消或释放占用"),
+        tr("维护、停用或删除影响排期")
       ]
     },
     {
-      key: "machineAccessUpdates",
-      label: tr("机器权限"),
-      details: [
-        tr("机器使用权状态更新"),
-        tr("机器管理员身份更新")
-      ]
-    },
-    {
-      key: "approvalUpdates",
-      label: tr("审核结果"),
-      details: [
-        tr("注册申请提交"),
-        tr("资料修改审核状态更新")
-      ]
+      key: "administrationUpdates",
+      label: tr("超时待办"),
+      details: [tr("超过 15 分钟未处理的审核请求")]
     }
   ];
-  if (user.role === "SYSTEM_ADMIN") {
-    emailPreferenceOptions.push({
-      key: "administrationUpdates",
-      label: tr("管理待办"),
-      details: [
-        tr("新用户注册待审核"),
-        tr("资料修改待审核"),
-        tr("机器使用权待审核")
-      ]
-    });
-  } else {
-    emailPreferenceOptions.push({
-      key: "administrationUpdates",
-      label: tr("管理待办"),
-      details: [tr("所管理机器的使用权待审核")]
-    });
-  }
 
   return (
     <>
@@ -3556,26 +3527,37 @@ function AccountProfilePage({
                 </span>
                 <h2>{tr("邮件通知")}</h2>
               </div>
-              <span
-                className="state-chip active profile-required-email"
-                tabIndex={0}
-                aria-describedby="required-email-detail"
-              >
-                <ShieldCheck size={13} aria-hidden="true" />
-                {tr("安全邮件必收")}<span
-                  id="required-email-detail"
-                  className="profile-required-email-detail"
-                  role="tooltip"
-                >
-                  <ul>
-                    <li>{tr("验证码与密码重置")}</li>
-                    <li>{tr("邮箱或登录信息变更")}</li>
-                    <li>{tr("账号安全状态更新")}</li>
-                  </ul>
-                </span>
-              </span>
             </div>
             <div className="profile-email-preferences-grid">
+                <label
+                  className="profile-email-preference profile-email-preference-locked"
+                  tabIndex={0}
+                >
+                  <span className="profile-email-preference-label">
+                    {tr("必要邮件")}
+                    <Info size={12} aria-hidden="true" />
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked
+                    disabled
+                    readOnly
+                    aria-describedby="email-preference-required-detail"
+                  />
+                  <i className="profile-email-switch" aria-hidden="true">
+                    <i />
+                  </i>
+                  <span
+                    id="email-preference-required-detail"
+                    className="profile-email-preference-detail"
+                    role="tooltip"
+                  >
+                    <ul>
+                      <li>{tr("验证码与密码重置")}</li>
+                      <li>{tr("注册拒绝、退回或账号停用")}</li>
+                    </ul>
+                  </span>
+                </label>
                 {emailPreferenceOptions.map(({ key, label, details }) => (
                   <label className="profile-email-preference" key={key}>
                     <span className="profile-email-preference-label">

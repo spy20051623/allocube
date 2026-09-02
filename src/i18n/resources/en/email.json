@@ -1,5 +1,12 @@
 {
   "安全邮件必收": "Required security emails",
+  "必要邮件": "Required email",
+  "排期影响": "Schedule impact",
+  "管理员取消或释放占用": "A manager cancels or ends a reservation",
+  "维护、停用或删除影响排期": "Maintenance, disabling, or deletion affects your schedule",
+  "超时待办": "Overdue reviews",
+  "超过 15 分钟未处理的审核请求": "Review requests pending for over 15 minutes",
+  "注册拒绝、退回或账号停用": "Registration rejected, changes requested, or account disabled",
   "保存邮件配置": "Save",
   "不填写邮箱？": "No email provided?",
   "不填写邮箱将无法接收系统邮件提醒，也无法自行通过邮件找回密码。": "Without an email, you cannot receive system email notifications or reset your password via email.",

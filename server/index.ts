@@ -28,6 +28,10 @@ import {
   nowIso
 } from "./db.js";
 import { processEmailOutbox } from "./mailer.js";
+import {
+  millisecondsUntilNextAdminReminderCheck,
+  processAdminRequestEmailReminders
+} from "./admin-email-reminders.js";
 import { registerAdminRoutes } from "./routes-admin.js";
 import { registerAnnouncementRoutes } from "./announcements.js";
 import { registerAuthRoutes } from "./routes-auth.js";
@@ -429,6 +433,25 @@ const emailTimer = setInterval(() => {
 }, 10_000);
 emailTimer.unref();
 void processEmailOutbox().catch((error) => app.log.error(error));
+
+function scheduleAdminReminderCheck() {
+  const timer = setTimeout(() => {
+    try {
+      processAdminRequestEmailReminders();
+    } catch (error) {
+      app.log.error(error);
+    } finally {
+      scheduleAdminReminderCheck();
+    }
+  }, millisecondsUntilNextAdminReminderCheck());
+  timer.unref();
+}
+try {
+  processAdminRequestEmailReminders();
+} catch (error) {
+  app.log.error(error);
+}
+scheduleAdminReminderCheck();
 
 const securityCleanupTimer = setInterval(() => {
   try {

@@ -61,8 +61,8 @@ const passwordSchema = z.string().max(256).superRefine((value, context) => {
 const emailSchema = z.string().trim().email().max(254).transform(normalizeEmail);
 const emailPreferencesSchema = z.object({
   reservationUpdates: z.boolean(),
-  machineAccessUpdates: z.boolean(),
-  approvalUpdates: z.boolean(),
+  machineAccessUpdates: z.boolean().optional(),
+  approvalUpdates: z.boolean().optional(),
   administrationUpdates: z.boolean()
 });
 const DUMMY_PASSWORD_HASH =
@@ -222,10 +222,8 @@ function userSelect(where: string) {
       u.last_login_at, u.last_login_ip,
       COALESCE((SELECT ep.reservation_updates FROM user_email_preferences ep
         WHERE ep.user_id = u.id), 1) AS email_reservation_updates,
-      COALESCE((SELECT ep.machine_access_updates FROM user_email_preferences ep
-        WHERE ep.user_id = u.id), 1) AS email_machine_access_updates,
-      COALESCE((SELECT ep.approval_updates FROM user_email_preferences ep
-        WHERE ep.user_id = u.id), 1) AS email_approval_updates,
+      0 AS email_machine_access_updates,
+      0 AS email_approval_updates,
       COALESCE((SELECT ep.administration_updates FROM user_email_preferences ep
         WHERE ep.user_id = u.id), 1) AS email_administration_updates,
       COALESCE(
@@ -294,8 +292,7 @@ function notifyApprovalQueue(userId: string, name: string) {
     "REGISTRATION_SUBMITTED",
     "注册申请已提交",
     "管理员审核完成后会通知你，审核期间可以在用户信息中修改资料。",
-    "/",
-    true
+    "/"
   );
 }
 
@@ -782,6 +779,12 @@ export function registerAuthRoutes(app: FastifyInstance) {
     const auth = requireSession(request, reply);
     if (!auth) return;
     const preferences = emailPreferencesSchema.parse(request.body);
+    const normalizedPreferences = {
+      reservationUpdates: preferences.reservationUpdates,
+      machineAccessUpdates: false,
+      approvalUpdates: false,
+      administrationUpdates: preferences.administrationUpdates
+    };
     const updatedAt = nowIso();
     db.prepare(
       `INSERT INTO user_email_preferences(
@@ -797,8 +800,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
     ).run(
       auth.user.id,
       Number(preferences.reservationUpdates),
-      Number(preferences.machineAccessUpdates),
-      Number(preferences.approvalUpdates),
+      0,
+      0,
       Number(preferences.administrationUpdates),
       updatedAt
     );
@@ -808,11 +811,11 @@ export function registerAuthRoutes(app: FastifyInstance) {
       "user",
       auth.user.id,
       auth.user.emailPreferences,
-      preferences
+      normalizedPreferences
     );
     return {
       message: "邮件接收设置已更新",
-      emailPreferences: preferences
+      emailPreferences: normalizedPreferences
     };
   });
 
@@ -998,8 +1001,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
       "USERNAME_CHANGED",
       "用户名已修改",
       `你的登录用户名已修改为 ${username.display}。`,
-      "/",
-      true
+      "/"
     );
     addAudit(auth.user.id, "USERNAME_CHANGE", "user", auth.user.id, undefined, undefined);
     return { message: "用户名已更新" };
@@ -1478,23 +1480,6 @@ export function registerAuthRoutes(app: FastifyInstance) {
               return null;
             });
 
-        if (current.email && configAtSubmit.emailEnabled) {
-          queueEmail(
-            current.email,
-            "Allocube 邮箱已移除 / Email removed",
-            targetEmail
-              ? "<p>你的账号已绑定新的通知邮箱。</p><hr /><p>Your account is now linked to a new notification email address.</p>"
-              : "<p>此邮箱已从你的 Allocube 账号中移除。</p><hr /><p>This email address has been removed from your Allocube account.</p>"
-          );
-        }
-        if (targetEmail) {
-          queueEmail(
-            targetEmail,
-            "Allocube 邮箱已变更 / Email changed",
-            "<p>此邮箱现已成为账号的通知和密码找回邮箱。</p><hr /><p>This address is now used for account notifications and password recovery.</p>",
-            auth.user.id
-          );
-        }
         if (result) notifyUpdatedRegistration(result.displayName);
         addAudit(
           auth.user.id,

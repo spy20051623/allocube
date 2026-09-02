@@ -42,6 +42,8 @@ const REQUIRED_TABLES = [
   "reservation_batches",
   "reservations",
   "notifications",
+  "user_email_preferences",
+  "admin_request_email_reminders",
   "email_outbox",
   "smtp_settings",
   "settings",
@@ -550,6 +552,30 @@ export async function initializeDatabase() {
       ).run(nowIso());
       db.exec("COMMIT");
       schemaVersion = { version: 18 };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+  if (schemaVersion.version === 18 && FINAL_SCHEMA_VERSION >= 19) {
+    db.exec("BEGIN EXCLUSIVE");
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS admin_request_email_reminders (
+          admin_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          request_kind TEXT NOT NULL
+            CHECK(request_kind IN ('REGISTRATION', 'PROFILE_CHANGE', 'MACHINE_ACCESS')),
+          request_id TEXT NOT NULL,
+          request_version INTEGER NOT NULL CHECK(request_version > 0),
+          queued_at TEXT NOT NULL,
+          PRIMARY KEY(admin_user_id, request_kind, request_id, request_version)
+        );
+      `);
+      db.prepare(
+        "INSERT INTO schema_migrations(version, applied_at) VALUES(19, ?)"
+      ).run(nowIso());
+      db.exec("COMMIT");
+      schemaVersion = { version: 19 };
     } catch (error) {
       db.exec("ROLLBACK");
       throw error;

@@ -8127,66 +8127,9 @@ body:has(.feedback-admin-detail-frame) {
   min-height: 0;
 }
 
-.profile-required-email {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  cursor: help;
-  outline: none;
-}
-
-.profile-required-email-detail {
-  position: absolute;
-  z-index: 80;
-  right: 0;
-  bottom: calc(100% + 9px);
-  width: max-content;
-  min-width: 190px;
-  max-width: 270px;
-  padding: 10px 12px;
-  border: 1px solid #d5deec;
-  border-radius: 8px;
-  background: #202b3d;
-  box-shadow: 0 9px 24px rgba(18, 29, 48, .18);
-  color: #f8fafc;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.65;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(4px);
-  visibility: hidden;
-  white-space: normal;
-  transition:
-    opacity .14s ease,
-    transform .14s ease,
-    visibility .14s ease;
-}
-
-.profile-required-email-detail::after {
-  position: absolute;
-  top: 100%;
-  right: 17px;
-  width: 9px;
-  height: 9px;
-  border-right: 1px solid #d5deec;
-  border-bottom: 1px solid #d5deec;
-  background: #202b3d;
-  content: "";
-  transform: translateY(-5px) rotate(45deg);
-}
-
-.profile-required-email:hover .profile-required-email-detail,
-.profile-required-email:focus .profile-required-email-detail {
-  opacity: 1;
-  transform: translateY(0);
-  visibility: visible;
-}
-
 .profile-email-preferences-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -8254,8 +8197,7 @@ body:has(.feedback-admin-detail-frame) {
     visibility .14s ease;
 }
 
-.profile-email-preference-detail ul,
-.profile-required-email-detail ul {
+.profile-email-preference-detail ul {
   margin: 0;
   padding: 0;
   display: grid;
@@ -8263,14 +8205,12 @@ body:has(.feedback-admin-detail-frame) {
   list-style: none;
 }
 
-.profile-email-preference-detail li,
-.profile-required-email-detail li {
+.profile-email-preference-detail li {
   position: relative;
   padding-left: 12px;
 }
 
-.profile-email-preference-detail li::before,
-.profile-required-email-detail li::before {
+.profile-email-preference-detail li::before {
   position: absolute;
   top: .72em;
   left: 0;
@@ -8280,11 +8220,6 @@ body:has(.feedback-admin-detail-frame) {
   background: #8fb2ff;
   content: "";
   transform: translateY(-50%);
-}
-
-.profile-email-preference:nth-child(n + 3) .profile-email-preference-detail {
-  right: 0;
-  left: auto;
 }
 
 .profile-email-preference-detail::after {
@@ -8298,11 +8233,6 @@ body:has(.feedback-admin-detail-frame) {
   background: #202b3d;
   content: "";
   transform: translateY(-5px) rotate(45deg);
-}
-
-.profile-email-preference:nth-child(n + 3) .profile-email-preference-detail::after {
-  right: 17px;
-  left: auto;
 }
 
 .profile-email-preference:hover .profile-email-preference-detail,
@@ -8358,6 +8288,20 @@ body:has(.feedback-admin-detail-frame) {
 .profile-email-preference:has(input:disabled) {
   cursor: wait;
   opacity: .62;
+}
+
+.profile-email-preference-locked:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.profile-email-preference-locked > input:checked + .profile-email-switch {
+  background: var(--blue);
+  box-shadow: none;
+}
+
+.profile-email-preference-locked .profile-email-switch > i {
+  background: #c8ced8;
 }
 
 .profile-email-unavailable {

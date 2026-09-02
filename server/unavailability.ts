@@ -401,7 +401,8 @@ function applyReservationImpacts(
         ? "资源占用因维护发生变化"
         : "资源占用因停用发生变化",
       `${targetName}${changeType === "MAINTENANCE" ? "已安排维护" : "已停用"}，${details}。${reason ? `原因：${reason}` : ""}`,
-      "/reservations"
+      "/reservations",
+      { emailPolicy: "RESERVATION_IMPACT" }
     );
   }
 }

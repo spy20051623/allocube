@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { beforeAll, describe, expect, it } from "vitest";
-import { FINAL_SCHEMA_SQL } from "../server/schema.js";
+import { FINAL_SCHEMA_SQL, FINAL_SCHEMA_VERSION } from "../server/schema.js";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-api-migration-"));
 const databasePath = path.join(directory, "version-13.sqlite");
@@ -56,7 +56,7 @@ describe("数据库连续迁移", () => {
       dbModule.db
         .prepare("SELECT MAX(version) AS version FROM schema_migrations")
         .get()
-    ).toEqual({ version: 18 });
+    ).toEqual({ version: FINAL_SCHEMA_VERSION });
     const tables = new Set(
       (
         dbModule.db

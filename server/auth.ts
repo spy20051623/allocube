@@ -50,8 +50,8 @@ export function publicUser(row: UserRow): AuthUser {
     lastLoginIp: row.last_login_ip,
     emailPreferences: {
       reservationUpdates: Boolean(row.email_reservation_updates),
-      machineAccessUpdates: Boolean(row.email_machine_access_updates),
-      approvalUpdates: Boolean(row.email_approval_updates),
+      machineAccessUpdates: false,
+      approvalUpdates: false,
       administrationUpdates: Boolean(row.email_administration_updates)
     },
     pendingProfileChange:
@@ -123,10 +123,8 @@ const sessionUserSelect = `
     u.last_login_at, u.last_login_ip,
     COALESCE((SELECT ep.reservation_updates FROM user_email_preferences ep
       WHERE ep.user_id = u.id), 1) AS email_reservation_updates,
-    COALESCE((SELECT ep.machine_access_updates FROM user_email_preferences ep
-      WHERE ep.user_id = u.id), 1) AS email_machine_access_updates,
-    COALESCE((SELECT ep.approval_updates FROM user_email_preferences ep
-      WHERE ep.user_id = u.id), 1) AS email_approval_updates,
+    0 AS email_machine_access_updates,
+    0 AS email_approval_updates,
     COALESCE((SELECT ep.administration_updates FROM user_email_preferences ep
       WHERE ep.user_id = u.id), 1) AS email_administration_updates,
     COALESCE(

@@ -1754,6 +1754,13 @@ describe("用户身份与审批生命周期", () => {
       }
     });
     expect(changed.statusCode).toBe(200);
+    expect(
+      dbModule.db.prepare(
+        `SELECT COUNT(*) AS count FROM email_outbox
+         WHERE subject LIKE 'Allocube 邮箱已变更%'
+            OR subject LIKE 'Allocube 邮箱已移除%'`
+      ).get()
+    ).toEqual({ count: 0 });
     const clearWithoutPassword = await app.inject({
       method: "POST",
       url: "/api/v1/auth/change-email",
@@ -1801,6 +1808,13 @@ describe("用户身份与审批生命周期", () => {
       headers: { cookie: userCookie }
     });
     expect(me.json().user.email).toBeNull();
+    expect(
+      dbModule.db.prepare(
+        `SELECT COUNT(*) AS count FROM email_outbox
+         WHERE subject LIKE 'Allocube 邮箱已变更%'
+            OR subject LIKE 'Allocube 邮箱已移除%'`
+      ).get()
+    ).toEqual({ count: 0 });
   });
 
   it("打回和最终拒绝均允许不填写原因", async () => {
@@ -1836,6 +1850,12 @@ describe("用户身份与审批生命周期", () => {
         )
         .get(created.userId)
     ).toEqual({ body: "管理员请你更新注册资料。" });
+    expect(
+      dbModule.db.prepare(
+        `SELECT COUNT(*) AS count FROM email_outbox
+         WHERE user_id = ? AND subject LIKE '注册资料需要修改 / %'`
+      ).get(created.userId)
+    ).toEqual({ count: 1 });
 
     const rejected = await app.inject({
       method: "POST",
@@ -1847,6 +1867,13 @@ describe("用户身份与审批生命周期", () => {
     expect(
       dbModule.db.prepare("SELECT 1 FROM users WHERE id = ?").get(created.userId)
     ).toBeUndefined();
+    expect(
+      dbModule.db.prepare(
+        `SELECT COUNT(*) AS count FROM email_outbox
+         WHERE to_email = 'release@example.com'
+           AND subject = '注册审核未通过 / Registration not approved'`
+      ).get()
+    ).toEqual({ count: 1 });
     expect(
       dbModule.db
         .prepare(
@@ -2183,6 +2210,7 @@ describe("用户身份与审批生命周期", () => {
         .prepare("SELECT COUNT(*) AS count FROM employee_numbers WHERE user_id = ?")
         .get(created.userId)
     ).toEqual({ count: 0 });
+
     expect(
       dbModule.db
         .prepare("SELECT user_id FROM reservations WHERE id = ?")
@@ -2264,14 +2292,21 @@ describe("用户身份与审批生命周期", () => {
       url: "/api/v1/auth/me",
       headers: { cookie }
     });
-    expect(me.json().user.emailPreferences).toEqual(preferences);
+    expect(me.json().user.emailPreferences).toEqual({
+      reservationUpdates: false,
+      machineAccessUpdates: false,
+      approvalUpdates: false,
+      administrationUpdates: false
+    });
 
     const { createNotification } = await import("../server/mailer.js");
     createNotification(
       created.userId,
       "RESERVATION_CANCELLED",
       "可选占用邮件",
-      "该邮件已关闭。"
+      "该邮件已关闭。",
+      "",
+      { emailPolicy: "RESERVATION_IMPACT" }
     );
     expect(
       dbModule.db
@@ -2288,6 +2323,25 @@ describe("用户身份与审批生命周期", () => {
         .get(created.userId, "可选占用邮件")
     ).toEqual({ count: 0 });
 
+    dbModule.db.prepare(
+      `UPDATE user_email_preferences SET reservation_updates = 1
+       WHERE user_id = ?`
+    ).run(created.userId);
+    createNotification(
+      created.userId,
+      "RESERVATION_CANCELLED",
+      "排期影响邮件",
+      "该邮件已开启。",
+      "",
+      { emailPolicy: "RESERVATION_IMPACT" }
+    );
+    expect(
+      dbModule.db.prepare(
+        `SELECT COUNT(*) AS count FROM email_outbox
+         WHERE user_id = ? AND subject LIKE '排期影响邮件%'`
+      ).get(created.userId)
+    ).toEqual({ count: 1 });
+
     createNotification(
       created.userId,
       "MACHINE_ACCESS_REQUEST",
@@ -2302,11 +2356,43 @@ describe("用户身份与审批生命周期", () => {
         .get(created.userId, "机器管理邮件")
     ).toEqual({ count: 0 });
 
+    const inAppOnlyTypes = [
+      "PROFILE_CHANGE_APPROVED",
+      "PROFILE_CHANGE_REJECTED",
+      "MACHINE_ACCESS_GRANTED",
+      "MACHINE_ACCESS_REJECTED",
+      "MACHINE_ACCESS_REMOVED",
+      "MACHINE_ROLE_CHANGED",
+      "USER_APPROVAL"
+    ];
+    for (const type of inAppOnlyTypes) {
+      createNotification(
+        created.userId,
+        type,
+        `仅站内-${type}`,
+        "这类事件不发送邮件。"
+      );
+    }
+    expect(
+      dbModule.db.prepare(
+        `SELECT COUNT(*) AS count FROM notifications
+         WHERE user_id = ? AND title LIKE '仅站内-%'`
+      ).get(created.userId)
+    ).toEqual({ count: inAppOnlyTypes.length });
+    expect(
+      dbModule.db.prepare(
+        `SELECT COUNT(*) AS count FROM email_outbox
+         WHERE user_id = ? AND subject LIKE '仅站内-%'`
+      ).get(created.userId)
+    ).toEqual({ count: 0 });
+
     createNotification(
       created.userId,
       "ACCOUNT_STATUS",
       "账号安全邮件",
-      "该邮件必须发送。"
+      "该邮件必须发送。",
+      "",
+      { emailPolicy: "ACCOUNT_BLOCKING" }
     );
     expect(
       dbModule.db
@@ -2347,16 +2433,34 @@ describe("用户身份与审批生命周期", () => {
       v0: unsafeUsername
     });
 
+    expect(
+      dbModule.db
+        .prepare(
+          `SELECT COUNT(*) AS count FROM email_outbox
+           WHERE user_id = ? AND subject LIKE '用户名已修改 / %'`
+        )
+        .get(created.userId)
+    ).toEqual({ count: 0 });
+
+    createNotification(
+      created.userId,
+      "ACCOUNT_STATUS",
+      "注册资料需要修改",
+      `请修改以下内容：${unsafeUsername}`,
+      "",
+      { emailPolicy: "ACCOUNT_BLOCKING" }
+    );
+
     const email = dbModule.db
       .prepare(
         `SELECT subject, html FROM email_outbox
-         WHERE user_id = ? AND subject LIKE '用户名已修改 / %'
+         WHERE user_id = ? AND subject LIKE '注册资料需要修改 / %'
          ORDER BY created_at DESC LIMIT 1`
       )
       .get(created.userId) as { subject: string; html: string };
-    expect(email.subject).toBe("用户名已修改 / Username modified");
+    expect(email.subject).toContain("注册资料需要修改 / ");
     expect(email.html).toContain(
-      "Your login username has been changed to &lt;img src=x onerror=&quot;alert(1)&quot;&gt;."
+      "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"
     );
     expect(email.html).not.toContain(unsafeUsername);
   });

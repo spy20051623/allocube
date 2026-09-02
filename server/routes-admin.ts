@@ -632,7 +632,8 @@ export function registerAdminRoutes(
       "ACCOUNT_STATUS",
       "注册资料需要修改",
       body.reason || "管理员请你更新注册资料。",
-      "/"
+      "/",
+      { emailPolicy: "ACCOUNT_BLOCKING" }
     );
     addAudit(auth.user.id, "USER_RETURN", "user", id, undefined, {
       expectedRevision: body.expectedRevision,
@@ -665,11 +666,13 @@ export function registerAdminRoutes(
       auth.user.id,
       body.expectedRevision
     );
-    queueEmail(
-      user.email!,
-      "注册审核未通过 / Registration not approved",
-      `<p>${escapeHtml(body.reason || "注册审核未通过。")}</p><hr /><p>Your Allocube registration was not approved. Contact an administrator for details.</p>`
-    );
+    if (user.email) {
+      queueEmail(
+        user.email,
+        "注册审核未通过 / Registration not approved",
+        `<p>${escapeHtml(body.reason || "注册审核未通过。")}</p><hr /><p>Your Allocube registration was not approved. Contact an administrator for details.</p>`
+      );
+    }
     addAudit(auth.user.id, "USER_REJECT", "registration_tombstone", id, undefined, {
       expectedRevision: body.expectedRevision,
       reasonProvided: Boolean(body.reason)
@@ -830,7 +833,8 @@ export function registerAdminRoutes(
       "ACCOUNT_STATUS",
       "账号已停用",
       body.reason || "账号已停用，当前和未来占用已经释放。",
-      "/"
+      "/",
+      { emailPolicy: "ACCOUNT_BLOCKING" }
     );
     return { status: "DISABLED", ...result };
   });
@@ -2123,7 +2127,8 @@ export function registerAdminRoutes(
                   "RESOURCE_GROUP_CHANGED",
                   "资源组配置已调整",
                   `${group.name} 的资源已从“${current.resourceSummary}”调整为“${configuration.resourceSummary}”。你的未结束占用仍然有效，并立即采用新配置。`,
-                  "/reservations"
+                  "/reservations",
+                  { emailPolicy: "RESERVATION_IMPACT" }
                 );
               }
             }
@@ -2698,7 +2703,8 @@ export function registerAdminRoutes(
             "RESOURCE_GROUP_CHANGED",
             "资源组配置已调整",
             `${body.name} 的资源已从“${beforeGroup.resourceSummary}”调整为“${configuration.resourceSummary}”。你的未结束占用仍然有效，并立即采用新配置。`,
-            "/reservations"
+            "/reservations",
+            { emailPolicy: "RESERVATION_IMPACT" }
           );
         }
       }
@@ -4253,12 +4259,21 @@ function notifyDeletedResourceGroupUsers(groupId: string, groupName: string) {
     )
     .all(groupId, groupId, groupId, groupId) as Array<{ user_id: string }>;
   for (const user of users) {
+    const hasActiveReservation = Boolean(
+      db.prepare(
+        `SELECT 1 FROM reservations
+         WHERE user_id = ? AND resource_group_id = ?
+           AND status = 'CONFIRMED' AND end_at > ?
+         LIMIT 1`
+      ).get(user.user_id, groupId, nowIso())
+    );
     createNotification(
       user.user_id,
       "RESOURCE_GROUP_DELETED",
       "资源组已删除",
       `${groupName}已被永久删除，历史占用记录将显示为“资源组已删除”。`,
-      ""
+      "",
+      hasActiveReservation ? { emailPolicy: "RESERVATION_IMPACT" } : {}
     );
   }
 }
@@ -4279,12 +4294,21 @@ function notifyDeletedMachineUsers(machineId: string, machineName: string) {
     user_id: string;
   }>;
   for (const user of users) {
+    const hasActiveReservation = Boolean(
+      db.prepare(
+        `SELECT 1 FROM reservations
+         WHERE user_id = ? AND machine_id = ?
+           AND status = 'CONFIRMED' AND end_at > ?
+         LIMIT 1`
+      ).get(user.user_id, machineId, nowIso())
+    );
     createNotification(
       user.user_id,
       "MACHINE_DELETED",
       "机器已删除",
       `${machineName}已被永久删除，历史占用记录将显示为“机器已删除”。`,
-      ""
+      "",
+      hasActiveReservation ? { emailPolicy: "RESERVATION_IMPACT" } : {}
     );
   }
 }

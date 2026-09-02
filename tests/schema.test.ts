@@ -46,6 +46,7 @@ describe("最终数据库结构", () => {
     expect(tables).toContain("deleted_resource_group_tombstones");
     expect(tables).toContain("deleted_resource_pool_tombstones");
     expect(tables).toContain("user_email_preferences");
+    expect(tables).toContain("admin_request_email_reminders");
     expect(tables).toContain("api_tokens");
     expect(tables).toContain("prepared_api_operations");
     expect(tables).toContain("announcements");

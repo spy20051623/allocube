@@ -350,8 +350,8 @@ function activeAdminIds(exceptUserId?: string) {
 function notifyAdmins(ticket: TicketRow, actorId: string, type: string, title: string, body: string) {
   for (const adminId of activeAdminIds(actorId)) {
     createNotification(
-      adminId, type, title, body, `/admin/feedback/${ticket.id}`, false,
-      { type: "FEEDBACK", id: ticket.id }
+      adminId, type, title, body, `/admin/feedback/${ticket.id}`,
+      { entity: { type: "FEEDBACK", id: ticket.id } }
     );
   }
 }
@@ -359,8 +359,8 @@ function notifyAdmins(ticket: TicketRow, actorId: string, type: string, title: s
 function notifyOwner(ticket: TicketRow, actorId: string, type: string, title: string, body: string) {
   if (!ticket.submitted_by || ticket.submitted_by === actorId) return;
   createNotification(
-    ticket.submitted_by, type, title, body, `/feedback/${ticket.id}`, false,
-    { type: "FEEDBACK", id: ticket.id }
+    ticket.submitted_by, type, title, body, `/feedback/${ticket.id}`,
+    { entity: { type: "FEEDBACK", id: ticket.id } }
   );
 }
 

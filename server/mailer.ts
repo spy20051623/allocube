@@ -19,31 +19,15 @@ let cachedTransporter:
   | undefined;
 let emailOutboxProcessing = false;
 
-type EmailPreferenceColumn =
-  | "reservation_updates"
-  | "machine_access_updates"
-  | "approval_updates"
-  | "administration_updates";
+export type NotificationEmailPolicy =
+  | "NONE"
+  | "REQUIRED_ACTION"
+  | "ACCOUNT_BLOCKING"
+  | "RESERVATION_IMPACT";
 
-const notificationEmailPreference: Partial<
-  Record<string, EmailPreferenceColumn>
-> = {
-  RESOURCE_UNAVAILABILITY: "reservation_updates",
-  RESERVATION_CANCELLED: "reservation_updates",
-  RESERVATION_RELEASED_BY_MANAGER: "reservation_updates",
-  RESOURCE_GROUP_CHANGED: "reservation_updates",
-  RESOURCE_GROUP_DELETED: "reservation_updates",
-  MACHINE_DELETED: "reservation_updates",
-  MACHINE_ACCESS_GRANTED: "machine_access_updates",
-  MACHINE_ACCESS_REJECTED: "machine_access_updates",
-  MACHINE_ACCESS_REMOVED: "machine_access_updates",
-  MACHINE_ROLE_CHANGED: "machine_access_updates",
-  REGISTRATION_SUBMITTED: "approval_updates",
-  PROFILE_CHANGE_APPROVED: "approval_updates",
-  PROFILE_CHANGE_REJECTED: "approval_updates",
-  MACHINE_ACCESS_REQUEST: "administration_updates",
-  USER_APPROVAL: "administration_updates",
-  PROFILE_CHANGE_REVIEW: "administration_updates"
+export type NotificationOptions = {
+  emailPolicy?: NotificationEmailPolicy;
+  entity?: { type: string; id: string };
 };
 
 const notificationEnglishCopy: Record<string, { title: string; body: string }> = {
@@ -81,14 +65,6 @@ function englishNotification(type: string) {
     title: "Allocube notification",
     body: "Something changed in Allocube. Open it to view the details."
   };
-}
-
-function notificationEmailEnabled(
-  type: string,
-  preferences: Record<EmailPreferenceColumn, number>
-) {
-  const preference = notificationEmailPreference[type];
-  return preference ? Boolean(preferences[preference]) : true;
 }
 
 function createTransporter(settings: RuntimeSmtpSettings) {
@@ -181,17 +157,14 @@ export function createNotification(
   title: string,
   body: string,
   link = "",
-  sendEmail = true,
-  entity?: { type: string; id: string }
+  options: NotificationOptions = {}
 ) {
+  const emailPolicy = options.emailPolicy ?? "NONE";
   const safeLink = normalizeNotificationLink(link);
   const user = db
     .prepare(
       `SELECT u.email,
-        COALESCE(ep.reservation_updates, 1) AS reservation_updates,
-        COALESCE(ep.machine_access_updates, 1) AS machine_access_updates,
-        COALESCE(ep.approval_updates, 1) AS approval_updates,
-        COALESCE(ep.administration_updates, 1) AS administration_updates
+        COALESCE(ep.reservation_updates, 1) AS reservation_updates
        FROM users u
        LEFT JOIN user_email_preferences ep ON ep.user_id = u.id
        WHERE u.id = ?
@@ -200,9 +173,7 @@ export function createNotification(
          )`
     )
     .get(userId) as
-    | ({
-        email: string | null;
-      } & Record<EmailPreferenceColumn, number>)
+    | { email: string | null; reservation_updates: number }
     | undefined;
   if (!user) return null;
   const id = randomUUID();
@@ -231,11 +202,15 @@ export function createNotification(
     templateKey,
     JSON.stringify(templateParams),
     safeLink,
-    entity?.type ?? null,
-    entity?.id ?? null,
+    options.entity?.type ?? null,
+    options.entity?.id ?? null,
     nowIso()
   );
-  if (sendEmail && notificationEmailEnabled(type, user)) {
+  const shouldEmail =
+    emailPolicy === "REQUIRED_ACTION" ||
+    emailPolicy === "ACCOUNT_BLOCKING" ||
+    (emailPolicy === "RESERVATION_IMPACT" && Boolean(user.reservation_updates));
+  if (shouldEmail) {
     if (user.email) {
       const siteOrigin = getPublicSiteOrigin();
       const detailUrl =

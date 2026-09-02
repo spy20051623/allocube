@@ -1,4 +1,13 @@
 {
+  "action.machine.new": "新增机器",
+  "action.machine.create": "创建机器",
+  "action.maintenance.create": "创建维护",
+  "action.machineUser.invite": "邀请用户",
+  "action.resourceGroup.new": "新增资源组",
+  "action.resourceItem.new": "新增资源项",
+  "action.device.add": "添加设备",
+  "action.interval.add": "添加区间",
+  "action.announcement.new": "创建公告",
   "保存配置": "保存配置",
   "编辑系统公告": "编辑系统公告",
   "撤下“{{v0}}”后，尚未查看的用户将不再收到此公告。": "撤下“{{v0}}”后，尚未查看的用户将不再收到此公告。",

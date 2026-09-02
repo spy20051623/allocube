@@ -9,8 +9,8 @@ export function userStatusLabel(status: string) {
     {
       PENDING_APPROVAL: tr("等待审核"),
       CHANGES_REQUESTED: tr("需要修改"),
-      ACTIVE: tr("已启用"),
-      DISABLED: tr("已停用")
+      ACTIVE: tr("status.enabled"),
+      DISABLED: tr("status.disabled")
     } as Record<string, string>
   )[status] ?? unknownStatus();
 }
@@ -18,8 +18,8 @@ export function userStatusLabel(status: string) {
 export function resourceGroupStatusLabel(status: string) {
   return (
     {
-      ACTIVE: tr("已启用"),
-      DISABLED: tr("已停用")
+      ACTIVE: tr("status.enabled"),
+      DISABLED: tr("status.disabled")
     } as Record<string, string>
   )[status] ?? unknownStatus();
 }

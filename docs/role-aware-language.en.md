@@ -22,6 +22,8 @@ The timeline displays the reservation owner's name and current employee ID, not 
 | reservation / 预约 / 资源申请 | reservation |
 | reservation segment | a reservation, reservation period |
 | batch / atomic commit | this submission |
+| resource group | Group in the interface; `resourceGroup` in APIs and internal models |
+| whole-machine reservation scope | Machine |
 | employee number | employee ID |
 | initial employee number | employee ID |
 | application revision | recent submission time; version number is not displayed |
@@ -30,12 +32,15 @@ The timeline displays the reservation owner's name and current employee ID, not 
 | resource pool | resource configuration, resource item |
 | allocation | resource composition, allocated quantity |
 | reserved minutes | reservation duration |
+| feedback level | Priority; use Critical for the highest priority |
 
 Use "request" for work that requires review, such as machine access or profile updates. Refer to account creation simply as "registration". Reports must state: Statistics are based on system-recorded reservation periods and do not represent actual hardware usage.
 
 ## Documentation Writing Conventions
 
 - Page, menu, and module names use the exact interface text in quotation marks, e.g., "Profile", "Calendar", and "API tokens".
+- Use "Email notifications" for the notification preference and "Email" for an address field.
+- Use "Show archived" for the interface control that includes withdrawn announcements; the underlying action remains "unpublish".
 - Call machine membership "machine access". Reserve "permission" for roles, token access, and general authorization checks.
 - Call scheduled resource time a "reservation"; do not use "预约" or "resource application".
 - Call the public integration surface the "official API"; do not use "official AI API" or unexplained abbreviations such as `PAT`.

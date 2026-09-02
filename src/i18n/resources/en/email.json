@@ -71,5 +71,5 @@
   "注册邮箱": "Registration email",
   "SMTP 登录账号": "Username",
   "SMTP 服务器": "Host",
-  "SMTP 密码": "Password"
+  "SMTP 密码": "SMTP password"
 }

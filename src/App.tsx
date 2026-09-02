@@ -3511,7 +3511,7 @@ function AccountProfilePage({
                   onClick={() => setPasswordOpen(true)}
                 >
                   <Pencil size={13} />
-                  {tr("编辑")}</button>
+                  {tr("修改密码")}</button>
               </div>
             </div>
           </div>
@@ -3743,7 +3743,7 @@ function ApiTokenSection({
             onClick={() => setCreateOpen(true)}
           >
             <Plus size={14} />
-            {tr("新建")}</button>
+            {tr("action.apiToken.new")}</button>
         </div>
       </div>
       {loading ? (
@@ -3947,7 +3947,7 @@ function ApiTokenCreateModal({
           <button type="button" className="secondary-button" onClick={onClose}>
             {tr("取消")}</button>
           <button className="primary-button" disabled={busy}>
-            <BusyButtonContent busy={busy}>{tr("创建")}</BusyButtonContent>
+            <BusyButtonContent busy={busy}>{tr("action.apiToken.create")}</BusyButtonContent>
           </button>
         </div>
       </form>
@@ -5337,10 +5337,10 @@ function ResourceCatalogPage({
                       }`}
                     >
                       {machine.availabilityStatus === "DISABLED"
-                        ? tr("已停用")
+                        ? tr("status.disabled")
                         : machine.availabilityStatus === "MAINTENANCE"
                           ? tr("维护")
-                          : tr("已启用")}
+                          : tr("status.enabled")}
                     </span>
                   </div>
                   <p title={machine.resourceSummary || tr("尚未配置资源")}>
@@ -7283,10 +7283,10 @@ function CalendarPage({
                       }`}
                     >
                       {machine.status === "DISABLED"
-                        ? tr("已停用")
+                        ? tr("status.disabled")
                         : machineMaintenanceNow
                           ? tr("维护")
-                          : tr("已启用")}
+                          : tr("status.enabled")}
                     </span>
                     <span className="machine-resource-summary">
                       {machine.resourceSummary || tr("尚未配置资源")}
@@ -7396,10 +7396,10 @@ function CalendarPage({
                           }`}
                         >
                           {longTermDisabled
-                            ? tr("已停用")
+                            ? tr("status.disabled")
                             : groupMaintenanceNow
                               ? tr("维护")
-                              : tr("已启用")}
+                              : tr("status.enabled")}
                         </span>
                       </div>
                       <div
@@ -7783,7 +7783,7 @@ function CalendarPage({
               onClick={() => setManualBookingOpen(true)}
             >
               <Plus size={14} />
-              {tr("新建")}</button>
+              {tr("action.reservation.new")}</button>
           </div>
         )}
         {!!drafts.length && (
@@ -10196,7 +10196,7 @@ function FeedbackPage({
         title={tr("我的反馈")}
         actions={
           <button type="button" className="primary-button" onClick={() => setCreating(true)}>
-            <Plus size={16} />{tr("新建")}</button>
+            <Plus size={16} />{tr("action.feedback.new")}</button>
         }
       />
       <div className="feedback-filter-bar card">
@@ -10438,7 +10438,7 @@ function FeedbackEditorModal({
         <div className="modal-actions">
           <button type="button" className="secondary-button" onClick={onClose}>{tr("取消")}</button>
           <button className="primary-button" disabled={busy || !title.trim() || !bodyMarkdown.trim()}>
-            <BusyButtonContent busy={busy}>{editing ? tr("保存修改") : tr("创建")}</BusyButtonContent>
+            <BusyButtonContent busy={busy}>{editing ? tr("保存修改") : tr("action.feedback.create")}</BusyButtonContent>
           </button>
         </div>
       </form>
@@ -11171,7 +11171,7 @@ function AdminPage({
           <>
             <PageHeader
               title={tr("资源管理")}
-              actions={isSystemAdmin ? <button className="primary-button" onClick={() => setNewMachineOpen(true)}><Plus size={16} />{tr("新建")}</button> : undefined}
+              actions={isSystemAdmin ? <button className="primary-button" onClick={() => setNewMachineOpen(true)}><Plus size={16} />{tr("action.machine.new")}</button> : undefined}
             />
             {!machinesLoaded ? (
               <div className="card machine-management-loading" aria-live="polite">
@@ -11538,10 +11538,10 @@ function MachineInfoSection({
       new Date(item.startAt).getTime() <= currentTime
   );
   const machineStatus = detail.status === "DISABLED"
-    ? { label: tr("已停用"), className: "disabled" }
+    ? { label: tr("status.disabled"), className: "disabled" }
     : machineMaintenanceNow
       ? { label: tr("维护"), className: "scheduled" }
-      : { label: tr("已启用"), className: "active" };
+      : { label: tr("status.enabled"), className: "active" };
 
   const handleEnable = async () => {
     try {
@@ -11731,7 +11731,7 @@ function MachineInfoSection({
         <div className={`machine-disabled-state${detail.status === "ACTIVE" ? " active" : ""}`}>
           <div>
             {detail.status === "ACTIVE" ? <Power size={17} /> : <PowerOff size={17} />}
-            <strong>{detail.status === "ACTIVE" ? tr("已启用") : tr("已停用")}</strong>
+            <strong>{detail.status === "ACTIVE" ? tr("status.enabled") : tr("status.disabled")}</strong>
           </div>
           {canManage && (
             <div className="section-header-actions">
@@ -12060,7 +12060,7 @@ function MaintenanceModal({
               Boolean(timeRangeError) || !preview || previewing || submitting
             }
           >
-            {tr("创建")}</button>
+            {tr("action.maintenance.create")}</button>
         </div>
       </div>
     </Modal>
@@ -12379,10 +12379,10 @@ function MachineResourcesSection({
                     }`}
                   >
                     {effectiveStatus === "DISABLED"
-                      ? tr("已停用")
+                      ? tr("status.disabled")
                       : effectiveStatus === "MAINTENANCE"
                         ? tr("维护")
-                        : tr("已启用")}
+                        : tr("status.enabled")}
                   </span>
                 </span>
                 <div className="group-admin-actions">
@@ -12524,7 +12524,7 @@ function MachineUsersSection({
       <section className="card panel-card machine-access-panel">
         <SectionHeader
           title={tr("用户列表")}
-          actions={canManage ? <button className="secondary-button compact" onClick={() => setInviteOpen(true)}><UserPlus size={15} />{tr("邀请")}</button> : undefined}
+          actions={canManage ? <button className="secondary-button compact" onClick={() => setInviteOpen(true)}><UserPlus size={15} />{tr("action.machineUser.invite")}</button> : undefined}
         />
         <div className="machine-member-list">
           <div className="machine-member-row machine-member-head">
@@ -12921,7 +12921,7 @@ function MachineFormModal({
             } catch (error) {
               notify("error", error instanceof Error ? error.message : tr("保存失败"));
             }
-          }}>{machine ? tr("保存修改") : tr("创建")}</button>
+          }}>{machine ? tr("保存修改") : tr("action.machine.create")}</button>
         </div>
       </div>
     </Modal>
@@ -13393,7 +13393,7 @@ function ResourceConfigurationModal({
               onClick={section === "POOLS" ? addPool : addGroup}
             >
               <Plus size={14} />
-              {tr("新建")}
+              {tr(section === "POOLS" ? "action.resourceItem.new" : "action.resourceGroup.new")}
             </button>
             <div
               onDragLeave={(event) => {
@@ -13766,7 +13766,7 @@ function ResourceConfigurationModal({
                           ]
                         }))}
                     >
-                      <Plus size={14} />{tr("添加")}</button>
+                      <Plus size={14} />{tr("action.device.add")}</button>
                   </div>
                 )}
                 <Field label={tr("说明")}>
@@ -14007,7 +14007,7 @@ function ResourceConfigurationModal({
                                     : value
                                 )}
                             >
-                              <Plus size={14} />{tr("添加")}</button>
+                              <Plus size={14} />{tr("action.interval.add")}</button>
                           </div>
                         )}
                         {allocation?.kind === "ITEM_LIST" &&
@@ -14948,7 +14948,7 @@ function AnnouncementAdminPanel({
               className="primary-button"
               onClick={() => setEditorState({ mode: "CREATE" })}
             >
-              <Plus size={16} />{tr("新建")}</button>
+              <Plus size={16} />{tr("action.announcement.new")}</button>
           </div>
         }
       />
@@ -15759,7 +15759,7 @@ function SettingsPanel({
                     ? tr("正在启用")
                     : tr("正在停用")
                   : !smtp.enabled
-                    ? tr("已停用")
+                    ? tr("status.disabled")
                   : smtp.operational
                     ? tr("运行正常")
                     : tr("配置不可用")}
@@ -15782,7 +15782,7 @@ function SettingsPanel({
           <div className="smtp-settings-body">
             <div className="smtp-summary" aria-label={tr("邮件服务状态摘要")}>
               <div><span>{tr("等待发送")}</span><strong>{smtp.queue.pending}</strong></div>
-              <div><span>{tr("失败")}</span><strong>{smtp.queue.failed}</strong></div>
+              <div><span>{tr("发送失败")}</span><strong>{smtp.queue.failed}</strong></div>
               <div><span>{tr("密码状态")}</span><strong>{smtp.passwordStatus === "READY" ? tr("已安全保存") : smtp.passwordStatus === "UNREADABLE" ? tr("需要重新输入") : tr("尚未设置")}</strong></div>
               <div><span>{tr("最近测试")}</span><strong>{smtp.lastTest ? (smtp.lastTest.status === "SUCCESS" ? tr("成功") : tr("失败")) : tr("尚未测试")}</strong></div>
             </div>

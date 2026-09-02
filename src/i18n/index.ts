@@ -28,8 +28,8 @@ const notificationEnglish: Record<string, string> = {
   "notification.RESOURCE_UNAVAILABILITY.title": "Resource availability changed",
   "notification.RESERVATION_CANCELLED.title": "Reservation cancelled",
   "notification.RESERVATION_RELEASED_BY_MANAGER.title": "Reservation ended",
-  "notification.RESOURCE_GROUP_CHANGED.title": "Resource group updated",
-  "notification.RESOURCE_GROUP_DELETED.title": "Resource group deleted",
+  "notification.RESOURCE_GROUP_CHANGED.title": "Group updated",
+  "notification.RESOURCE_GROUP_DELETED.title": "Group deleted",
   "notification.MACHINE_DELETED.title": "Machine deleted",
   "notification.AVAILABILITY_WATCH.title": "Resource available",
   "notification.FEEDBACK_CREATED.title": "New feedback",
@@ -38,7 +38,7 @@ const notificationEnglish: Record<string, string> = {
   "notification.FEEDBACK_ADMIN_COMMENT.title": "Administrator replied",
   "notification.FEEDBACK_USER_COMMENT.title": "New feedback comment",
   "notification.FEEDBACK_STATUS_CHANGED.title": "Feedback status updated",
-  "notification.FEEDBACK_LEVEL_CHANGED.title": "Feedback level updated",
+  "notification.FEEDBACK_LEVEL_CHANGED.title": "Feedback priority updated",
   "notification.generic.title": "Allocube notification",
   "notification.generic.body": "Something changed in Allocube. Open it to view the details."
 };

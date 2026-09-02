@@ -1,4 +1,6 @@
 {
+  "status.enabled": "启用",
+  "status.disabled": "停用",
   "{{count}} 组_one": "{{count}} 组",
   "{{count}} 组_other": "{{count}} 组",
   "界面语言": "界面语言",

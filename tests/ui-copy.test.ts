@@ -1,5 +1,6 @@
 import fs from "node:fs";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import i18n, { initializeI18n } from "../src/i18n/index.js";
 import {
   auditActionLabel,
   reservationStatusClass,
@@ -17,10 +18,15 @@ function readText(path: fs.PathOrFileDescriptor | URL, encoding: BufferEncoding)
 }
 
 describe("角色化界面文案", () => {
+  beforeAll(async () => {
+    await initializeI18n();
+    await i18n.changeLanguage("zh-CN");
+  });
+
   it("把内部状态统一映射为中文任务语言", () => {
     expect(userStatusLabel("PENDING_APPROVAL")).toBe("等待审核");
-    expect(resourceGroupStatusLabel("ACTIVE")).toBe("已启用");
-    expect(resourceGroupStatusLabel("DISABLED")).toBe("已停用");
+    expect(resourceGroupStatusLabel("ACTIVE")).toBe("启用");
+    expect(resourceGroupStatusLabel("DISABLED")).toBe("停用");
     expect(
       reservationStatusLabel(
         "CONFIRMED",
@@ -263,13 +269,13 @@ describe("角色化界面文案", () => {
     expect(server).toContain("resource_unavailability");
   });
 
-  it("机器和资源组状态标签只使用已启用、已停用和维护", () => {
+  it("机器和资源组状态标签使用独立的状态语义键", () => {
     const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).not.toContain('"维护中"');
     expect(source).not.toContain(">整机停用</span>");
     expect(source).toContain('? "维护"');
-    expect(source).toContain('? "已停用"');
-    expect(source).toContain(': "已启用"');
+    expect(source).toContain('? "status.disabled"');
+    expect(source).toContain(': "status.enabled"');
   });
 
   it("资源管理顶部机器栏不重复显示状态标签", () => {

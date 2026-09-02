@@ -23,7 +23,7 @@ import { getDocsSections } from "../src/docs-content.js";
 import serverEnglish from "../src/i18n/server-en.json";
 import { validateLoginField } from "../src/login-validation.js";
 import { validateResetPasswordForm } from "../src/public-auth-validation.js";
-import { userStatusLabel } from "../src/ui-copy.js";
+import { resourceGroupStatusLabel, userStatusLabel } from "../src/ui-copy.js";
 import { siteOriginValidationError } from "../src/shared/site-origin.js";
 import { icpFilingValidationError } from "../src/shared/icp-filing.js";
 
@@ -115,13 +115,13 @@ describe("国际化资源与语言解析", () => {
       expect(tr("管理")).toBe("Admin");
       expect(tr("资源管理")).toBe("Resources");
       expect(tr("用户管理")).toBe("Users");
-      expect(tr("使用统计")).toBe("Reports");
+      expect(tr("使用统计")).toBe("Usage");
       expect(tr("系统设置")).toBe("Settings");
-      expect(tr("审计记录")).toBe("Audit");
+      expect(tr("审计记录")).toBe("Audit log");
       expect(tr("API 文档")).toBe("API Docs");
       expect(tr("问题单")).toBe("Issue");
       expect(tr("需求单")).toBe("Request");
-      expect(tr("非常紧急")).toBe("Immediate");
+      expect(tr("非常紧急")).toBe("Critical");
       expect(tr("已提交")).toBe("Submitted");
       expect(tr("已修复")).toBe("Fixed");
       expect(tr("标签")).toBe("Tags");
@@ -147,7 +147,7 @@ describe("国际化资源与语言解析", () => {
       expect(tr("整机")).toBe("Machine");
       expect(tr("{{count}} 组", { count: 1 })).toBe("1 Group");
       expect(tr("{{count}} 组", { count: 2 })).toBe("2 Groups");
-      expect(tr("{{v0}}{{v1}}的资源组", { v0: tr("收起"), v1: "Node" })).toBe("Collapse Node's resource group");
+      expect(tr("{{v0}}{{v1}}的资源组", { v0: tr("收起"), v1: "Node" })).toBe("Collapse Node's group");
       expect(tr("安排维护")).toBe("Schedule");
       expect(tr("维护管理")).toBe("Maintenance");
       expect(tr("导出 CSV")).toBe("Export");
@@ -170,6 +170,65 @@ describe("国际化资源与语言解析", () => {
     } finally {
       await i18n.changeLanguage("zh-CN");
     }
+  });
+
+  it("按语义区分状态、动作和确认后的英文术语", async () => {
+    await i18n.changeLanguage("en");
+    try {
+      expect(tr("status.enabled")).toBe("Enabled");
+      expect(tr("status.disabled")).toBe("Disabled");
+      expect(userStatusLabel("ACTIVE")).toBe("Enabled");
+      expect(resourceGroupStatusLabel("DISABLED")).toBe("Disabled");
+      expect(tr("启用")).toBe("Enable");
+      expect(tr("停用")).toBe("Disable");
+      expect(tr("action.apiToken.new")).toBe("New");
+      expect(tr("action.apiToken.create")).toBe("Create");
+      expect(tr("action.reservation.new")).toBe("New");
+      expect(tr("action.feedback.new")).toBe("New");
+      expect(tr("action.feedback.create")).toBe("Create");
+      expect(tr("action.machine.new")).toBe("New");
+      expect(tr("action.machine.create")).toBe("Create");
+      expect(tr("action.maintenance.create")).toBe("Create");
+      expect(tr("action.machineUser.invite")).toBe("Invite");
+      expect(tr("action.resourceGroup.new")).toBe("New");
+      expect(tr("action.resourceItem.new")).toBe("New");
+      expect(tr("action.device.add")).toBe("Add");
+      expect(tr("action.interval.add")).toBe("Add");
+      expect(tr("action.announcement.new")).toBe("New");
+      expect(tr("邮件通知")).toBe("Email notifications");
+      expect(tr("全部资源")).toBe("All resources");
+      expect(tr("问题描述")).toBe("Details");
+      expect(tr("需求描述")).toBe("Details");
+      expect(tr("显示已撤下")).toBe("Show archived");
+      expect(tr("密码状态")).toBe("Password status");
+      expect(tr("SMTP 密码")).toBe("SMTP password");
+      expect(tr("查看影响")).toBe("Review impact");
+      expect(tr("用户与权限")).toBe("Users & access");
+      expect(tr("等级")).toBe("Priority");
+      expect(tr("连接加密")).toBe("Connection security");
+      expect(tr("计算资源占用系统")).toBe("Compute resource reservations");
+    } finally {
+      await i18n.changeLanguage("zh-CN");
+    }
+
+    expect(tr("status.enabled")).toBe("启用");
+    expect(tr("status.disabled")).toBe("停用");
+    expect(userStatusLabel("ACTIVE")).toBe("启用");
+    expect(resourceGroupStatusLabel("DISABLED")).toBe("停用");
+    expect(tr("action.apiToken.new")).toBe("创建令牌");
+    expect(tr("action.apiToken.create")).toBe("创建令牌");
+    expect(tr("action.reservation.new")).toBe("新增占用");
+    expect(tr("action.feedback.new")).toBe("提交反馈");
+    expect(tr("action.feedback.create")).toBe("提交反馈");
+    expect(tr("action.machine.new")).toBe("新增机器");
+    expect(tr("action.machine.create")).toBe("创建机器");
+    expect(tr("action.maintenance.create")).toBe("创建维护");
+    expect(tr("action.machineUser.invite")).toBe("邀请用户");
+    expect(tr("action.resourceGroup.new")).toBe("新增资源组");
+    expect(tr("action.resourceItem.new")).toBe("新增资源项");
+    expect(tr("action.device.add")).toBe("添加设备");
+    expect(tr("action.interval.add")).toBe("添加区间");
+    expect(tr("action.announcement.new")).toBe("创建公告");
   });
 
   it("英文模式下认证校验和状态回退不泄漏中文", async () => {

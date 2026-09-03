@@ -11,6 +11,11 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  allocateCalendarResultFieldWidths,
+  CALENDAR_RESULT_FIELD_GAP,
+  type CalendarResultFieldWidths
+} from "./calendar-result-layout";
+import {
   searchCalendarResources,
   type CalendarSearchGroup,
   type CalendarSearchMachine
@@ -33,6 +38,137 @@ type MenuPosition = {
   placement: "down" | "up";
   edge: number;
 };
+
+function sameFieldWidths(
+  left: CalendarResultFieldWidths | null,
+  right: CalendarResultFieldWidths
+) {
+  return (
+    left?.title === right.title &&
+    left.address === right.address &&
+    left.tags === right.tags &&
+    left.resource === right.resource
+  );
+}
+
+function CalendarResultLine({
+  title,
+  address = "",
+  tags = [],
+  resource = ""
+}: {
+  title: string;
+  address?: string;
+  tags?: string[];
+  resource?: string;
+}) {
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const titleMeasureRef = useRef<HTMLElement>(null);
+  const addressMeasureRef = useRef<HTMLElement>(null);
+  const tagsMeasureRef = useRef<HTMLElement>(null);
+  const resourceMeasureRef = useRef<HTMLElement>(null);
+  const [widths, setWidths] = useState<CalendarResultFieldWidths | null>(null);
+  const tagText = tags.join(" · ");
+
+  useLayoutEffect(() => {
+    let active = true;
+    const recalculate = () => {
+      if (!active) return;
+      const availableWidth = rootRef.current?.clientWidth ?? 0;
+      if (!availableWidth) return;
+      const measureWidth = (element: HTMLElement | null) => {
+        const width = Math.max(
+          element?.scrollWidth ?? 0,
+          element?.offsetWidth ?? 0
+        );
+        return width > 0 ? width + 1 : 0;
+      };
+      const next = allocateCalendarResultFieldWidths(
+        {
+          title: measureWidth(titleMeasureRef.current),
+          address: measureWidth(addressMeasureRef.current),
+          tags: measureWidth(tagsMeasureRef.current),
+          resource: measureWidth(resourceMeasureRef.current)
+        },
+        availableWidth
+      );
+      setWidths((current) => (sameFieldWidths(current, next) ? current : next));
+    };
+    recalculate();
+
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(recalculate);
+    [
+      rootRef.current,
+      titleMeasureRef.current,
+      addressMeasureRef.current,
+      tagsMeasureRef.current,
+      resourceMeasureRef.current
+    ].forEach((element) => {
+      if (element) observer?.observe(element);
+    });
+    void document.fonts?.ready.then(recalculate);
+
+    return () => {
+      active = false;
+      observer?.disconnect();
+    };
+  }, [address, resource, tagText, title]);
+
+  const fieldStyle = (width: number | undefined): CSSProperties | undefined =>
+    width === undefined ? undefined : { width };
+
+  return (
+    <span
+      className="calendar-resource-finder-copy"
+      ref={rootRef}
+      style={{ columnGap: CALENDAR_RESULT_FIELD_GAP }}
+    >
+      <strong
+        className="calendar-resource-finder-result-title"
+        style={fieldStyle(widths?.title)}
+        title={title}
+      >
+        {title}
+      </strong>
+      {address && (widths === null || widths.address > 0) && (
+        <small
+          className="calendar-resource-finder-result-address"
+          style={fieldStyle(widths?.address)}
+          title={address}
+        >
+          {address}
+        </small>
+      )}
+      {tagText && (widths === null || widths.tags > 0) && (
+        <em
+          className="calendar-resource-finder-result-tags"
+          style={fieldStyle(widths?.tags)}
+          title={tagText}
+        >
+          {tagText}
+        </em>
+      )}
+      {resource && (widths === null || widths.resource > 0) && (
+        <small
+          className="calendar-resource-finder-result-resource"
+          style={fieldStyle(widths?.resource)}
+          title={resource}
+        >
+          {resource}
+        </small>
+      )}
+      <span className="calendar-resource-finder-measure" aria-hidden="true">
+        <strong ref={titleMeasureRef}>{title}</strong>
+        {address && <small ref={addressMeasureRef}>{address}</small>}
+        {tagText && <em ref={tagsMeasureRef}>{tagText}</em>}
+        {resource && <small ref={resourceMeasureRef}>{resource}</small>}
+      </span>
+    </span>
+  );
+}
 
 export function CalendarResourceFinder({
   machines,
@@ -275,26 +411,12 @@ export function CalendarResourceFinder({
                         <span className="calendar-resource-finder-machine-icon">
                           <Server size={16} aria-hidden="true" />
                         </span>
-                        <span className="calendar-resource-finder-copy">
-                          <span className="calendar-resource-finder-identity">
-                            <strong>{machine.name}</strong>
-                            {machine.address && (
-                              <small title={machine.address}>{machine.address}</small>
-                            )}
-                            {machine.tags.length > 0 && (
-                              <em title={machine.tags.join(" · ")}>
-                                {machine.tags.join(" · ")}
-                              </em>
-                            )}
-                          </span>
-                          <span className="calendar-resource-finder-metadata">
-                            {machine.resourceSummary && (
-                              <small title={machine.resourceSummary}>
-                                {machine.resourceSummary}
-                              </small>
-                            )}
-                          </span>
-                        </span>
+                        <CalendarResultLine
+                          title={machine.name}
+                          address={machine.address}
+                          tags={machine.tags}
+                          resource={machine.resourceSummary}
+                        />
                       </button>
                       {matchingGroups.map((group) => {
                         const groupKey = `group:${group.id}`;
@@ -314,12 +436,10 @@ export function CalendarResourceFinder({
                           >
                             <span aria-hidden="true" />
                             <Layers3 size={15} aria-hidden="true" />
-                            <span className="calendar-resource-finder-copy">
-                              <strong>{group.name}</strong>
-                              {group.resourceSummary && (
-                                <small title={group.resourceSummary}>{group.resourceSummary}</small>
-                              )}
-                            </span>
+                            <CalendarResultLine
+                              title={group.name}
+                              resource={group.resourceSummary}
+                            />
                           </button>
                         );
                       })}

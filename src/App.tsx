@@ -13,6 +13,11 @@ import {
   type CalendarSearchTarget
 } from "./CalendarResourceFinder";
 import {
+  allocateCalendarResultFieldWidths,
+  CALENDAR_RESULT_FIELD_GAP,
+  type CalendarResultFieldWidths
+} from "./calendar-result-layout";
+import {
   Activity,
   Bell,
   BookOpenText,
@@ -1297,6 +1302,157 @@ function CalendarMachineTags({
         <span key={tag}>{tag}</span>
       ))}
       {remaining > 0 && <span>+{remaining}</span>}
+    </span>
+  );
+}
+
+function CalendarMachineStripLine({
+  machine,
+  maintenanceNow
+}: {
+  machine: Machine;
+  maintenanceNow: boolean;
+}) {
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const leadingRef = useRef<HTMLSpanElement>(null);
+  const stateRef = useRef<HTMLSpanElement>(null);
+  const titleMeasureRef = useRef<HTMLElement>(null);
+  const addressMeasureRef = useRef<HTMLElement>(null);
+  const tagsMeasureRef = useRef<HTMLSpanElement>(null);
+  const resourceMeasureRef = useRef<HTMLSpanElement>(null);
+  const [widths, setWidths] = useState<CalendarResultFieldWidths | null>(null);
+  const tagKey = machine.tags.join("\u0000");
+  const stateClass =
+    machine.status === "DISABLED"
+      ? "disabled"
+      : maintenanceNow
+        ? "scheduled"
+        : "active";
+  const stateLabel =
+    machine.status === "DISABLED"
+      ? tr("status.disabled")
+      : maintenanceNow
+        ? tr("维护")
+        : tr("status.enabled");
+  const resourceText = machine.resourceSummary || tr("尚未配置资源");
+
+  useLayoutEffect(() => {
+    let active = true;
+    const recalculate = () => {
+      if (!active) return;
+      const rootWidth = rootRef.current?.clientWidth ?? 0;
+      if (!rootWidth) return;
+      const fixedWidth =
+        (leadingRef.current?.offsetWidth ?? 0) +
+        (stateRef.current?.offsetWidth ?? 0) +
+        CALENDAR_RESULT_FIELD_GAP * 2;
+      const measureWidth = (element: HTMLElement | null) => {
+        const width = Math.max(
+          element?.scrollWidth ?? 0,
+          element?.offsetWidth ?? 0
+        );
+        return width > 0 ? width + 1 : 0;
+      };
+      const next = allocateCalendarResultFieldWidths(
+        {
+          title: measureWidth(titleMeasureRef.current),
+          address: measureWidth(addressMeasureRef.current),
+          tags: measureWidth(tagsMeasureRef.current),
+          resource: measureWidth(resourceMeasureRef.current)
+        },
+        Math.max(0, rootWidth - fixedWidth)
+      );
+      setWidths((current) =>
+        current?.title === next.title &&
+        current.address === next.address &&
+        current.tags === next.tags &&
+        current.resource === next.resource
+          ? current
+          : next
+      );
+    };
+    recalculate();
+
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(recalculate);
+    [
+      rootRef.current,
+      leadingRef.current,
+      stateRef.current,
+      titleMeasureRef.current,
+      addressMeasureRef.current,
+      tagsMeasureRef.current,
+      resourceMeasureRef.current
+    ].forEach((element) => {
+      if (element) observer?.observe(element);
+    });
+    void document.fonts?.ready.then(recalculate);
+
+    return () => {
+      active = false;
+      observer?.disconnect();
+    };
+  }, [machine.address, machine.name, resourceText, stateLabel, tagKey]);
+
+  const fieldStyle = (width: number | undefined) =>
+    width === undefined ? undefined : { width };
+
+  return (
+    <span
+      className="machine-strip-visible"
+      ref={rootRef}
+      style={{ columnGap: CALENDAR_RESULT_FIELD_GAP }}
+    >
+      <span className="machine-strip-leading" ref={leadingRef}>
+        <ChevronDown className="machine-collapse-icon" size={15} />
+        <Server size={16} />
+      </span>
+      <strong
+        className="calendar-machine-name"
+        style={fieldStyle(widths?.title)}
+        title={machine.name}
+      >
+        {machine.name}
+      </strong>
+      {machine.address && (widths === null || widths.address > 0) && (
+        <code style={fieldStyle(widths?.address)} title={machine.address}>
+          {machine.address}
+        </code>
+      )}
+      {machine.tags.length > 0 && (widths === null || widths.tags > 0) && (
+        <span
+          className="machine-strip-tags-field"
+          style={fieldStyle(widths?.tags)}
+        >
+          <CalendarMachineTags tags={machine.tags} />
+        </span>
+      )}
+      <span className={`state-chip machine-strip-state ${stateClass}`} ref={stateRef}>
+        {stateLabel}
+      </span>
+      {(widths === null || widths.resource > 0) && (
+        <span
+          className="machine-resource-summary"
+          style={fieldStyle(widths?.resource)}
+          title={resourceText}
+        >
+          {resourceText}
+        </span>
+      )}
+      <span className="machine-strip-measure" aria-hidden="true">
+        <strong ref={titleMeasureRef}>{machine.name}</strong>
+        {machine.address && <code ref={addressMeasureRef}>{machine.address}</code>}
+        {machine.tags.length > 0 && (
+          <span ref={tagsMeasureRef}>
+            <CalendarMachineTags tags={machine.tags} />
+          </span>
+        )}
+        <span className="machine-resource-summary" ref={resourceMeasureRef}>
+          {resourceText}
+        </span>
+      </span>
     </span>
   );
 }
@@ -7252,35 +7408,10 @@ function CalendarPage({
                     setDragPreview(null);
                   }}
                 >
-                  <span className="machine-strip-main">
-                    <ChevronDown className="machine-collapse-icon" size={15} />
-                    <Server size={16} />
-                    <strong>{machine.name}</strong>
-                    <code>{machine.address}</code>
-                    <span className="machine-group-count">
-                      {tr("{{count}} 组", { count: machineGroups.length })}</span>
-                    <CalendarMachineTags tags={machine.tags} />
-                  </span>
-                  <span className="machine-strip-summary">
-                    <span
-                      className={`state-chip ${
-                        machine.status === "DISABLED"
-                          ? "disabled"
-                          : machineMaintenanceNow
-                            ? "scheduled"
-                            : "active"
-                      }`}
-                    >
-                      {machine.status === "DISABLED"
-                        ? tr("status.disabled")
-                        : machineMaintenanceNow
-                          ? tr("维护")
-                          : tr("status.enabled")}
-                    </span>
-                    <span className="machine-resource-summary">
-                      {machine.resourceSummary || tr("尚未配置资源")}
-                    </span>
-                  </span>
+                  <CalendarMachineStripLine
+                    machine={machine}
+                    maintenanceNow={machineMaintenanceNow}
+                  />
                 </button>
                 <div
                   id={machineContentsId}
@@ -8041,7 +8172,9 @@ function CalendarWeekOverview({
                 data-calendar-machine-id={machine.id}
               >
                 <Server size={15} />
-                <strong>{machine.name}</strong>
+                <strong className="calendar-machine-name" title={machine.name}>
+                  {machine.name}
+                </strong>
                 <code>{machine.address}</code>
                 <CalendarMachineTags tags={machine.tags} className="week" />
               </div>

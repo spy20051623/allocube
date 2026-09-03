@@ -626,6 +626,9 @@ describe("角色化界面文案", () => {
     expect(source).toContain("onSelect={locateCalendarResource}");
     expect(source).toContain("data-calendar-machine-id={machine.id}");
     expect(source).toContain("data-calendar-group-id={group.id}");
+    expect(source).toContain(
+      '<strong className="calendar-machine-name" title={machine.name}>'
+    );
     expect(source).not.toContain(
       "...(debouncedSearch ? { search: debouncedSearch } : {})"
     );
@@ -647,8 +650,35 @@ describe("角色化界面文案", () => {
     expect(styles).toMatch(
       /\.calendar-resource-finder-copy\s*\{[^}]*display:\s*flex/s
     );
-    expect(finder).toContain('className="calendar-resource-finder-identity"');
-    expect(finder).toContain('className="calendar-resource-finder-metadata"');
+    expect(finder).toContain("<CalendarResultLine");
+    expect(finder).toContain("allocateCalendarResultFieldWidths");
+    expect(finder).toContain("element?.scrollWidth ?? 0");
+    expect(finder).toContain("return width > 0 ? width + 1 : 0");
+    expect(finder).toContain("style={{ columnGap: CALENDAR_RESULT_FIELD_GAP }}");
+    expect(finder).not.toContain("menuWidth");
+    expect(finder).not.toContain("titleMeasureRef.current?.getBoundingClientRect()");
+    expect(finder).toContain('new ResizeObserver(recalculate)');
+    expect(finder).toContain('document.fonts?.ready.then(recalculate)');
+    expect(styles).toContain(".calendar-resource-finder-result-resource");
+    expect(styles).toContain(".calendar-resource-finder-measure");
+    expect(styles).toMatch(
+      /\.calendar-resource-finder-measure > \*\s*\{[^}]*display:\s*inline-block;/s
+    );
+    expect(styles).toMatch(
+      /\.machine-strip \.calendar-machine-name\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;/s
+    );
+    expect(styles).toMatch(
+      /\.timeline-scroll-shell\s*\{[^}]*container-type:\s*inline-size;/s
+    );
+    expect(source).toContain("<CalendarMachineStripLine");
+    expect(source).not.toContain('className="machine-group-count"');
+    expect(styles).toMatch(
+      /\.machine-strip-visible\s*\{[^}]*width:\s*min\(calc\(100% - 30px\), calc\(100cqw - 30px\)\);/s
+    );
+    expect(styles).toContain(".machine-strip-measure");
+    expect(styles).toMatch(
+      /\.machine-strip-tags-field\s*\{[^}]*height:\s*100%;[^}]*display:\s*inline-flex;[^}]*align-items:\s*center;/s
+    );
     expect(styles).not.toContain(".calendar-resource-finder-copy small::before");
     expect(styles).not.toContain(".calendar-resource-finder-copy em::before");
   });

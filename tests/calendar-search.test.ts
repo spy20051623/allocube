@@ -130,13 +130,33 @@ describe("日历资源搜索", () => {
     ];
     const result = searchCalendarResources(
       demonstrationMachines,
-      [],
+      demonstrationMachines.map((machine, index) => ({
+        ...groups[0],
+        id: `group-demo-${index}`,
+        machineId: machine.id,
+        name: "默认资源组"
+      })),
       "演示节点"
     );
     expect(result.map((item) => item.machine.name)).toEqual([
       "演示停用节点",
       "演示维护节点"
     ]);
+  });
+
+  it("不返回没有可见资源组、因而无法在日历中定位的机器", () => {
+    const machineWithoutGroups: Machine = {
+      ...machines[0],
+      id: "machine-without-groups",
+      name: "孤立测试机"
+    };
+    expect(
+      searchCalendarResources(
+        [...machines, machineWithoutGroups],
+        groups,
+        "孤立测试机"
+      )
+    ).toEqual([]);
   });
 
   it("多个关键词可以分布在机器的地址、标签和资源摘要中", () => {

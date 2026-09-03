@@ -107,6 +107,7 @@ export function searchCalendarResources(
   if (!normalizedQuery) return [];
 
   const terms = normalizedQuery.split(" ");
+  const navigableMachineIds = new Set(groups.map((group) => group.machineId));
   const groupsByMachine = new Map<string, ScoredGroup[]>();
   groups.forEach((group, order) => {
     const score = groupMatchScore(group, normalizedQuery, terms);
@@ -117,6 +118,7 @@ export function searchCalendarResources(
   });
 
   return machines
+    .filter((machine) => navigableMachineIds.has(machine.id))
     .map((machine, order) => {
       const machineScore = machineMatchScore(machine, normalizedQuery, terms);
       const matchingGroups = (groupsByMachine.get(machine.id) ?? []).sort(

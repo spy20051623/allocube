@@ -683,6 +683,15 @@ describe("角色化界面文案", () => {
     expect(styles).not.toContain(".calendar-resource-finder-copy em::before");
   });
 
+  it("功能图标在紧凑布局中保持固定尺寸", () => {
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const styles = readText(new URL("../src/styles.css", import.meta.url), "utf8");
+    expect(styles).toMatch(
+      /\.lucide,\s*\.mouse-control-icon\s*\{[^}]*flex:\s*0 0 auto;/s
+    );
+    expect(source).toContain('className="mouse-control-icon"');
+  });
+
   it("统计排行空状态不使用排行三列布局", () => {
     const styles = readText(
       new URL("../src/styles.css", import.meta.url),

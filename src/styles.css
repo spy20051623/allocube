@@ -28,6 +28,11 @@
   box-sizing: border-box;
 }
 
+.lucide,
+.mouse-control-icon {
+  flex: 0 0 auto;
+}
+
 html {
   background: #f4f5f7;
 }

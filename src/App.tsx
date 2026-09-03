@@ -1466,6 +1466,7 @@ function MouseControlIcon({
 }) {
   return (
     <svg
+      className="mouse-control-icon"
       aria-hidden="true"
       width={size}
       height={size}

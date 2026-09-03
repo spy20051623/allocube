@@ -9,6 +9,10 @@ import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "./i18n/LanguageSwitcher";
 import { SelectControl, type SelectControlOption } from "./SelectControl";
 import {
+  CalendarResourceFinder,
+  type CalendarSearchTarget
+} from "./CalendarResourceFinder";
+import {
   Activity,
   Bell,
   BookOpenText,
@@ -5530,26 +5534,17 @@ function CalendarPage({
   );
   const [view, setView] = useState<CalendarView>(initialQuery.view);
   const [date, setDate] = useState(initialQuery.date);
-  const [search, setSearch] = useState(initialQuery.search);
-  const [debouncedSearch, setDebouncedSearch] = useState(initialQuery.search);
-  const [selectedMachine, setSelectedMachine] = useState(
-    initialQuery.machineId || initialCalendarPreference.machineId || ""
+  const [search, setSearch] = useState("");
+  const [calendarSearchTarget, setCalendarSearchTarget] = useState<
+    (CalendarSearchTarget & { revision: number }) | null
+  >(
+    initialQuery.machineId
+      ? { machineId: initialQuery.machineId, revision: 1 }
+      : null
   );
-  const calendarStateRef = useRef({
-    ...initialQuery,
-    machineId:
-      initialQuery.machineId || initialCalendarPreference.machineId || ""
-  });
+  const calendarStateRef = useRef(initialQuery);
   const initialCalendarRouteAppliedRef = useRef(false);
   const serverDateCorrectionAppliedRef = useRef(false);
-  const [machineOptions, setMachineOptions] = useState<
-    Array<
-      Pick<
-        Machine,
-        "id" | "name" | "address" | "resourceSummary" | "status" | "tags" | "isManager"
-      >
-    >
-  >([]);
   const [timeline, setTimeline] = useState<TimelinePayload | null>(null);
   const [visibleHours, setVisibleHours] = useState(
     initialCalendarPreference.visibleHours
@@ -5627,6 +5622,7 @@ function CalendarPage({
   const timelineShellRef = useRef<HTMLDivElement | null>(null);
   const timelineHorizontalScrollRef = useRef<HTMLDivElement | null>(null);
   const bookingDrawerRef = useRef<HTMLElement | null>(null);
+  const calendarSearchHighlightTimerRef = useRef<number | null>(null);
   const lastAltZoomAtRef = useRef(0);
   const timelineStartMinutesRef = useRef(
     defaultDayWindowStartMinutes(currentTime)
@@ -5852,7 +5848,6 @@ function CalendarPage({
         date: string;
         view: CalendarView;
         machineId: string;
-        search: string;
       }>,
       replace = false
     ) => {
@@ -5871,19 +5866,14 @@ function CalendarPage({
 
   useEffect(() => {
     const next = parseCalendarQuery(routeLocation.searchStr, todayChina());
-    const machineId = initialCalendarRouteAppliedRef.current
-      ? next.machineId
-      : next.machineId || initialCalendarPreference.machineId || "";
+    if (!initialCalendarRouteAppliedRef.current && next.machineId) {
+      setCalendarSearchTarget({ machineId: next.machineId, revision: 1 });
+    }
     initialCalendarRouteAppliedRef.current = true;
-    const hydrated = { ...next, machineId };
-    calendarStateRef.current = hydrated;
+    calendarStateRef.current = next;
     setDate((current) => (current === next.date ? current : next.date));
     setView((current) => (current === next.view ? current : next.view));
-    setSelectedMachine((current) =>
-      current === machineId ? current : machineId
-    );
-    setSearch((current) => (current === next.search ? current : next.search));
-  }, [initialCalendarPreference.machineId, routeLocation.searchStr]);
+  }, [routeLocation.searchStr]);
 
   useEffect(() => {
     if (!serverClockReady || serverDateCorrectionAppliedRef.current) return;
@@ -5905,37 +5895,6 @@ function CalendarPage({
     writeCalendarRoute
   ]);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
-    return () => window.clearTimeout(timer);
-  }, [search]);
-
-  const loadMachineOptions = useCallback(async () => {
-    try {
-      const result = await api<{ machines: typeof machineOptions }>(
-        "/timeline/machines"
-      );
-      setMachineOptions(result.machines);
-    } catch (error) {
-      notify(
-        "error",
-        error instanceof Error ? error.message : tr("机器列表加载失败")
-      );
-    }
-  }, [notify]);
-
-  useEffect(() => {
-    if (
-      selectedMachine &&
-      machineOptions.length > 0 &&
-      !machineOptions.some((machine) => machine.id === selectedMachine)
-    ) {
-      setSelectedMachine("");
-      writeCalendarPreference({ machineId: undefined });
-      writeCalendarRoute({ machineId: "" }, true);
-    }
-  }, [machineOptions, selectedMachine, writeCalendarRoute]);
-
   const loadTimeline = useCallback(async (_background = false) => {
     const requestId = ++requestIdRef.current;
     requestControllerRef.current?.abort();
@@ -5947,9 +5906,7 @@ function CalendarPage({
       const requestStartedAt = performance.now();
       const query = new URLSearchParams({
         from: range.from,
-        to: range.to,
-        ...(selectedMachine ? { machineIds: selectedMachine } : {}),
-        ...(debouncedSearch ? { search: debouncedSearch } : {})
+        to: range.to
       });
       const result = await api<TimelinePayload>(`/timeline?${query}`, {
         signal: controller.signal
@@ -5968,17 +5925,11 @@ function CalendarPage({
       }
     }
   }, [
-    debouncedSearch,
     notify,
     range.from,
     range.to,
-    selectedMachine,
     synchronizeServerClock
   ]);
-
-  useEffect(() => {
-    void loadMachineOptions();
-  }, [loadMachineOptions]);
 
   useEffect(() => {
     void loadTimeline(false);
@@ -6010,7 +5961,6 @@ function CalendarPage({
   useEffect(() => {
     const reload = () => {
       loadTimelineRef.current(true);
-      void loadMachineOptions();
     };
     const unsubscribeConnection = subscribeRealtimeConnection(setConnectionState);
     const unsubscribeRevision = subscribeRealtimeEvent("revision", reload);
@@ -6018,16 +5968,15 @@ function CalendarPage({
       unsubscribeConnection();
       unsubscribeRevision();
     };
-  }, [loadMachineOptions]);
+  }, []);
 
   useEffect(() => {
     if (connectionState !== "DISCONNECTED") return;
     const timer = window.setInterval(() => {
       loadTimelineRef.current(true);
-      void loadMachineOptions();
     }, 30_000);
     return () => window.clearInterval(timer);
-  }, [connectionState, loadMachineOptions]);
+  }, [connectionState]);
 
   const reservationsByGroup = useMemo(() => {
     const map = new Map<string, TimelineReservation[]>();
@@ -6082,6 +6031,86 @@ function CalendarPage({
     }
     return map;
   }, [timeline]);
+
+  const locateCalendarResource = useCallback((target: CalendarSearchTarget) => {
+    setCalendarSearchTarget((current) => ({
+      ...target,
+      revision: (current?.revision ?? 0) + 1
+    }));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!calendarSearchTarget || !timeline) return;
+    const machine = timeline.machines.find(
+      (item) => item.id === calendarSearchTarget.machineId
+    );
+    const group = calendarSearchTarget.groupId
+      ? timeline.groups.find(
+          (item) =>
+            item.id === calendarSearchTarget.groupId &&
+            item.machineId === calendarSearchTarget.machineId
+        )
+      : undefined;
+    if (!machine || (calendarSearchTarget.groupId && !group)) {
+      setCalendarSearchTarget(null);
+      return;
+    }
+    if (
+      calendarSearchTarget.groupId &&
+      collapsedMachineIds.has(calendarSearchTarget.machineId)
+    ) {
+      setCollapsedMachineIds((current) => {
+        const next = new Set(current);
+        next.delete(calendarSearchTarget.machineId);
+        return next;
+      });
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const root = timelineFrameRef.current;
+      const targets = root?.querySelectorAll<HTMLElement>(
+        calendarSearchTarget.groupId
+          ? "[data-calendar-group-id]"
+          : "[data-calendar-machine-id]:not([data-calendar-group-id])"
+      );
+      const element = Array.from(targets ?? []).find(
+        (item) =>
+          item.dataset.calendarMachineId === calendarSearchTarget.machineId &&
+          (calendarSearchTarget.groupId
+            ? item.dataset.calendarGroupId === calendarSearchTarget.groupId
+            : true)
+      );
+      if (!element) return;
+      element.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+        block: "center",
+        inline: "nearest"
+      });
+      if (calendarSearchHighlightTimerRef.current !== null) {
+        window.clearTimeout(calendarSearchHighlightTimerRef.current);
+      }
+      const revision = calendarSearchTarget.revision;
+      calendarSearchHighlightTimerRef.current = window.setTimeout(() => {
+        setCalendarSearchTarget((current) =>
+          current?.revision === revision ? null : current
+        );
+        calendarSearchHighlightTimerRef.current = null;
+      }, 1_800);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [calendarSearchTarget, collapsedMachineIds, timeline, view]);
+
+  useEffect(
+    () => () => {
+      if (calendarSearchHighlightTimerRef.current !== null) {
+        window.clearTimeout(calendarSearchHighlightTimerRef.current);
+      }
+    },
+    []
+  );
 
   const groupById = useMemo(
     () =>
@@ -7126,48 +7155,12 @@ function CalendarPage({
               </button>
             </div>
           )}
-          <div className="search-box">
-            <Search size={16} />
-            <input
-              aria-label={tr("搜索资源组或标签")}
-              value={search}
-              onChange={(event) => {
-                const next = event.target.value;
-                setSearch(next);
-                writeCalendarRoute({ search: next }, true);
-              }}
-              placeholder={tr("搜索资源组或标签")}
-            />
-            {search && (
-              <button
-                type="button"
-                className="search-clear-button"
-                aria-label={tr("清除搜索")}
-                title={tr("清除搜索")}
-                onClick={() => {
-                  setSearch("");
-                  writeCalendarRoute({ search: "" }, true);
-                }}
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-          <SelectControl
-            value={selectedMachine}
-            ariaLabel={tr("筛选机器")}
-            compact
-            options={[
-              { value: "", label: tr("全部机器") },
-              ...machineOptions.map((machine) => ({ value: machine.id, label: machine.name }))
-            ]}
-            onChange={(value) => {
-              setSelectedMachine(value);
-              writeCalendarPreference({
-                machineId: value || undefined
-              });
-              writeCalendarRoute({ machineId: value });
-            }}
+          <CalendarResourceFinder
+            machines={timeline?.machines ?? []}
+            groups={timeline?.groups ?? []}
+            value={search}
+            onChange={setSearch}
+            onSelect={locateCalendarResource}
           />
           <button className="secondary-button" disabled={refreshing} onClick={() => void loadTimeline(true)}>
             {refreshing ? <RefreshCw size={16} className="spin" /> : <RefreshCw size={16} />}
@@ -7187,15 +7180,9 @@ function CalendarPage({
             />
           ) : !timeline.groups.length ? (
             <CalendarEmptyState
-              icon={debouncedSearch ? Search : Server}
-              title={tr("没有符合条件的资源组")}
-              text={
-                debouncedSearch
-                  ? tr("可以调整搜索或筛选条件，或前往全部资源查看完整机器列表。")
-                  : selectedMachine
-                    ? tr("可以切换机器，或前往全部资源查看完整机器列表。")
-                    : tr("可以前往全部资源查看完整机器列表。")
-              }
+              icon={Server}
+              title={tr("尚未配置资源组")}
+              text={tr("可以前往全部资源查看完整机器列表。")}
               onOpenResourceCatalog={() => navigate("resources")}
             />
           ) : view === "week" ? (
@@ -7204,6 +7191,7 @@ function CalendarPage({
               range={range}
               today={serverToday}
               refreshing={refreshing}
+              searchTarget={calendarSearchTarget}
               onSelectDay={(selectedDate) => changeView("day", selectedDate)}
             />
           ) : (
@@ -7245,7 +7233,8 @@ function CalendarPage({
               <div className="machine-block" key={machine.id}>
                 <button
                   type="button"
-                  className={`machine-strip${machineCollapsed ? " collapsed" : ""}`}
+                  className={`machine-strip${machineCollapsed ? " collapsed" : ""}${calendarSearchTarget?.machineId === machine.id && !calendarSearchTarget.groupId ? " calendar-search-highlight" : ""}`}
+                  data-calendar-machine-id={machine.id}
                   aria-expanded={!machineCollapsed}
                   aria-controls={machineContentsId}
                   aria-label={tr("{{v0}}{{v1}}的资源组", {
@@ -7378,7 +7367,9 @@ function CalendarPage({
                       machineGroups.every((item) => item.status === "ACTIVE"));
                   return (
                     <div
-                      className={`timeline-row${longTermDisabled ? " long-term-disabled" : ""}`}
+                      className={`timeline-row${longTermDisabled ? " long-term-disabled" : ""}${calendarSearchTarget?.machineId === machine.id && calendarSearchTarget.groupId === group.id ? " calendar-search-highlight" : ""}`}
+                      data-calendar-machine-id={machine.id}
+                      data-calendar-group-id={group.id}
                       key={group.id}
                     >
                       <div className="resource-cell">
@@ -7991,12 +7982,14 @@ function CalendarWeekOverview({
   range,
   today,
   refreshing,
+  searchTarget,
   onSelectDay
 }: {
   timeline: TimelinePayload;
   range: { from: string; to: string; startDate: string; days: number };
   today: string;
   refreshing: boolean;
+  searchTarget: CalendarSearchTarget | null;
   onSelectDay: (date: string) => void;
 }) {
   const days = Array.from({ length: 7 }, (_, index) =>
@@ -8043,14 +8036,22 @@ function CalendarWeekOverview({
           if (!groups.length) return null;
           return (
             <div className="week-machine-block" key={machine.id}>
-              <div className="week-machine-strip">
+              <div
+                className={`week-machine-strip${searchTarget?.machineId === machine.id && !searchTarget.groupId ? " calendar-search-highlight" : ""}`}
+                data-calendar-machine-id={machine.id}
+              >
                 <Server size={15} />
                 <strong>{machine.name}</strong>
                 <code>{machine.address}</code>
                 <CalendarMachineTags tags={machine.tags} className="week" />
               </div>
               {groups.map((group) => (
-                <div className="week-overview-row" key={group.id}>
+                <div
+                  className={`week-overview-row${searchTarget?.machineId === machine.id && searchTarget.groupId === group.id ? " calendar-search-highlight" : ""}`}
+                  data-calendar-machine-id={machine.id}
+                  data-calendar-group-id={group.id}
+                  key={group.id}
+                >
                   <div className="week-resource-cell">
                     <strong>{group.name}</strong>
                     <ResourceSummary value={group.resourceSummary} />

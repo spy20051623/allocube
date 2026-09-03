@@ -1548,6 +1548,252 @@ textarea::placeholder {
   margin-left: 0;
 }
 
+.calendar-resource-finder {
+  min-width: 220px;
+  height: 35px;
+  padding: 0 8px 0 10px;
+  display: flex;
+  flex: 1 1 280px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: #8a93a4;
+  background: #fafbfc;
+  transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+}
+
+.calendar-resource-finder.open,
+.calendar-resource-finder:focus-within {
+  border-color: #9db3e9;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(37, 88, 217, .1);
+}
+
+.calendar-resource-finder > svg {
+  flex: 0 0 auto;
+  color: #7b8799;
+}
+
+.calendar-resource-finder.open > svg,
+.calendar-resource-finder:focus-within > svg {
+  color: var(--blue);
+}
+
+.calendar-resource-finder input {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.calendar-resource-finder input:focus {
+  outline: none;
+}
+
+.calendar-resource-finder-clear {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  color: #7d8798;
+  background: transparent;
+  cursor: pointer;
+}
+
+.calendar-resource-finder-clear:hover,
+.calendar-resource-finder-clear:focus-visible {
+  color: var(--blue);
+  background: #eaf0ff;
+  outline: none;
+}
+
+.calendar-resource-finder-menu {
+  position: fixed;
+  z-index: 220;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #dce2ec;
+  border-radius: 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, .99);
+  box-shadow: 0 18px 46px rgba(24, 36, 58, .18), 0 2px 8px rgba(24, 36, 58, .06);
+  scrollbar-width: thin;
+  scrollbar-color: #c8d0dc transparent;
+  animation: ui-popover-in .14s ease-out;
+}
+
+.calendar-resource-finder-menu:not([style]) {
+  visibility: hidden;
+}
+
+.calendar-resource-finder-menu.up {
+  animation-name: ui-select-popover-up;
+}
+
+.calendar-resource-finder-machine + .calendar-resource-finder-machine {
+  border-top: 1px solid #e8ebf1;
+}
+
+.calendar-resource-finder-machine-option,
+.calendar-resource-finder-group-option {
+  width: 100%;
+  border: 0;
+  color: #3e4a5e;
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-resource-finder-machine-option {
+  min-height: 44px;
+  padding: 5px 10px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  background: white;
+}
+
+.calendar-resource-finder-group-option {
+  min-height: 36px;
+  padding: 4px 10px;
+  display: grid;
+  grid-template-columns: 18px 15px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  color: #667187;
+  background: #fafbfc;
+}
+
+.calendar-resource-finder-machine-option:hover,
+.calendar-resource-finder-machine-option.active,
+.calendar-resource-finder-group-option:hover,
+.calendar-resource-finder-group-option.active {
+  color: var(--blue);
+  background: #f1f5ff;
+  outline: none;
+}
+
+.calendar-resource-finder-machine-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--blue);
+  background: #eaf0ff;
+}
+
+.calendar-resource-finder-group-option > svg {
+  color: #7a8aa4;
+}
+
+.calendar-resource-finder-copy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.calendar-resource-finder-copy strong,
+.calendar-resource-finder-copy small,
+.calendar-resource-finder-copy em,
+.calendar-resource-finder-identity,
+.calendar-resource-finder-metadata {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-resource-finder-copy strong {
+  color: #344055;
+  font-size: 12.5px;
+  line-height: 1.25;
+}
+
+.calendar-resource-finder-copy > strong {
+  flex: 0 1 auto;
+  max-width: 48%;
+}
+
+.calendar-resource-finder-copy small {
+  color: #7f899a;
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+
+.calendar-resource-finder-copy em {
+  color: #4c6fbf;
+  font-size: 10.5px;
+  font-style: normal;
+  line-height: 1.25;
+}
+
+.calendar-resource-finder-identity,
+.calendar-resource-finder-metadata {
+  display: flex;
+  align-items: center;
+}
+
+.calendar-resource-finder-identity {
+  flex: 1 1 62%;
+  gap: 7px;
+}
+
+.calendar-resource-finder-identity strong {
+  flex: 0 0 auto;
+  max-width: 52%;
+}
+
+.calendar-resource-finder-identity em {
+  flex: 0 2 auto;
+  max-width: 34%;
+}
+
+.calendar-resource-finder-identity small {
+  flex: 0 1 auto;
+  max-width: 40%;
+}
+
+.calendar-resource-finder-metadata {
+  flex: 0 3 38%;
+  justify-content: flex-end;
+  gap: 12px;
+  text-align: right;
+}
+
+.calendar-resource-finder-metadata small,
+.calendar-resource-finder-copy > small {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+.calendar-resource-finder-copy > small {
+  margin-left: auto;
+  text-align: right;
+}
+
+.calendar-resource-finder-empty {
+  min-height: 112px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #7d8798;
+  font-size: 12px;
+}
+
 .toolbar .segmented,
 .toolbar > .secondary-button {
   flex: 0 0 auto;
@@ -1899,6 +2145,32 @@ textarea::placeholder {
   color: #8a93a2;
   font-family: inherit;
   font-size: 10px;
+}
+
+.week-machine-strip.calendar-search-highlight,
+.machine-strip.calendar-search-highlight {
+  background: #eaf1ff;
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.week-overview-row.calendar-search-highlight .week-resource-cell,
+.week-overview-row.calendar-search-highlight .week-day-cell > button,
+.timeline-row.calendar-search-highlight .resource-cell,
+.timeline-row.calendar-search-highlight .time-track {
+  background-color: #edf3ff;
+}
+
+.week-overview-row.calendar-search-highlight .week-resource-cell,
+.timeline-row.calendar-search-highlight .resource-cell {
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.week-machine-strip,
+.week-resource-cell,
+.week-day-cell > button,
+.resource-cell,
+.time-track {
+  transition: background-color 180ms ease, box-shadow 180ms ease;
 }
 
 .calendar-machine-tags {
@@ -2379,6 +2651,11 @@ textarea::placeholder {
 
 @media (prefers-reduced-motion: reduce) {
   .machine-strip,
+  .week-machine-strip,
+  .week-resource-cell,
+  .week-day-cell > button,
+  .resource-cell,
+  .time-track,
   .machine-collapse-icon,
   .machine-contents,
   .machine-contents.collapsed {
@@ -8742,6 +9019,7 @@ body:has(.feedback-admin-detail-frame) {
   .catalog-manager-popover,
   .profile-review-popover,
   .language-switcher-popover,
+  .calendar-resource-finder-menu,
   .select-control-menu {
     animation: none;
   }

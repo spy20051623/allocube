@@ -567,7 +567,7 @@ describe("角色化界面文案", () => {
       styles.match(/\.booking-drawer\s*\{([^}]*)\}/)?.[1] ?? "";
     const calendarEmptyState =
       styles.match(/\.calendar-empty-state\s*\{([^}]*)\}/)?.[1] ?? "";
-    expect(source).toContain('title="没有符合条件的资源组"');
+    expect(source).toContain('title="尚未配置资源组"');
     expect(source).toContain("可以前往全部资源查看完整机器列表");
     expect(source).toContain('onOpenResourceCatalog={() => navigate("resources")}');
     expect(source).toContain("function CalendarEmptyState");
@@ -607,6 +607,50 @@ describe("角色化界面文案", () => {
     expect(styles).toMatch(
       /\.timeline-head\s*\{[^}]*position:\s*sticky;[^}]*top:\s*0;/s
     );
+  });
+
+  it("资源日历使用统一查找器定位而不筛选时间轴", () => {
+    const source = readText(
+      new URL("../src/App.tsx", import.meta.url),
+      "utf8"
+    );
+    const finder = readText(
+      new URL("../src/CalendarResourceFinder.tsx", import.meta.url),
+      "utf8"
+    );
+    const styles = readText(
+      new URL("../src/styles.css", import.meta.url),
+      "utf8"
+    );
+    expect(source).toContain("<CalendarResourceFinder");
+    expect(source).toContain("onSelect={locateCalendarResource}");
+    expect(source).toContain("data-calendar-machine-id={machine.id}");
+    expect(source).toContain("data-calendar-group-id={group.id}");
+    expect(source).not.toContain(
+      "...(debouncedSearch ? { search: debouncedSearch } : {})"
+    );
+    expect(source).not.toContain(
+      "...(selectedMachine ? { machineIds: selectedMachine } : {})"
+    );
+    expect(source).toContain("onChange={setSearch}");
+    expect(source).not.toContain("writeCalendarRoute({ search:");
+    expect(finder).not.toContain("机器命中");
+    expect(finder).not.toContain(">定位<");
+    expect(finder).toContain("setOpen(Boolean(next.trim()))");
+    expect(finder).toContain("if (!hasQuery) return;");
+    expect(styles).toMatch(
+      /\.calendar-resource-finder-machine-option\s*\{[^}]*min-height:\s*44px/s
+    );
+    expect(styles).toMatch(
+      /\.calendar-resource-finder-group-option\s*\{[^}]*min-height:\s*36px/s
+    );
+    expect(styles).toMatch(
+      /\.calendar-resource-finder-copy\s*\{[^}]*display:\s*flex/s
+    );
+    expect(finder).toContain('className="calendar-resource-finder-identity"');
+    expect(finder).toContain('className="calendar-resource-finder-metadata"');
+    expect(styles).not.toContain(".calendar-resource-finder-copy small::before");
+    expect(styles).not.toContain(".calendar-resource-finder-copy em::before");
   });
 
   it("统计排行空状态不使用排行三列布局", () => {

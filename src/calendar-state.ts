@@ -11,7 +11,6 @@ export type CalendarQueryState = {
   date: string;
   view: CalendarView;
   machineId: string;
-  search: string;
 };
 
 export type CalendarDraft = ReservationSegmentInput & {
@@ -255,8 +254,7 @@ export function parseCalendarQuery(
   return {
     date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : fallbackDate,
     view: params.get("view") === "week" ? "week" : "day",
-    machineId: params.get("machine")?.trim() ?? "",
-    search: params.get("q")?.trim().slice(0, 100) ?? ""
+    machineId: params.get("machine")?.trim() ?? ""
   };
 }
 
@@ -265,7 +263,6 @@ export function calendarQueryUrl(state: CalendarQueryState) {
   params.set("date", state.date);
   if (state.view === "week") params.set("view", "week");
   if (state.machineId) params.set("machine", state.machineId);
-  if (state.search) params.set("q", state.search);
   const query = params.toString();
   return query ? `/calendar?${query}` : "/calendar";
 }

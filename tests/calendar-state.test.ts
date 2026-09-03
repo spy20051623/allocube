@@ -230,17 +230,16 @@ describe("资源日历状态", () => {
 
   it("解析并生成可恢复的日历地址", () => {
     const state = parseCalendarQuery(
-      "?date=2026-07-27&view=week&machine=m-1&q=GPU",
+      "?date=2026-07-27&view=week&machine=m-1",
       "2026-07-26"
     );
     expect(state).toEqual({
       date: "2026-07-27",
       view: "week",
-      machineId: "m-1",
-      search: "GPU"
+      machineId: "m-1"
     });
     expect(calendarQueryUrl(state)).toBe(
-      "/calendar?date=2026-07-27&view=week&machine=m-1&q=GPU"
+      "/calendar?date=2026-07-27&view=week&machine=m-1"
     );
     const reservationId = "43f88a10-a42e-4fe3-8a4a-2c434d4c20a7";
     const editUrl = calendarEditUrl({

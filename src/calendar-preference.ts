@@ -7,6 +7,7 @@ export type CalendarPreference = {
 };
 
 const STORAGE_KEY = "allocube.calendar-preference.v1";
+const MACHINE_COLLAPSE_STORAGE_KEY = "allocube.calendar-machine-collapse.v1";
 
 const fallbackPreference: CalendarPreference = {
   reservationMode: "RESOURCE_GROUP",
@@ -46,6 +47,43 @@ export function writeCalendarPreference(
         ...current,
         ...update
       })
+    );
+  } catch {
+    // 浏览器禁用存储时不影响排期功能。
+  }
+}
+
+function machineCollapseStorageKey(userId: string) {
+  return `${MACHINE_COLLAPSE_STORAGE_KEY}:${encodeURIComponent(userId)}`;
+}
+
+export function readCollapsedCalendarMachineIds(userId: string): string[] {
+  if (!userId) return [];
+  try {
+    const raw = localStorage.getItem(machineCollapseStorageKey(userId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return Array.from(
+      new Set(parsed.filter((value): value is string => typeof value === "string" && Boolean(value)))
+    ).slice(0, 1_000);
+  } catch {
+    return [];
+  }
+}
+
+export function writeCollapsedCalendarMachineIds(
+  userId: string,
+  machineIds: Iterable<string>
+) {
+  if (!userId) return;
+  try {
+    const normalized = Array.from(
+      new Set(Array.from(machineIds).filter(Boolean))
+    ).slice(0, 1_000);
+    localStorage.setItem(
+      machineCollapseStorageKey(userId),
+      JSON.stringify(normalized)
     );
   } catch {
     // 浏览器禁用存储时不影响排期功能。

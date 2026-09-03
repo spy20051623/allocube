@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  readCollapsedCalendarMachineIds,
   readCalendarPreference,
+  writeCollapsedCalendarMachineIds,
   writeCalendarPreference
 } from "../src/calendar-preference";
 
@@ -38,5 +40,30 @@ describe("资源日历偏好", () => {
       reservationMode: "MACHINE",
       visibleHours: 6
     });
+  });
+
+  it("按用户保存去重后的机器折叠状态", () => {
+    writeCollapsedCalendarMachineIds("user/a", [
+      "machine-a",
+      "machine-b",
+      "machine-a",
+      ""
+    ]);
+
+    expect(readCollapsedCalendarMachineIds("user/a")).toEqual([
+      "machine-a",
+      "machine-b"
+    ]);
+    expect(readCollapsedCalendarMachineIds("user/b")).toEqual([]);
+  });
+
+  it("损坏的机器折叠状态不会影响日历", () => {
+    store.set("allocube.calendar-machine-collapse.v1:user", "{");
+    expect(readCollapsedCalendarMachineIds("user")).toEqual([]);
+    store.set(
+      "allocube.calendar-machine-collapse.v1:user",
+      JSON.stringify(["machine-a", 1, null, "machine-a"])
+    );
+    expect(readCollapsedCalendarMachineIds("user")).toEqual(["machine-a"]);
   });
 });

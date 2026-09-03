@@ -243,7 +243,9 @@ import {
   type CalendarView
 } from "./calendar-state";
 import {
+  readCollapsedCalendarMachineIds,
   readCalendarPreference,
+  writeCollapsedCalendarMachineIds,
   writeCalendarPreference
 } from "./calendar-preference";
 import {
@@ -5768,7 +5770,7 @@ function CalendarPage({
     "RESOURCE_GROUP" | "MACHINE"
   >(initialCalendarPreference.reservationMode);
   const [collapsedMachineIds, setCollapsedMachineIds] = useState<Set<string>>(
-    () => new Set()
+    () => new Set(readCollapsedCalendarMachineIds(user.id))
   );
   const [drafts, setDrafts] = useState<CalendarDraft[]>([]);
   const [editingReservation, setEditingReservation] = useState<{
@@ -6250,11 +6252,12 @@ function CalendarPage({
       const next = new Set(current);
       if (next.has(machineId)) next.delete(machineId);
       else next.add(machineId);
+      writeCollapsedCalendarMachineIds(user.id, next);
       return next;
     });
     setHoveredTime(null);
     setDragPreview(null);
-  }, []);
+  }, [user.id]);
 
   useLayoutEffect(() => {
     if (!calendarSearchTarget || !timeline) return;
@@ -6279,6 +6282,7 @@ function CalendarPage({
       setCollapsedMachineIds((current) => {
         const next = new Set(current);
         next.delete(calendarSearchTarget.machineId);
+        writeCollapsedCalendarMachineIds(user.id, next);
         return next;
       });
       return;
@@ -6318,7 +6322,7 @@ function CalendarPage({
       }, 1_800);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [calendarSearchTarget, collapsedMachineIds, timeline, view]);
+  }, [calendarSearchTarget, collapsedMachineIds, timeline, user.id, view]);
 
   useEffect(
     () => () => {

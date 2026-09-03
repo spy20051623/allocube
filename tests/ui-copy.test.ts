@@ -626,9 +626,8 @@ describe("角色化界面文案", () => {
     expect(source).toContain("onSelect={locateCalendarResource}");
     expect(source).toContain("data-calendar-machine-id={machine.id}");
     expect(source).toContain("data-calendar-group-id={group.id}");
-    expect(source).toContain(
-      '<strong className="calendar-machine-name" title={machine.name}>'
-    );
+    expect(source).toContain('className="calendar-machine-name"');
+    expect(source).toContain("title={machine.name}");
     expect(source).not.toContain(
       "...(debouncedSearch ? { search: debouncedSearch } : {})"
     );
@@ -673,7 +672,10 @@ describe("角色化界面文案", () => {
     expect(source).toContain("<CalendarMachineStripLine");
     expect(source).not.toContain('className="machine-group-count"');
     expect(styles).toMatch(
-      /\.machine-strip-visible\s*\{[^}]*width:\s*min\(calc\(100% - 30px\), calc\(100cqw - 30px\)\);/s
+      /\.machine-strip-visible\s*\{[^}]*left:\s*0;[^}]*width:\s*min\(100%, 100cqw\);/s
+    );
+    expect(source).toContain(
+      "Math.min(strip.clientWidth, shell.clientWidth)"
     );
     expect(styles).toContain(".machine-strip-measure");
     expect(styles).toMatch(
@@ -681,6 +683,20 @@ describe("角色化界面文案", () => {
     );
     expect(styles).not.toContain(".calendar-resource-finder-copy small::before");
     expect(styles).not.toContain(".calendar-resource-finder-copy em::before");
+    expect(source).not.toContain("function CalendarWeekOverview");
+    expect(source).toContain('className={`timeline-card ${view}`}');
+    expect(source).toContain('view === "week" ? (');
+    expect(source).toContain('className="week-days-track"');
+    expect(source).toContain('view === "day" && (\n        <CurrentTimeLine');
+    expect(source.match(/<CalendarResourceCell/g)).toHaveLength(1);
+    expect(styles).not.toContain(".week-overview");
+    expect(source).toContain(
+      'className={`timeline-horizontal-scroll-row ${view}`}'
+    );
+    expect(styles).not.toContain(".timeline-scroll-shell.week");
+    expect(styles).toMatch(
+      /\.week-days-track\s*\{[^}]*grid-template-columns:\s*repeat\(7,/s
+    );
   });
 
   it("功能图标在紧凑布局中保持固定尺寸", () => {

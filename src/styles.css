@@ -1803,6 +1803,11 @@ textarea::placeholder {
   padding: 0 7px;
 }
 
+.calendar-day-control.hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .toolbar > .secondary-button {
   min-height: 35px;
   padding: 0 9px;
@@ -2009,6 +2014,10 @@ textarea::placeholder {
   height: 1px;
 }
 
+.timeline-horizontal-scroll > div.week {
+  width: max(100%, 490px);
+}
+
 .timeline-horizontal-scroll::-webkit-scrollbar {
   height: 7px;
 }
@@ -2032,108 +2041,10 @@ textarea::placeholder {
   background: white;
 }
 
-.week-overview-scroll {
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
+.timeline-card.week {
+  min-width: 750px;
 }
 
-.week-overview {
-  position: relative;
-  min-width: 760px;
-  background: white;
-}
-
-.week-overview-head,
-.week-overview-row {
-  display: grid;
-  grid-template-columns: 260px repeat(7, minmax(70px, 1fr));
-}
-
-.week-overview-head {
-  position: sticky;
-  z-index: 12;
-  top: 0;
-  height: 48px;
-  border-bottom: 1px solid var(--line);
-  background: #f8f9fb;
-}
-
-.week-overview-head > strong {
-  position: sticky;
-  z-index: 2;
-  left: 0;
-  padding: 0 15px;
-  display: flex;
-  align-items: center;
-  border-right: 1px solid var(--line);
-  color: #566174;
-  background: #f8f9fb;
-  font-size: 11px;
-}
-
-.week-overview-head button {
-  min-width: 0;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  border: 0;
-  border-right: 1px solid #eceff4;
-  color: #657084;
-  background: transparent;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.week-overview-head button:hover,
-.week-overview-head button:focus-visible,
-.week-overview-head button.today {
-  color: #2857b7;
-  background: #eef3ff;
-  outline: none;
-}
-
-.week-overview-head button span {
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.week-overview-head button small {
-  font-size: 9px;
-}
-
-.week-machine-block {
-  border-bottom: 1px solid var(--line);
-}
-
-.week-machine-strip {
-  position: sticky;
-  z-index: 6;
-  left: 0;
-  height: 36px;
-  padding: 0 15px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow: hidden;
-  border-bottom: 1px solid var(--line);
-  color: #445065;
-  background: #f5f7fa;
-}
-
-.week-machine-strip svg {
-  color: var(--blue);
-}
-
-.week-machine-strip strong {
-  font-size: 12px;
-}
-
-.week-machine-strip .calendar-machine-name,
 .machine-strip .calendar-machine-name {
   min-width: 0;
   overflow: hidden;
@@ -2142,32 +2053,22 @@ textarea::placeholder {
   white-space: nowrap;
 }
 
-.week-machine-strip code {
-  color: #8a93a2;
-  font-family: inherit;
-  font-size: 10px;
-}
-
-.week-machine-strip.calendar-search-highlight,
 .machine-strip.calendar-search-highlight {
   background: #eaf1ff;
   box-shadow: inset 3px 0 0 var(--blue);
 }
 
-.week-overview-row.calendar-search-highlight .week-resource-cell,
-.week-overview-row.calendar-search-highlight .week-day-cell > button,
 .timeline-row.calendar-search-highlight .resource-cell,
+.timeline-row.calendar-search-highlight .week-day-cell > button,
 .timeline-row.calendar-search-highlight .time-track {
   background-color: #edf3ff;
 }
 
-.week-overview-row.calendar-search-highlight .week-resource-cell,
 .timeline-row.calendar-search-highlight .resource-cell {
   box-shadow: inset 3px 0 0 var(--blue);
 }
 
-.week-machine-strip,
-.week-resource-cell,
+.machine-strip,
 .week-day-cell > button,
 .resource-cell,
 .time-track {
@@ -2197,50 +2098,22 @@ textarea::placeholder {
   white-space: nowrap;
 }
 
-.calendar-machine-tags.week {
-  margin-left: 2px;
-}
-
-.week-overview-row {
-  min-height: 64px;
-  border-bottom: 1px solid #eceef2;
-}
-
-.week-overview-row:last-child {
-  border-bottom: 0;
-}
-
-.week-resource-cell {
-  position: sticky;
-  z-index: 5;
-  left: 0;
-  min-width: 0;
-  padding: 10px 14px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  border-right: 1px solid var(--line);
-  background: white;
-}
-
-.week-resource-cell > strong {
-  overflow: hidden;
-  color: #303b4f;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .week-day-cell {
   position: relative;
   min-width: 0;
   border-right: 1px solid #eef0f4;
 }
 
+.week-days-track {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(70px, 1fr));
+}
+
 .week-day-cell > button {
   width: 100%;
   height: 100%;
-  min-height: 63px;
+  min-height: 57px;
   padding: 9px 8px;
   display: flex;
   flex-direction: column;
@@ -2462,11 +2335,27 @@ textarea::placeholder {
 }
 
 .scale-head.week button {
-  top: 8px;
-  height: 26px;
-  padding: 0 8px;
-  border-radius: 5px;
+  position: static;
+  height: 100%;
+  padding: 0;
+  border-right: 1px solid #eceff4;
+  border-radius: 0;
   cursor: pointer;
+  transform: none;
+}
+
+.scale-head.week {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(70px, 1fr));
+}
+
+.scale-head.week button:hover,
+.scale-head.week button:focus-visible,
+.scale-head.week button.today {
+  color: #2857b7;
+  background: #eef3ff;
+  outline: none;
 }
 
 .scale-head.week button:hover,
@@ -2518,7 +2407,7 @@ textarea::placeholder {
 .machine-strip {
   width: 100%;
   height: 38px;
-  padding: 0 15px;
+  padding: 0;
   display: block;
   border: 0;
   border-bottom: 1px solid var(--line);
@@ -2547,10 +2436,11 @@ textarea::placeholder {
 
 .machine-strip-visible {
   position: sticky;
-  left: 15px;
-  width: min(calc(100% - 30px), calc(100cqw - 30px));
+  left: 0;
+  width: min(100%, 100cqw);
   height: 100%;
   min-width: 0;
+  padding: 0 15px;
   display: flex;
   align-items: center;
   overflow: hidden;
@@ -2670,8 +2560,6 @@ textarea::placeholder {
 
 @media (prefers-reduced-motion: reduce) {
   .machine-strip,
-  .week-machine-strip,
-  .week-resource-cell,
   .week-day-cell > button,
   .resource-cell,
   .time-track,

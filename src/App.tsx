@@ -1340,7 +1340,17 @@ function CalendarMachineStripLine({
     let active = true;
     const recalculate = () => {
       if (!active) return;
-      const rootWidth = rootRef.current?.clientWidth ?? 0;
+      const root = rootRef.current;
+      const strip = root?.parentElement;
+      const shell = root?.closest<HTMLElement>(".timeline-scroll-shell");
+      if (!root || !strip || !shell) return;
+      const visibleWidth = Math.min(strip.clientWidth, shell.clientWidth);
+      root.style.width = `${visibleWidth}px`;
+      const rootStyle = window.getComputedStyle(root);
+      const horizontalPadding =
+        Number.parseFloat(rootStyle.paddingLeft) +
+        Number.parseFloat(rootStyle.paddingRight);
+      const rootWidth = root.clientWidth - horizontalPadding;
       if (!rootWidth) return;
       const fixedWidth =
         (leadingRef.current?.offsetWidth ?? 0) +
@@ -1379,6 +1389,8 @@ function CalendarMachineStripLine({
         : new ResizeObserver(recalculate);
     [
       rootRef.current,
+      rootRef.current?.parentElement,
+      rootRef.current?.closest(".timeline-scroll-shell"),
       leadingRef.current,
       stateRef.current,
       titleMeasureRef.current,
@@ -1454,6 +1466,40 @@ function CalendarMachineStripLine({
         </span>
       </span>
     </span>
+  );
+}
+
+function CalendarResourceCell({
+  group,
+  longTermDisabled,
+  maintenanceNow
+}: {
+  group: Omit<ResourceGroup, "version">;
+  longTermDisabled: boolean;
+  maintenanceNow: boolean;
+}) {
+  return (
+    <div className="resource-cell">
+      <span className="resource-copy">
+        <strong title={group.name}>{group.name}</strong>
+        <ResourceSummary value={group.resourceSummary} />
+      </span>
+      <span
+        className={`state-chip ${
+          longTermDisabled
+            ? "disabled"
+            : maintenanceNow
+              ? "scheduled"
+              : "active"
+        }`}
+      >
+        {longTermDisabled
+          ? tr("status.disabled")
+          : maintenanceNow
+            ? tr("维护")
+            : tr("status.enabled")}
+      </span>
+    </div>
   );
 }
 
@@ -5839,6 +5885,9 @@ function CalendarPage({
       timelineStartMinutesRef.current = 0;
       setTimelineWindowStartMinutes(0);
       if (timelineShellRef.current) timelineShellRef.current.scrollLeft = 0;
+      if (timelineHorizontalScrollRef.current) {
+        timelineHorizontalScrollRef.current.scrollLeft = 0;
+      }
       return;
     }
     const preferredHours = readCalendarPreference().visibleHours;
@@ -6194,6 +6243,17 @@ function CalendarPage({
       ...target,
       revision: (current?.revision ?? 0) + 1
     }));
+  }, []);
+
+  const toggleCalendarMachine = useCallback((machineId: string) => {
+    setCollapsedMachineIds((current) => {
+      const next = new Set(current);
+      if (next.has(machineId)) next.delete(machineId);
+      else next.add(machineId);
+      return next;
+    });
+    setHoveredTime(null);
+    setDragPreview(null);
   }, []);
 
   useLayoutEffect(() => {
@@ -7245,8 +7305,10 @@ function CalendarPage({
             <button className={view === "day" ? "active" : ""} onClick={() => changeView("day")}>{tr("一天")}</button>
             <button className={view === "week" ? "active" : ""} onClick={() => changeView("week")}>{tr("一周")}</button>
           </div>
-          {view === "day" && (
-            <div className="segmented reservation-mode">
+          <div
+            className={`segmented reservation-mode calendar-day-control${view === "day" ? "" : " hidden"}`}
+            aria-hidden={view !== "day"}
+          >
               <button
                 className={reservationMode === "RESOURCE_GROUP" ? "active" : ""}
                 disabled={
@@ -7287,10 +7349,12 @@ function CalendarPage({
                 }}
               >
                 {tr("整机")}</button>
-            </div>
-          )}
-          {view === "day" && (
-            <div className="timeline-zoom-control" aria-label={tr("时间轴缩放")}>
+          </div>
+          <div
+            className={`timeline-zoom-control calendar-day-control${view === "day" ? "" : " hidden"}`}
+            aria-label={tr("时间轴缩放")}
+            aria-hidden={view !== "day"}
+          >
               <button
                 type="button"
                 aria-label={tr("缩小时间轴")}
@@ -7310,8 +7374,7 @@ function CalendarPage({
               >
                 <ZoomIn size={15} />
               </button>
-            </div>
-          )}
+          </div>
           <CalendarResourceFinder
             machines={timeline?.machines ?? []}
             groups={timeline?.groups ?? []}
@@ -7342,15 +7405,6 @@ function CalendarPage({
               text={tr("可以前往全部资源查看完整机器列表。")}
               onOpenResourceCatalog={() => navigate("resources")}
             />
-          ) : view === "week" ? (
-            <CalendarWeekOverview
-              timeline={timeline}
-              range={range}
-              today={serverToday}
-              refreshing={refreshing}
-              searchTarget={calendarSearchTarget}
-              onSelectDay={(selectedDate) => changeView("day", selectedDate)}
-            />
           ) : (
             <>
           <div
@@ -7358,7 +7412,10 @@ function CalendarPage({
             className={`timeline-scroll-shell ${view}`}
             onScroll={handleTimelineScroll}
           >
-            <div className="timeline-card" style={{ width: timelineCardWidth }}>
+            <div
+              className={`timeline-card ${view}`}
+              style={{ width: timelineCardWidth }}
+            >
           <div className="timeline-head">
             <div className="resource-head">
               <span>{tr("资源组")}</span>
@@ -7398,16 +7455,7 @@ function CalendarPage({
                     v0: tr(machineCollapsed ? "展开" : "收起"),
                     v1: machine.name
                   })}
-                  onClick={() => {
-                    setCollapsedMachineIds((current) => {
-                      const next = new Set(current);
-                      if (next.has(machine.id)) next.delete(machine.id);
-                      else next.add(machine.id);
-                      return next;
-                    });
-                    setHoveredTime(null);
-                    setDragPreview(null);
-                  }}
+                  onClick={() => toggleCalendarMachine(machine.id)}
                 >
                   <CalendarMachineStripLine
                     machine={machine}
@@ -7504,27 +7552,49 @@ function CalendarPage({
                       data-calendar-group-id={group.id}
                       key={group.id}
                     >
-                      <div className="resource-cell">
-                        <span className="resource-copy">
-                          <strong>{group.name}</strong>
-                          <ResourceSummary value={group.resourceSummary} />
-                        </span>
-                        <span
-                          className={`state-chip ${
-                            longTermDisabled
-                              ? "disabled"
-                              : groupMaintenanceNow
-                                ? "scheduled"
-                                : "active"
-                          }`}
-                        >
-                          {longTermDisabled
-                            ? tr("status.disabled")
-                            : groupMaintenanceNow
-                              ? tr("维护")
-                              : tr("status.enabled")}
-                        </span>
-                      </div>
+                      <CalendarResourceCell
+                        group={group}
+                        longTermDisabled={longTermDisabled}
+                        maintenanceNow={groupMaintenanceNow}
+                      />
+                      {view === "week" ? (
+                        <div className="week-days-track">
+                          {Array.from({ length: 7 }, (_, index) =>
+                            addDays(range.startDate, index)
+                          ).map((day) => {
+                            const dayStart = chinaLocalToIso(`${day}T00:00`);
+                            const dayEnd = chinaLocalToIso(
+                              `${addDays(day, 1)}T00:00`
+                            );
+                            const dayReservations = reservations.filter(
+                              (item) =>
+                                item.startAt < dayEnd && item.endAt > dayStart
+                            );
+                            const dayUnavailability =
+                              timeline.unavailability.filter(
+                                (item) =>
+                                  item.machineId === machine.id &&
+                                  (!item.resourceGroupId ||
+                                    item.resourceGroupId === group.id) &&
+                                  item.startAt < dayEnd &&
+                                  item.endAt > dayStart
+                              );
+                            return (
+                              <CalendarWeekDayCell
+                                key={day}
+                                day={day}
+                                today={serverToday}
+                                dayStart={dayStart}
+                                dayEnd={dayEnd}
+                                groupName={group.name}
+                                reservations={dayReservations}
+                                unavailable={dayUnavailability}
+                                onSelect={() => changeView("day", day)}
+                              />
+                            );
+                          })}
+                        </div>
+                      ) : (
                       <div
                         className={`time-track${!selectable ? " not-selectable" : ""}${longTermDisabled ? " long-term-disabled" : ""}`}
                         title={
@@ -7842,6 +7912,7 @@ function CalendarPage({
                             </TimelineBar>
                           )}
                       </div>
+                      )}
                     </div>
                   );
                 })}
@@ -7856,8 +7927,7 @@ function CalendarPage({
           )}
             </div>
           </div>
-          {view === "day" && visibleHours < 24 && (
-            <div className="timeline-horizontal-scroll-row">
+            <div className={`timeline-horizontal-scroll-row ${view}`}>
               <div
                 ref={timelineHorizontalScrollRef}
                 className="timeline-horizontal-scroll"
@@ -7865,10 +7935,16 @@ function CalendarPage({
                 aria-label={tr("横向滚动时间轴")}
                 tabIndex={0}
               >
-                <div style={{ width: `${timelineZoom * 100}%` }} />
+                <div
+                  className={view}
+                  style={
+                    view === "day"
+                      ? { width: `${timelineZoom * 100}%` }
+                      : undefined
+                  }
+                />
               </div>
             </div>
-          )}
             </>
           )}
         </div>
@@ -8105,137 +8181,6 @@ function CalendarPage({
           }}
         />
       )}
-    </div>
-  );
-}
-
-function CalendarWeekOverview({
-  timeline,
-  range,
-  today,
-  refreshing,
-  searchTarget,
-  onSelectDay
-}: {
-  timeline: TimelinePayload;
-  range: { from: string; to: string; startDate: string; days: number };
-  today: string;
-  refreshing: boolean;
-  searchTarget: CalendarSearchTarget | null;
-  onSelectDay: (date: string) => void;
-}) {
-  const days = Array.from({ length: 7 }, (_, index) =>
-    addDays(range.startDate, index)
-  );
-  const groupsByMachine = new Map<
-    string,
-    Array<Omit<ResourceGroup, "version">>
-  >();
-  for (const group of timeline.groups) {
-    const groups = groupsByMachine.get(group.machineId) ?? [];
-    groups.push(group);
-    groupsByMachine.set(group.machineId, groups);
-  }
-
-  return (
-    <div className="week-overview-scroll">
-      <div className="week-overview">
-        <div className="week-overview-head">
-          <strong>{tr("资源组")}</strong>
-          {days.map((day) => (
-            <button
-              type="button"
-              key={day}
-            className={day === today ? "today" : ""}
-              onClick={() => onSelectDay(day)}
-            >
-              <span>
-                {formatChina(chinaLocalToIso(`${day}T00:00`), {
-                  month: "numeric",
-                  day: "numeric"
-                })}
-              </span>
-              <small>
-                {formatChina(chinaLocalToIso(`${day}T00:00`), {
-                  weekday: "short"
-                })}
-              </small>
-            </button>
-          ))}
-        </div>
-        {timeline.machines.map((machine) => {
-          const groups = groupsByMachine.get(machine.id) ?? [];
-          if (!groups.length) return null;
-          return (
-            <div className="week-machine-block" key={machine.id}>
-              <div
-                className={`week-machine-strip${searchTarget?.machineId === machine.id && !searchTarget.groupId ? " calendar-search-highlight" : ""}`}
-                data-calendar-machine-id={machine.id}
-              >
-                <Server size={15} />
-                <strong className="calendar-machine-name" title={machine.name}>
-                  {machine.name}
-                </strong>
-                <code>{machine.address}</code>
-                <CalendarMachineTags tags={machine.tags} className="week" />
-              </div>
-              {groups.map((group) => (
-                <div
-                  className={`week-overview-row${searchTarget?.machineId === machine.id && searchTarget.groupId === group.id ? " calendar-search-highlight" : ""}`}
-                  data-calendar-machine-id={machine.id}
-                  data-calendar-group-id={group.id}
-                  key={group.id}
-                >
-                  <div className="week-resource-cell">
-                    <strong>{group.name}</strong>
-                    <ResourceSummary value={group.resourceSummary} />
-                  </div>
-                  {days.map((day) => {
-                    const dayStart = chinaLocalToIso(`${day}T00:00`);
-                    const dayEnd = chinaLocalToIso(
-                      `${addDays(day, 1)}T00:00`
-                    );
-                    const reservations = timeline.reservations.filter(
-                      (item) =>
-                        item.machineId === machine.id &&
-                        (item.scope === "MACHINE" ||
-                          item.resourceGroupId === group.id) &&
-                        item.startAt < dayEnd &&
-                        item.endAt > dayStart
-                    );
-                    const unavailable = timeline.unavailability.filter(
-                      (item) =>
-                        item.machineId === machine.id &&
-                        (!item.resourceGroupId ||
-                          item.resourceGroupId === group.id) &&
-                        item.startAt < dayEnd &&
-                        item.endAt > dayStart
-                    );
-                    return (
-                      <CalendarWeekDayCell
-                        key={day}
-                        day={day}
-                        today={today}
-                        dayStart={dayStart}
-                        dayEnd={dayEnd}
-                        groupName={group.name}
-                        reservations={reservations}
-                        unavailable={unavailable}
-                        onSelect={() => onSelectDay(day)}
-                      />
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          );
-        })}
-        {refreshing && (
-          <div className="timeline-refreshing" aria-live="polite">
-            <RefreshCw size={14} className="spin" />
-            {tr("正在更新")}</div>
-        )}
-      </div>
     </div>
   );
 }
@@ -8572,7 +8517,7 @@ function CalendarWeekDayCell({
     if (!button) return;
     const rect = button.getBoundingClientRect();
     const containerRect =
-      button.closest(".week-overview-scroll")?.getBoundingClientRect() ??
+      button.closest(".timeline-scroll-shell")?.getBoundingClientRect() ??
       new DOMRect(0, 0, window.innerWidth, window.innerHeight);
     const width = 280;
     const estimatedHeight = Math.min(280, 48 + details.length * 29);
@@ -8743,6 +8688,10 @@ function TimelineScale({
   currentTime: number;
   onSelectDay?: (date: string) => void;
 }) {
+  const today = isoToChinaLocal(new Date(currentTime).toISOString()).slice(
+    0,
+    10
+  );
   const marks =
     view === "day"
       ? (() => {
@@ -8789,6 +8738,7 @@ function TimelineScale({
           <button
             type="button"
             key={mark.key}
+            className={mark.date === today ? "today" : ""}
             style={{ left: `${mark.left}%` }}
             onClick={() => onSelectDay?.(mark.date!)}
             aria-label={tr("查看 {{v0}} 的日视图", { v0: mark.label })}
@@ -8801,11 +8751,13 @@ function TimelineScale({
           </span>
         )
       )}
-      <CurrentTimeLine
-        range={range}
-        currentTime={currentTime}
-        showLabel
-      />
+      {view === "day" && (
+        <CurrentTimeLine
+          range={range}
+          currentTime={currentTime}
+          showLabel
+        />
+      )}
     </div>
   );
 }

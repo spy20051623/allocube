@@ -48,8 +48,8 @@ function includesAllTerms(values: string[], terms: string[]) {
   return terms.every((term) => content.includes(term));
 }
 
-function isOrderedCjkNameMatch(name: string, query: string) {
-  if (query.includes(" ") || !/\p{Script=Han}/u.test(query)) return false;
+function isOrderedNameMatch(name: string, query: string) {
+  if (query.includes(" ")) return false;
   let queryIndex = 0;
   for (const character of name) {
     if (character === query[queryIndex]) queryIndex += 1;
@@ -66,7 +66,7 @@ function machineMatchScore(
   const name = normalizeSearchText(machine.name);
   if (name === normalizedQuery) return 0;
   if (name.startsWith(normalizedQuery)) return 10;
-  if (isOrderedCjkNameMatch(name, normalizedQuery)) return 15;
+  if (isOrderedNameMatch(name, normalizedQuery)) return 15;
   return includesAllTerms(
     [machine.name, machine.address, machine.resourceSummary, ...machine.tags],
     terms
@@ -83,7 +83,7 @@ function groupMatchScore(
   const name = normalizeSearchText(group.name);
   if (name === normalizedQuery) return 30;
   if (name.startsWith(normalizedQuery)) return 40;
-  if (isOrderedCjkNameMatch(name, normalizedQuery)) return 45;
+  if (isOrderedNameMatch(name, normalizedQuery)) return 45;
   return includesAllTerms(
     [
       group.name,

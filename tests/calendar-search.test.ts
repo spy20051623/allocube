@@ -115,7 +115,7 @@ describe("日历资源搜索", () => {
     expect(result[0]?.machineMatched).toBe(true);
   });
 
-  it("中文名称允许关键词之间插入状态描述", () => {
+  it("所有语言的名称都允许查询字符按顺序匹配", () => {
     const demonstrationMachines: Machine[] = [
       {
         ...machines[0],
@@ -142,6 +142,22 @@ describe("日历资源搜索", () => {
       "演示停用节点",
       "演示维护节点"
     ]);
+
+    const latinMachine: Machine = {
+      ...machines[0],
+      id: "machine-test",
+      name: "test"
+    };
+    expect(
+      searchCalendarResources(
+        [latinMachine],
+        [{ ...groups[0], id: "group-test", machineId: latinMachine.id }],
+        "tst"
+      )[0]?.machine.name
+    ).toBe("test");
+    expect(searchCalendarResources(machines, groups, "ifc")[0]?.groups[0]?.name).toBe(
+      "Inference"
+    );
   });
 
   it("不返回没有可见资源组、因而无法在日历中定位的机器", () => {

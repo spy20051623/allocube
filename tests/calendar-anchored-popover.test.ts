@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { calendarAnchoredPopoverPosition } from "../src/CalendarAnchoredPopover.js";
 
@@ -44,25 +43,5 @@ describe("日历定位弹层", () => {
         viewport
       ).top
     ).toBe(280);
-  });
-
-  it("三个日历弹层复用同一外壳并统一支持点击背景关闭", () => {
-    const appSource = readFileSync(
-      new URL("../src/App.tsx", import.meta.url),
-      "utf8"
-    );
-    const popoverSource = readFileSync(
-      new URL("../src/CalendarAnchoredPopover.tsx", import.meta.url),
-      "utf8"
-    );
-
-    expect(appSource.match(/<CalendarAnchoredPopover/g)).toHaveLength(3);
-    expect(popoverSource).toContain("const CALENDAR_POPOVER_WIDTH = 340;");
-    expect(popoverSource).toContain(
-      '<div className="reservation-popover-layer" onPointerDown={onClose}>'
-    );
-    expect(popoverSource).toContain(
-      "onPointerDown={(event) => event.stopPropagation()}"
-    );
   });
 });

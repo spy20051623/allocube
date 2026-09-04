@@ -15,7 +15,6 @@ process.env.BOOTSTRAP_ALLOWED_EMAIL_DOMAINS = "company.test,example.test";
 process.env.BOOTSTRAP_MIN_BOOKING_MINUTES = "5";
 process.env.BOOTSTRAP_MAX_BOOKING_MINUTES = "720";
 process.env.BOOTSTRAP_ADVANCE_DAYS = "60";
-process.env.BOOTSTRAP_DEMO_DATA = "false";
 process.env.BOOTSTRAP_SMTP_ENABLED = "true";
 process.env.BOOTSTRAP_SMTP_HOST = "smtp.company.test";
 process.env.BOOTSTRAP_SMTP_PORT = "994";
@@ -61,6 +60,18 @@ describe("首次启动配置", () => {
         )
         .get()
     ).toBeTruthy();
+  });
+
+  it("空库只创建初始管理员，不生成业务示例数据", () => {
+    expect(
+      dbModule.db.prepare("SELECT COUNT(*) AS count FROM users").get()
+    ).toEqual({ count: 1 });
+    expect(
+      dbModule.db.prepare("SELECT COUNT(*) AS count FROM machines").get()
+    ).toEqual({ count: 0 });
+    expect(
+      dbModule.db.prepare("SELECT COUNT(*) AS count FROM reservations").get()
+    ).toEqual({ count: 0 });
   });
 
   it("生成独立实例密钥文件且不把明文 SMTP 密码写入数据库", () => {

@@ -59,8 +59,7 @@ async function main() {
         PORT: String(port),
         DATABASE_PATH: path.join(testRoot, "allocube.sqlite"),
         BOOTSTRAP_SITE_ORIGIN: origin,
-        BOOTSTRAP_ADMIN_PASSWORD: TEST_PASSWORD,
-        BOOTSTRAP_DEMO_DATA: "false"
+        BOOTSTRAP_ADMIN_PASSWORD: TEST_PASSWORD
       },
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true

@@ -231,11 +231,7 @@ function loadBootstrapConfig() {
       1,
       365
     ),
-    smtp: smtpBootstrapSettings(),
-    seedDemoData: booleanBootstrapValue(
-      "BOOTSTRAP_DEMO_DATA",
-      process.env.NODE_ENV === "development"
-    )
+    smtp: smtpBootstrapSettings()
   };
   if (
     bootstrap.maxBookingMinutes <

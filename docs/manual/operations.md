@@ -36,7 +36,7 @@ npm start
 - `PORT`
 - `DATABASE_PATH`
 
-`BOOTSTRAP_*` 只在空数据库首次初始化时读取，包括管理员资料、站点地址、占用规则、演示数据和 SMTP。之后修改环境变量不会覆盖数据库中的管理设置。
+`BOOTSTRAP_*` 只在空数据库首次初始化时读取，包括管理员资料、站点地址、占用规则和 SMTP。之后修改环境变量不会覆盖数据库中的管理设置。
 
 生产部署必须为 `BOOTSTRAP_ADMIN_PASSWORD` 设置随机强密码，并保护 `.env.production`。
 

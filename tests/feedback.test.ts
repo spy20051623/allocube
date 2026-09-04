@@ -11,7 +11,6 @@ import { z } from "zod";
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-feedback-"));
 process.env.NODE_ENV = "test";
 process.env.DATABASE_PATH = path.join(directory, "feedback.sqlite");
-process.env.SEED_DEMO_DATA = "false";
 process.env.BOOTSTRAP_ADMIN_NAME = "反馈管理员";
 process.env.BOOTSTRAP_ADMIN_PASSWORD = "Admin12#$";
 process.env.SESSION_SECRET = "feedback-test-session-secret-at-least-32-characters";

@@ -116,31 +116,31 @@ describe("日历资源搜索", () => {
   });
 
   it("所有语言的名称都允许查询字符按顺序匹配", () => {
-    const demonstrationMachines: Machine[] = [
+    const matchingMachines: Machine[] = [
       {
         ...machines[0],
-        id: "machine-demo-disabled",
-        name: "演示停用节点"
+        id: "machine-disabled",
+        name: "测试停用节点"
       },
       {
         ...machines[1],
-        id: "machine-demo-maintenance",
-        name: "演示维护节点"
+        id: "machine-maintenance",
+        name: "测试维护节点"
       }
     ];
     const result = searchCalendarResources(
-      demonstrationMachines,
-      demonstrationMachines.map((machine, index) => ({
+      matchingMachines,
+      matchingMachines.map((machine, index) => ({
         ...groups[0],
-        id: `group-demo-${index}`,
+        id: `group-match-${index}`,
         machineId: machine.id,
         name: "默认资源组"
       })),
-      "演示节点"
+      "测试节点"
     );
     expect(result.map((item) => item.machine.name)).toEqual([
-      "演示停用节点",
-      "演示维护节点"
+      "测试停用节点",
+      "测试维护节点"
     ]);
 
     const latinMachine: Machine = {

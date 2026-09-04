@@ -9,7 +9,6 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-feedback-migra
 const databasePath = path.join(directory, "version-16.sqlite");
 process.env.NODE_ENV = "test";
 process.env.DATABASE_PATH = databasePath;
-process.env.SEED_DEMO_DATA = "false";
 process.env.BOOTSTRAP_ADMIN_PASSWORD = "Admin12#$";
 
 let dbModule: typeof import("../server/db.js");

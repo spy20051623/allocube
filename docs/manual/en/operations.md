@@ -35,7 +35,7 @@ Read on every startup:
 - `PORT`
 - `DATABASE_PATH`
 
-`BOOTSTRAP_*` variables are only read during the initial setup of an empty database. This includes administrator profile information, site address, reservation rules, demo data, and SMTP. Subsequent changes to environment variables will not overwrite administrative settings stored in the database.
+`BOOTSTRAP_*` variables are only read during the initial setup of an empty database. This includes administrator profile information, site address, reservation rules, and SMTP. Subsequent changes to environment variables will not overwrite administrative settings stored in the database.
 
 For production deployment, you must set `BOOTSTRAP_ADMIN_PASSWORD` to a random, strong password and protect the `.env.production` file.
 

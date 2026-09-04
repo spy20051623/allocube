@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import Database from "better-sqlite3";
 import { config, getBootstrapConfig } from "./config.js";
 import { FINAL_SCHEMA_SQL, FINAL_SCHEMA_VERSION } from "./schema.js";
-import { seedDatabase } from "./seed-data.js";
+import { bootstrapAdministrator } from "./bootstrap-admin.js";
 import { normalizeAllowedEmailDomains } from "../src/shared/email-domain-rules.js";
 import {
   normalizeSiteOrigin,
@@ -732,7 +732,7 @@ async function initializePersistentConfiguration() {
     db.prepare(
       "INSERT INTO app_meta(key, value) VALUES('machine_access_revision', '1')"
     ).run();
-    await seedDatabase(db, bootstrap, nowIso);
+    await bootstrapAdministrator(db, bootstrap, nowIso);
     db.prepare(
       `INSERT INTO app_meta(key, value)
        VALUES('persistent_configuration_initialized', ?)`

@@ -7,7 +7,6 @@ import { FINAL_SCHEMA_VERSION } from "../server/schema.js";
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "resource-schema-"));
 process.env.NODE_ENV = "test";
 process.env.DATABASE_PATH = path.join(directory, "schema.sqlite");
-process.env.SEED_DEMO_DATA = "false";
 process.env.BOOTSTRAP_ADMIN_PASSWORD = "Admin12#$";
 
 let dbModule: typeof import("../server/db.js");

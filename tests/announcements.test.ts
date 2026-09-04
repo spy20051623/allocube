@@ -10,7 +10,6 @@ import { z } from "zod";
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-announcements-"));
 process.env.NODE_ENV = "test";
 process.env.DATABASE_PATH = path.join(directory, "announcements.sqlite");
-process.env.SEED_DEMO_DATA = "false";
 process.env.BOOTSTRAP_ADMIN_NAME = "测试管理员";
 process.env.BOOTSTRAP_ADMIN_PASSWORD = "Admin12#$";
 process.env.SESSION_SECRET = "announcement-test-session-secret-at-least-32-characters";

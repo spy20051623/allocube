@@ -6,7 +6,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-admin-reminders-"));
 process.env.NODE_ENV = "test";
 process.env.DATABASE_PATH = path.join(directory, "reminders.sqlite");
-process.env.SEED_DEMO_DATA = "false";
 process.env.BOOTSTRAP_ADMIN_PASSWORD = "Admin12#$";
 process.env.SMTP_SETTINGS_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
 

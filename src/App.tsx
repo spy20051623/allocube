@@ -17,6 +17,7 @@ import {
   CalendarWeekEvent,
   type CalendarEventModel
 } from "./CalendarEventVisual";
+import { CalendarAnchoredPopover } from "./CalendarAnchoredPopover";
 import {
   allocateCalendarResultFieldWidths,
   CALENDAR_RESULT_FIELD_GAP,
@@ -9174,74 +9175,14 @@ function CalendarNearbyReservationsPopover({
   onClose: () => void;
   onSelect: (detail: CalendarReservationDetail) => void;
 }) {
-  const popoverRef = useRef<HTMLElement | null>(null);
-  const popoverWidth = 340;
-  const viewportPadding = 12;
-  const anchorGap = 8;
-  const estimatedHeight = Math.min(430, 82 + nearby.items.length * 57);
-  const preferredLeft = nearby.anchor.right + anchorGap;
-  const left =
-    preferredLeft + popoverWidth <= window.innerWidth - viewportPadding
-      ? preferredLeft
-      : Math.max(
-          viewportPadding,
-          nearby.anchor.left - popoverWidth - anchorGap
-        );
-  const top = Math.min(
-    Math.max(viewportPadding, nearby.anchor.top - 8),
-    Math.max(viewportPadding, window.innerHeight - estimatedHeight - viewportPadding)
-  );
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    const handleViewportChange = () => onClose();
-    const handleViewportScroll = (event: Event) => {
-      if (
-        event.target instanceof Node &&
-        popoverRef.current?.contains(event.target)
-      ) {
-        return;
-      }
-      onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportScroll, true);
-    window.requestAnimationFrame(() => popoverRef.current?.focus());
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportScroll, true);
-    };
-  }, [onClose]);
-
   return (
-    <div className="reservation-popover-layer" onPointerDown={onClose}>
-      <article
-        ref={popoverRef}
-        className="reservation-popover nearby-reservations-popover"
-        role="dialog"
-        aria-label={tr("选择附近占用")}
-        tabIndex={-1}
-        style={{ left, top }}
-        onPointerDown={(event) => event.stopPropagation()}
-      >
-        <div className="reservation-popover-head">
-          <div>
-            <strong>{tr("附近有")}{nearby.items.length} {tr("条占用")}</strong>
-          </div>
-          <button
-            className="reservation-popover-action"
-            type="button"
-            aria-label={tr("关闭")}
-            title={tr("关闭")}
-            onClick={onClose}
-          >
-            <X size={16} />
-          </button>
-        </div>
+    <CalendarAnchoredPopover
+      anchor={nearby.anchor}
+      ariaLabel={tr("选择附近占用")}
+      className="nearby-reservations-popover"
+      heading={<>{tr("附近有")}{nearby.items.length} {tr("条占用")}</>}
+      onClose={onClose}
+    >
         <p className="nearby-reservations-hint">{tr("请选择一条查看完整信息")}</p>
         <div className="nearby-reservations-list">
           {nearby.items.map((detail) => (
@@ -9282,8 +9223,7 @@ function CalendarNearbyReservationsPopover({
             </button>
           ))}
         </div>
-      </article>
-    </div>
+    </CalendarAnchoredPopover>
   );
 }
 
@@ -9307,7 +9247,6 @@ function CalendarReservationPopover({
   const { item } = detail;
   const dialog = useAppDialog();
   const [busy, setBusy] = useState(false);
-  const popoverRef = useRef<HTMLElement | null>(null);
   const now = currentTime;
   const startTime = new Date(item.startAt).getTime();
   const upcoming = startTime > now;
@@ -9317,46 +9256,6 @@ function CalendarReservationPopover({
   const withinFirstMinute = active && now - startTime < 60_000;
   const canRelease = item.mine || canManage;
   const status = upcoming ? tr("未开始") : active ? tr("进行中") : tr("已结束");
-  const popoverWidth = 320;
-  const viewportPadding = 12;
-  const anchorGap = 8;
-  const preferredLeft = detail.anchor.right + anchorGap;
-  const left =
-    preferredLeft + popoverWidth <= window.innerWidth - viewportPadding
-      ? preferredLeft
-      : Math.max(
-          viewportPadding,
-          detail.anchor.left - popoverWidth - anchorGap
-        );
-  const top = Math.min(
-    Math.max(viewportPadding, detail.anchor.top - 8),
-    Math.max(viewportPadding, window.innerHeight - 420)
-  );
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    const handleViewportChange = () => onClose();
-    const handleViewportScroll = (event: Event) => {
-      if (
-        event.target instanceof Node &&
-        popoverRef.current?.contains(event.target)
-      ) {
-        return;
-      }
-      onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportScroll, true);
-    window.requestAnimationFrame(() => popoverRef.current?.focus());
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportScroll, true);
-    };
-  }, [onClose]);
 
   const performAction = async (action: "cancel" | "end") => {
     const releasingAnotherUser = !item.mine && canManage;
@@ -9424,27 +9323,17 @@ function CalendarReservationPopover({
   };
 
   return (
-    <div
-      className="reservation-popover-layer"
-      onPointerDown={onClose}
-    >
-      <article
-        ref={popoverRef}
-        className="reservation-popover"
-        role="dialog"
-        aria-label={tr("占用详情")}
-        tabIndex={-1}
-        style={{ left, top }}
-        onPointerDown={(event) => event.stopPropagation()}
-      >
-        <div className="reservation-popover-head">
-          <div>
-            <strong>{tr("占用详情")}</strong>
-            <span className={`state-chip ${active ? "active" : ""}`}>
-              {status}
-            </span>
-          </div>
-          <div className="reservation-popover-actions">
+    <CalendarAnchoredPopover
+      anchor={detail.anchor}
+      ariaLabel={tr("占用详情")}
+      heading={tr("占用详情")}
+      badge={
+        <span className={`state-chip ${active ? "active" : ""}`}>
+          {status}
+        </span>
+      }
+      actions={
+        <>
             {item.mine && (upcoming || active) && (
               <button
                 className="reservation-popover-action edit"
@@ -9495,18 +9384,10 @@ function CalendarReservationPopover({
                   : <PowerOff size={16} />}
               </button>
             )}
-            <button
-              className="reservation-popover-action"
-              type="button"
-              disabled={busy}
-              aria-label={tr("关闭")}
-              title={tr("关闭")}
-              onClick={onClose}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
+        </>
+      }
+      onClose={onClose}
+    >
         <dl className="reservation-popover-details">
           <div>
             <dt>{tr("使用人")}</dt>
@@ -9570,8 +9451,7 @@ function CalendarReservationPopover({
             {item.adjustmentReason && <div><span>{tr("调整原因")}</span><p>{item.adjustmentReason}</p></div>}
           </div>
         )}
-      </article>
-    </div>
+    </CalendarAnchoredPopover>
   );
 }
 
@@ -9587,82 +9467,24 @@ function CalendarUnavailabilityPopover({
   };
   onClose: () => void;
 }) {
-  const popoverRef = useRef<HTMLElement | null>(null);
   const isDisableHistory =
     detail.item.sources[0]?.window.kind === "LONG_TERM";
-  const popoverWidth = 360;
-  const viewportPadding = 12;
-  const anchorGap = 8;
-  const preferredLeft = detail.anchor.right + anchorGap;
-  const left =
-    preferredLeft + popoverWidth <= window.innerWidth - viewportPadding
-      ? preferredLeft
-      : Math.max(
-          viewportPadding,
-          detail.anchor.left - popoverWidth - anchorGap
-        );
-  const top = Math.min(
-    Math.max(viewportPadding, detail.anchor.top - 8),
-    Math.max(viewportPadding, window.innerHeight - 440)
-  );
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    const handleViewportChange = () => onClose();
-    const handleViewportScroll = (event: Event) => {
-      if (
-        event.target instanceof Node &&
-        popoverRef.current?.contains(event.target)
-      ) {
-        return;
-      }
-      onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportScroll, true);
-    window.requestAnimationFrame(() => popoverRef.current?.focus());
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportScroll, true);
-    };
-  }, [onClose]);
 
   return (
-    <div className="reservation-popover-layer">
-      <article
-        ref={popoverRef}
-        className={`reservation-popover unavailability-popover${isDisableHistory ? " disable-history-popover" : ""}`}
-        style={{ left, top }}
-        role="dialog"
-        aria-modal="false"
-        aria-label={isDisableHistory ? tr("停用详情") : tr("维护详情")}
-        tabIndex={-1}
-      >
-        <div className="reservation-popover-head">
-          <div>
-            <strong>{isDisableHistory ? tr("停用详情") : tr("维护详情")}</strong>
-            <span
-              className={`state-chip ${isDisableHistory ? "disabled" : "scheduled"}`}
-            >
-              {detail.item.sources.length}{tr("项")}{isDisableHistory ? tr("记录") : tr("安排")}
-            </span>
-          </div>
-          <div className="reservation-popover-actions">
-            <button
-              className="reservation-popover-action"
-              type="button"
-              aria-label={tr("关闭")}
-              title={tr("关闭")}
-              onClick={onClose}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
+    <CalendarAnchoredPopover
+      anchor={detail.anchor}
+      ariaLabel={isDisableHistory ? tr("停用详情") : tr("维护详情")}
+      className={`unavailability-popover${isDisableHistory ? " disable-history-popover" : ""}`}
+      heading={isDisableHistory ? tr("停用详情") : tr("维护详情")}
+      badge={
+        <span
+          className={`state-chip ${isDisableHistory ? "disabled" : "scheduled"}`}
+        >
+          {detail.item.sources.length}{tr("项")}{isDisableHistory ? tr("记录") : tr("安排")}
+        </span>
+      }
+      onClose={onClose}
+    >
         <dl className="reservation-popover-details">
           <div><dt>{tr("机器")}</dt><dd>{detail.machineName}</dd></div>
           <div><dt>{tr("资源组")}</dt><dd>{detail.groupName}</dd></div>
@@ -9725,8 +9547,7 @@ function CalendarUnavailabilityPopover({
             </section>
           ))}
         </div>
-      </article>
-    </div>
+    </CalendarAnchoredPopover>
   );
 }
 

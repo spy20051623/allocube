@@ -3591,10 +3591,6 @@ textarea::placeholder {
   cursor: default;
 }
 
-.nearby-reservations-popover {
-  width: 340px;
-}
-
 .nearby-reservations-hint {
   margin: 7px 0 0;
   color: #7a8596;

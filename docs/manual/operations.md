@@ -58,6 +58,14 @@ docker compose --env-file .env.production up -d --build
 
 应用容器端口只用于容器内部通信，不应直接映射到公网。反向代理需要正确传递 `Host`、`X-Forwarded-Host` 和 `X-Forwarded-Proto`。
 
+重复构建生产镜像时使用仓库内的缓存构建脚本：
+
+```text
+sh scripts/build-docker-release.sh RELEASE_ID BUILD_CONTEXT
+```
+
+脚本将依赖层保存为具名 Docker 镜像，并在 `/opt/allocube-build-cache` 保留按 `package-lock.json` 区分的离线镜像归档。已有缓存时构建会强制禁用网络；缓存一旦失效，构建将直接失败，不会静默重新下载。只有依赖确实发生变化时，才应为一次构建显式设置 `ALLOCUBE_ALLOW_DEPENDENCY_DOWNLOAD=1`，随后生成的新缓存可供后续版本离线复用。清理 Docker 镜像时不得删除 `allocube-build-cache:*`，离线归档也应纳入服务器磁盘备份。
+
 ## 健康检查
 
 ```text

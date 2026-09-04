@@ -57,6 +57,14 @@ docker compose --env-file .env.production up -d --build
 
 Keep the application container port private. The reverse proxy must forward `Host`, `X-Forwarded-Host`, and `X-Forwarded-Proto` correctly.
 
+Use the repository's cached build script for repeated production image builds:
+
+```text
+sh scripts/build-docker-release.sh RELEASE_ID BUILD_CONTEXT
+```
+
+The script keeps dependency layers in named Docker images and stores an offline image archive keyed by `package-lock.json` under `/opt/allocube-build-cache`. When a cache exists, the build runs with networking disabled; a cache miss fails instead of silently downloading packages. Set `ALLOCUBE_ALLOW_DEPENDENCY_DOWNLOAD=1` for one build only when dependencies intentionally change, after which later releases can reuse the refreshed cache offline. Do not remove `allocube-build-cache:*` during Docker image cleanup, and include the offline archive in server disk backups.
+
 ## Health check
 
 ```text

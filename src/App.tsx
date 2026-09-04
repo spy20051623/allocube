@@ -19,6 +19,10 @@ import {
 } from "./CalendarEventVisual";
 import { CalendarAnchoredPopover } from "./CalendarAnchoredPopover";
 import {
+  UnavailabilityImpactSummary,
+  type UnavailabilityImpactData
+} from "./UnavailabilityImpactSummary";
+import {
   allocateCalendarResultFieldWidths,
   CALENDAR_RESULT_FIELD_GAP,
   type CalendarResultFieldWidths
@@ -11573,17 +11577,10 @@ function MachineInfoSection({
   );
 }
 
-type MaintenancePreview = {
-  affectedReservations: any[];
+type MaintenancePreview = UnavailabilityImpactData & {
   startAt: string;
   endAt: string;
   revision: number;
-  summary: {
-    total: number;
-    cancelled: number;
-    trimmed: number;
-    split: number;
-  };
 };
 
 function MaintenanceModal({
@@ -11780,33 +11777,7 @@ function MaintenanceModal({
             onChange={(event) => updateForm("reason", event.target.value)}
           />
         </Field>
-        {preview && (
-          <div className={`unavailability-impact-bar ${preview.summary.total ? "warning" : "safe"}`}>
-            <div>
-              {preview.summary.total ? <CircleAlert size={16} /> : <Check size={16} />}
-              <span>
-                <strong>
-                  {preview.summary.total
-                    ? tr("影响 {{v0}} 条占用", { v0: preview.summary.total })
-                    : tr("没有受影响的占用")}
-                </strong>
-                {preview.summary.total > 0 && (
-                  <small>
-                    {tr("取消")}{preview.summary.cancelled} {tr("条 · 裁切")}{preview.summary.trimmed} {tr("条 · 拆分")}{preview.summary.split} {tr("条")}</small>
-                )}
-                  {preview.affectedReservations.slice(0, 3).map((item) => (
-                  <small key={item.id}>
-                    {item.applicantName} · {item.resourceGroupName || tr("整机")} ·
-                    {" "}{formatChinaFullMinute(item.startAt)}
-                  </small>
-                ))}
-                {preview.summary.total > 3 && (
-                  <small>{tr("另有")}{preview.summary.total - 3} {tr("条占用")}</small>
-                )}
-              </span>
-            </div>
-          </div>
-        )}
+        {preview && <UnavailabilityImpactSummary impact={preview} />}
         <div className="modal-actions">
           <button
             type="button"
@@ -11910,24 +11881,7 @@ function MachineStopModal({
             }}
           />
         </Field>
-        {preview && (
-          <div className={`unavailability-impact-bar ${preview.summary.total ? "warning" : "safe"}`}>
-            <div>
-              {preview.summary.total ? <CircleAlert size={16} /> : <Check size={16} />}
-              <span>
-                <strong>
-                  {preview.summary.total
-                    ? tr("影响 {{v0}} 条占用", { v0: preview.summary.total })
-                    : tr("没有受影响的占用")}
-                </strong>
-                {preview.summary.total > 0 && (
-                  <small>
-                    {tr("取消")}{preview.summary.cancelled} {tr("条 · 裁切")}{preview.summary.trimmed} {tr("条 · 拆分")}{preview.summary.split} {tr("条")}</small>
-                )}
-              </span>
-            </div>
-          </div>
-        )}
+        {preview && <UnavailabilityImpactSummary impact={preview} />}
         <div className="modal-actions">
           <button
             type="button"

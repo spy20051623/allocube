@@ -13,6 +13,11 @@ import {
   type CalendarSearchTarget
 } from "./CalendarResourceFinder";
 import {
+  CalendarDayEventBlock,
+  CalendarWeekEvent,
+  type CalendarEventModel
+} from "./CalendarEventVisual";
+import {
   allocateCalendarResultFieldWidths,
   CALENDAR_RESULT_FIELD_GAP,
   type CalendarResultFieldWidths
@@ -7524,6 +7529,56 @@ function CalendarPage({
                       new Date(left.startAt).getTime() -
                       new Date(right.startAt).getTime()
                   );
+                  const visibleCalendarEvents: Array<{
+                    event: CalendarEventModel;
+                    reservation?: TimelineReservation;
+                    unavailability?: ProjectedUnavailability;
+                  }> = [
+                    ...visibleResourceWindows.map((item) => {
+                      const isDisableHistory =
+                        item.sources[0]?.window.kind === "LONG_TERM";
+                      const onlySource =
+                        item.sources.length === 1 ? item.sources[0] : null;
+                      const label =
+                        item.sources.length > 1
+                          ? tr("{{v0}} · {{v1}}项", {
+                              v0: tr(isDisableHistory ? "停用" : "维护"),
+                              v1: item.sources.length
+                            })
+                          : onlySource?.window.reason ||
+                            (onlySource?.scope === "MACHINE"
+                              ? isDisableHistory
+                                ? tr("整机停用")
+                                : tr("整机维护")
+                              : isDisableHistory
+                                ? tr("资源组停用")
+                                : tr("资源组维护"));
+                      const event: CalendarEventModel = {
+                        key: `${group.id}-${item.startAt}-${item.endAt}-${item.sources.map((source) => source.window.id).join("-")}`,
+                        kind: isDisableHistory
+                          ? "DISABLE_HISTORY"
+                          : "MAINTENANCE",
+                        stage: "COMMITTED",
+                        startAt: item.startAt,
+                        endAt: item.endAt,
+                        label
+                      };
+                      return {
+                        event,
+                        unavailability: item
+                      };
+                    }),
+                    ...visibleReservations.map((item) => {
+                      const event: CalendarEventModel = {
+                        ...reservationCalendarEvent(item),
+                        stage:
+                          item.id === editingReservation?.id
+                            ? "EDITING_HISTORY"
+                            : "COMMITTED"
+                      };
+                      return { event, reservation: item };
+                    })
+                  ];
                   const groupMaintenanceNow = visibleUnavailability.some(
                     (item) =>
                       new Date(item.startAt).getTime() <= currentTime &&
@@ -7756,164 +7811,108 @@ function CalendarPage({
                                }
                              />
                            )}
-                        {visibleResourceWindows.map((item) => {
-                          const isDisableHistory =
-                            item.sources[0]?.window.kind === "LONG_TERM";
-                          const onlySource =
-                            item.sources.length === 1
-                              ? item.sources[0]
-                              : null;
-                          const label =
-                            item.sources.length > 1
-                              ? tr("{{v0}} · {{v1}}项", { v0: isDisableHistory ? "停用" : "维护", v1: item.sources.length })
-                              : onlySource?.window.reason ||
-                                (onlySource?.scope === "MACHINE"
-                                  ? isDisableHistory
-                                    ? tr("整机停用")
-                                    : tr("整机维护")
-                                  : isDisableHistory
-                                    ? tr("资源组停用")
-                                    : tr("资源组维护"));
-                          return (
-                          <TimelineBar
-                            key={`${group.id}-${item.startAt}-${item.endAt}-${item.sources.map((source) => source.window.id).join("-")}`}
-                            start={item.startAt}
-                            end={item.endAt}
-                            range={range}
-                            className={`unavailability-bar${isDisableHistory ? " disable-history-bar" : ""}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setReservationDetail(null);
-                              setNearbyReservations(null);
-                              setUnavailabilityDetail({
-                                item,
-                                machineName: machine.name,
-                                groupName: group.name,
-                                anchor:
-                                  event.currentTarget.getBoundingClientRect()
-                              });
-                            }}
-                          >
-                            <PowerOff className="unavailability-icon" size={11} />
-                            <span className="booking-bar-copy">
-                              <span>{label}</span>
-                              {view === "day" && (
-                                <small>
-                                  {formatTimelineDayPeriod(
-                                    item.startAt,
-                                    item.endAt,
-                                    range
-                                  )}
-                                </small>
+                        {visibleCalendarEvents.map(
+                          ({ event, reservation, unavailability }) => (
+                            <CalendarDayEventBlock
+                              key={event.key}
+                              event={event}
+                              range={range}
+                              periodLabel={formatTimelineDayPeriod(
+                                event.startAt,
+                                event.endAt,
+                                range
                               )}
-                            </span>
-                          </TimelineBar>
-                          );
-                        })}
-                        {visibleReservations.map((item) => (
-                          <TimelineBar
-                            key={item.id}
-                            start={item.startAt}
-                            end={item.endAt}
-                            range={range}
-                            className={`${item.mine ? "booking-bar mine" : "booking-bar"}${item.scope === "MACHINE" ? " machine-scope" : ""}${item.id === editingReservation?.id ? " editing-history" : ""}`}
-                            onClick={
-                                  longTermDisabled ||
-                                  item.id === editingReservation?.id
-                                ? undefined
-                                : (event) =>
-                                    openTimelineReservation(
-                                      event,
-                                      item,
-                                      visibleReservations,
-                                      machine.name,
-                                      group.name
-                                    )
-                            }
-                          >
-                            <span className="booking-dot" />
-                            <span className="booking-bar-copy">
-                              <span>
-                                {item.scope === "MACHINE" && tr("整机 · ")}
-                                {item.applicantName}
-                                {item.applicantEmployeeNumber
-                                  ? ` · ${item.applicantEmployeeNumber}`
-                                  : ""}
-                              </span>
-                              {view === "day" && (
-                                <small>
-                                  {formatTimelineDayPeriod(
-                                    item.startAt,
-                                    item.endAt,
-                                    range
-                                  )}
-                                </small>
-                              )}
-                            </span>
-                          </TimelineBar>
-                        ))}
+                              onClick={
+                                unavailability
+                                  ? (clickEvent) => {
+                                      clickEvent.stopPropagation();
+                                      setReservationDetail(null);
+                                      setNearbyReservations(null);
+                                      setUnavailabilityDetail({
+                                        item: unavailability,
+                                        machineName: machine.name,
+                                        groupName: group.name,
+                                        anchor:
+                                          clickEvent.currentTarget.getBoundingClientRect()
+                                      });
+                                    }
+                                  : reservation &&
+                                      !longTermDisabled &&
+                                      reservation.id !== editingReservation?.id
+                                    ? (clickEvent) =>
+                                        openTimelineReservation(
+                                          clickEvent,
+                                          reservation,
+                                          visibleReservations,
+                                          machine.name,
+                                          group.name
+                                        )
+                                    : undefined
+                              }
+                            />
+                          )
+                        )}
                         {timelineDrafts
                           .filter(
                             (draft) =>
                               draft.startAt < range.to &&
                               draft.endAt > range.from
                           )
-                          .map((draft, index) => (
-                            <TimelineBar
-                              key={`${group.id}-${draft.startAt}-${draft.endAt}-${index}`}
-                              start={draft.startAt}
-                              end={draft.endAt}
-                              range={range}
-                              className={`draft-timeline-bar${isDragTarget && dragPreview?.action === "ADD" ? " preview" : ""}${draft.scope === "MACHINE" ? " machine-scope" : ""}`}
-                            >
-                              <span className="booking-dot" />
-                              <span className="booking-bar-copy">
-                                <span>
-                                  {draft.scope === "MACHINE" && tr("整机 · ")}
-                                  {user.displayName}
-                                  {user.employeeNumber
-                                    ? ` · ${user.employeeNumber}`
-                                    : ""}
-                                </span>
-                                {view === "day" && (
-                                  <small>
-                                    {formatTimelineDayPeriod(
-                                      draft.startAt,
-                                      draft.endAt,
-                                      range
-                                    )}
-                                  </small>
+                          .map((draft, index) => {
+                            const event = draftCalendarEvent(
+                              draft,
+                              user,
+                              `${group.id}-${draft.startAt}-${draft.endAt}-${index}`,
+                              Boolean(
+                                isDragTarget && dragPreview?.action === "ADD"
+                              )
+                            );
+                            return (
+                              <CalendarDayEventBlock
+                                key={event.key}
+                                event={event}
+                                range={range}
+                                periodLabel={formatTimelineDayPeriod(
+                                  event.startAt,
+                                  event.endAt,
+                                  range
                                 )}
-                              </span>
-                            </TimelineBar>
-                          ))}
+                              />
+                            );
+                          })}
                         {dragPreview &&
                           isDragTarget &&
                           dragPreview.action === "ERASE" && (
-                            <TimelineBar
-                              start={dragPreview.requested.startAt}
-                              end={dragPreview.requested.endAt}
+                            <CalendarDayEventBlock
+                              event={{
+                                key: `erase-${group.id}`,
+                                kind: "ERASE_PREVIEW",
+                                stage: "DRAFT_PREVIEW",
+                                startAt: dragPreview.requested.startAt,
+                                endAt: dragPreview.requested.endAt,
+                                label: tr("删除草稿")
+                              }}
                               range={range}
-                              className="drag-erase-bar"
-                            >
-                              <X size={12} />
-                              {tr("删除草稿")}</TimelineBar>
+                            />
                           )}
                         {dragPreview &&
                           isDragTarget &&
                           dragPreview.action === "ADD" &&
                           dragPreview.blocked && (
-                            <TimelineBar
-                              start={dragPreview.requested.startAt}
-                              end={dragPreview.requested.endAt}
+                            <CalendarDayEventBlock
+                              event={{
+                                key: `conflict-${group.id}`,
+                                kind: "CONFLICT_PREVIEW",
+                                stage: "DRAFT_PREVIEW",
+                                startAt: dragPreview.requested.startAt,
+                                endAt: dragPreview.requested.endAt,
+                                label:
+                                  dragPreview.target.scope === "MACHINE"
+                                    ? tr("机器已有资源被占用")
+                                    : tr("已被占用")
+                              }}
                               range={range}
-                              className="drag-blocked-bar"
-                            >
-                              <CircleAlert size={12} />
-                              {dragPreview.target.scope === "MACHINE"
-                                ? tr("机器已有资源被占用")
-                                : tr("已被占用")}
-                            </TimelineBar>
+                            />
                           )}
                       </div>
                       )}
@@ -8431,6 +8430,52 @@ function CalendarTargetFields({
   );
 }
 
+function reservationCalendarEvent(
+  item: TimelineReservation
+): CalendarEventModel {
+  return {
+    key: item.id,
+    kind:
+      item.scope === "MACHINE"
+        ? "MACHINE_RESERVATION"
+        : "GENERAL_RESERVATION",
+    stage: "COMMITTED",
+    startAt: item.startAt,
+    endAt: item.endAt,
+    label: `${item.scope === "MACHINE" ? tr("整机 · ") : ""}${
+      item.applicantName
+    }${
+      item.applicantEmployeeNumber
+        ? ` · ${item.applicantEmployeeNumber}`
+        : ""
+    }`,
+    mine: item.mine
+  };
+}
+
+function draftCalendarEvent(
+  draft: CalendarTimeRange & {
+    scope?: "RESOURCE_GROUP" | "MACHINE";
+  },
+  user: AuthUser,
+  key: string,
+  preview: boolean
+): CalendarEventModel {
+  return {
+    key,
+    kind:
+      draft.scope === "MACHINE"
+        ? "MACHINE_RESERVATION"
+        : "GENERAL_RESERVATION",
+    stage: preview ? "DRAFT_PREVIEW" : "DRAFT",
+    startAt: draft.startAt,
+    endAt: draft.endAt,
+    label: `${draft.scope === "MACHINE" ? tr("整机 · ") : ""}${
+      user.displayName
+    }${user.employeeNumber ? ` · ${user.employeeNumber}` : ""}`
+  };
+}
+
 function CalendarWeekDayCell({
   day,
   today,
@@ -8479,42 +8524,23 @@ function CalendarWeekDayCell({
     : unavailable.length
       ? tr("不可用")
       : tr("空闲");
-  const details = [
-    ...reservations.map((item) => ({
-      id: item.id,
-      kind: item.mine ? "mine" as const : "reservation" as const,
-      machineScope: item.scope === "MACHINE",
-      startAt: item.startAt,
-      endAt: item.endAt,
-      persistent: false,
-      label: `${item.scope === "MACHINE" ? tr("整机 · ") : ""}${item.applicantName}${
-        item.applicantEmployeeNumber
-          ? ` · ${item.applicantEmployeeNumber}`
-          : ""
-      }`
-    })),
-    ...unavailable.map((item) => ({
-      id: item.id,
-      kind:
-        item.kind === "LONG_TERM"
-          ? "disabled" as const
-          : "unavailable" as const,
-      machineScope: false,
+  const reservationEvents = reservations.map(reservationCalendarEvent);
+  const unavailableEvents: CalendarEventModel[] = unavailable.map(
+    (item) => ({
+      key: `unavailable-${item.id}`,
+      kind: item.kind === "LONG_TERM" ? "DISABLE_HISTORY" : "MAINTENANCE",
+      stage: "COMMITTED",
       startAt: item.startAt,
       endAt: item.endAt,
       persistent: item.kind === "LONG_TERM" && item.endAt >= dayEnd,
-      label: item.reason || (item.kind === "LONG_TERM" ? tr("停用") : tr("维护"))
-    }))
-  ].sort((left, right) => left.startAt.localeCompare(right.startAt));
-
-  const rangeStyle = (startAt: string, endAt: string) => {
-    const start = Math.max(from, new Date(startAt).getTime());
-    const end = Math.min(to, new Date(endAt).getTime());
-    return {
-      left: `${((start - from) / (to - from)) * 100}%`,
-      width: `${Math.max(0, ((end - start) / (to - from)) * 100)}%`
-    };
-  };
+      label:
+        item.reason || (item.kind === "LONG_TERM" ? tr("停用") : tr("维护"))
+    })
+  );
+  const trackEvents = [...unavailableEvents, ...reservationEvents];
+  const details = [...reservationEvents, ...unavailableEvents].sort((left, right) =>
+    left.startAt.localeCompare(right.startAt)
+  );
 
   const updatePopoverPosition = useCallback(() => {
     const button = buttonRef.current;
@@ -8582,24 +8608,12 @@ function CalendarWeekDayCell({
         >
           <span className="week-day-summary">{summary}</span>
           <span className="week-mini-track" aria-hidden="true">
-            {unavailable.map((item) => (
-              <i
-                key={`unavailable-${item.id}`}
-                className={
-                  item.kind === "LONG_TERM"
-                    ? "unavailable disabled"
-                    : "unavailable"
-                }
-                style={rangeStyle(item.startAt, item.endAt)}
-              />
-            ))}
-            {reservations.map((item) => (
-              <i
-                key={`reservation-${item.id}`}
-                className={`${item.mine ? "mine" : ""}${
-                  item.scope === "MACHINE" ? " machine-scope" : ""
-                }`.trim()}
-                style={rangeStyle(item.startAt, item.endAt)}
+            {trackEvents.map((event) => (
+              <CalendarWeekEvent
+                key={event.key}
+                event={event}
+                variant="track"
+                range={{ from: dayStart, to: dayEnd }}
               />
             ))}
           </span>
@@ -8619,11 +8633,10 @@ function CalendarWeekDayCell({
           >
             <strong>{day} · {groupName}</strong>
             {details.map((item) => (
-              <div key={`${item.kind}-${item.id}`}>
-                <span
-                  className={`${item.kind}${
-                    item.machineScope ? " machine-scope" : ""
-                  }`}
+              <div key={item.key}>
+                <CalendarWeekEvent
+                  event={item}
+                  variant="detail-marker"
                 />
                 <time>
                   {formatWeekDayDetailPeriod({
@@ -8631,7 +8644,7 @@ function CalendarWeekDayCell({
                     endAt: item.endAt,
                     dayStart,
                     dayEnd,
-                    persistent: item.persistent
+                    persistent: Boolean(item.persistent)
                   })}
                 </time>
                 <em>{item.label}</em>
@@ -9026,66 +9039,6 @@ function TrackGrid({
     visibleHours === 6 ? 30 : visibleHours === 12 ? 60 : 120;
   const count = view === "day" ? (24 * 60) / intervalMinutes : 7;
   return <>{Array.from({ length: count + 1 }, (_, index) => <i key={index} style={{ left: `${(index / count) * 100}%` }} />)}</>;
-}
-
-function TimelineBar({
-  start,
-  end,
-  range,
-  className,
-  children,
-  onClick
-}: {
-  start: string;
-  end: string;
-  range: { from: string; to: string };
-  className: string;
-  children: React.ReactNode;
-  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-}) {
-  const from = new Date(range.from).getTime();
-  const to = new Date(range.to).getTime();
-  const startTime = new Date(start).getTime();
-  const endTime = new Date(end).getTime();
-  if (
-    !Number.isFinite(from) ||
-    !Number.isFinite(to) ||
-    !Number.isFinite(startTime) ||
-    !Number.isFinite(endTime) ||
-    to <= from ||
-    endTime <= startTime
-  ) {
-    return null;
-  }
-  const left = ((Math.max(from, startTime) - from) / (to - from)) * 100;
-  const right = ((Math.min(to, endTime) - from) / (to - from)) * 100;
-  const style = {
-    left: `${left}%`,
-    width: `${Math.max(0, right - left)}%`
-  };
-  const visual = (
-    <span className={`timeline-bar-visual ${className}`}>
-      <span className="timeline-bar-content">{children}</span>
-    </span>
-  );
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        className={`timeline-bar-anchor ${className}`}
-        style={style}
-        onClick={onClick}
-        onPointerDown={(event) => event.stopPropagation()}
-      >
-        {visual}
-      </button>
-    );
-  }
-  return (
-    <div className={`timeline-bar-anchor passive ${className}`} style={style}>
-      {visual}
-    </div>
-  );
 }
 
 function formatTimelineDayPeriod(

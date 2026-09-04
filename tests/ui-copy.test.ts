@@ -247,6 +247,10 @@ describe("角色化界面文案", () => {
       new URL("../src/calendar-unavailability.ts", import.meta.url),
       "utf8"
     );
+    const calendarEvents = readText(
+      new URL("../src/CalendarEventVisual.tsx", import.meta.url),
+      "utf8"
+    );
     const server = readText(new URL("../server/routes-admin.ts", import.meta.url), "utf8");
     expect(source).toContain('title="重新启用"');
     expect(source).toContain('title="永久删除"');
@@ -254,7 +258,7 @@ describe("角色化界面文案", () => {
     expect(source).toContain("visibleResourceWindows.map");
     expect(source).toContain("mergeProjectedUnavailability");
     expect(source).toContain("mergeProjectedDisableHistory");
-    expect(source).toContain("disable-history-bar");
+    expect(calendarEvents).toContain("disable-history-bar");
     expect(source).toContain("CalendarUnavailabilityPopover");
     expect(calendarUnavailability).toContain('window.kind === kind');
     expect(calendarUnavailability).toContain('"LONG_TERM"');
@@ -309,6 +313,64 @@ describe("角色化界面文案", () => {
     );
     expect(unavailableRule).not.toContain("top: 0");
     expect(unavailableRule).not.toContain("bottom: 0");
+  });
+
+  it("日视图和周视图分别通过统一事件组件区分事件类型", () => {
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const calendarEvents = readText(
+      new URL("../src/CalendarEventVisual.tsx", import.meta.url),
+      "utf8"
+    );
+
+    expect(calendarEvents).toContain("export function CalendarDayEventBlock");
+    expect(calendarEvents).toContain("export function CalendarWeekEvent");
+    expect(calendarEvents).toContain('"GENERAL_RESERVATION"');
+    expect(calendarEvents).toContain('"MACHINE_RESERVATION"');
+    expect(calendarEvents).toContain('"MAINTENANCE"');
+    expect(calendarEvents).toContain('"DISABLE_HISTORY"');
+    expect(source).toContain("visibleCalendarEvents.map");
+    expect(source).toContain("<CalendarDayEventBlock");
+    expect(source).toContain("<CalendarWeekEvent");
+    expect(source).toContain('className="long-term-disabled-state"');
+  });
+
+  it("日视图草稿与正式事件复用同一色块组件", () => {
+    const source = readText(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const calendarEvents = readText(
+      new URL("../src/CalendarEventVisual.tsx", import.meta.url),
+      "utf8"
+    );
+
+    expect(source).toContain("function draftCalendarEvent");
+    expect(source.match(/<CalendarDayEventBlock/g)).toHaveLength(4);
+    expect(source).not.toContain('className={`draft-timeline-bar');
+    expect(source).not.toContain("<TimelineBar");
+    expect(calendarEvents).toContain('"DRAFT"');
+    expect(calendarEvents).toContain('"DRAFT_PREVIEW"');
+    expect(calendarEvents).toContain("event.stage === \"DRAFT_PREVIEW\"");
+    expect(calendarEvents).toContain('"ERASE_PREVIEW"');
+    expect(calendarEvents).toContain('"CONFLICT_PREVIEW"');
+    expect(calendarEvents).not.toContain("export function TimelineBar");
+  });
+
+  it("日视图事件文字在色块边界直接裁切而不使用省略号", () => {
+    const calendarEvents = readText(
+      new URL("../src/CalendarEventVisual.tsx", import.meta.url),
+      "utf8"
+    );
+    const styles = readText(
+      new URL("../src/styles.css", import.meta.url),
+      "utf8"
+    );
+    const overflowRules = styles.slice(
+      styles.indexOf(".timeline-bar-visual.calendar-day-event-block,"),
+      styles.indexOf(".booking-dot", styles.indexOf(".timeline-bar-visual.calendar-day-event-block,"))
+    );
+
+    expect(calendarEvents).toContain("calendar-day-event-block");
+    expect(overflowRules).toContain("overflow: hidden");
+    expect(overflowRules).toContain("text-overflow: clip");
+    expect(overflowRules).not.toContain("text-overflow: ellipsis");
   });
 
   it("时间轴使用真实时长，仅为亚像素短占用保留细线", () => {
@@ -464,7 +526,7 @@ describe("角色化界面文案", () => {
     expect(source).toContain("function formatTimelineDayPeriod");
     expect(source).toContain('start <= from ? "00:00"');
     expect(source).toContain('end >= to ? "24:00"');
-    expect(source.match(/formatTimelineDayPeriod\(/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(source.match(/formatTimelineDayPeriod\(/g)?.length).toBeGreaterThanOrEqual(3);
   });
 
   it("机器维护与停用使用独立卡片", () => {

@@ -2928,6 +2928,19 @@ textarea::placeholder {
   white-space: nowrap;
 }
 
+.timeline-bar-visual.calendar-day-event-block,
+.timeline-bar-visual.calendar-day-event-block .timeline-bar-content,
+.timeline-bar-visual.calendar-day-event-block .booking-bar-copy,
+.timeline-bar-visual.calendar-day-event-block .booking-bar-copy > span,
+.timeline-bar-visual.calendar-day-event-block .booking-bar-copy small {
+  overflow: hidden;
+}
+
+.timeline-bar-visual.calendar-day-event-block .booking-bar-copy > span,
+.timeline-bar-visual.calendar-day-event-block .booking-bar-copy small {
+  text-overflow: clip;
+}
+
 .draft-timeline-bar .booking-dot {
   background: currentColor;
 }

@@ -1767,15 +1767,16 @@ function LoginPage({
           {tr("工号")}</button>
       </div>
       {method === "USERNAME" ? (
-        <UsernameLoginForm
-          username={username}
+        <LoginCredentialForm
+          identifierType="USERNAME"
+          identifier={username}
           password={usernamePassword}
           busy={busy}
           infoMessage={loginInfoMessage}
           errorMessage={usernameError}
           validation={usernameValidation}
           setValidation={setUsernameValidation}
-          onUsernameChange={(value) => {
+          onIdentifierChange={(value) => {
             setUsername(value);
             setUsernameError("");
           }}
@@ -1788,14 +1789,15 @@ function LoginPage({
           }
         />
       ) : (
-        <EmployeeNumberLoginForm
-          employeeNumber={employeeNumber}
+        <LoginCredentialForm
+          identifierType="EMPLOYEE_NUMBER"
+          identifier={employeeNumber}
           password={employeeNumberPassword}
           busy={busy}
           errorMessage={employeeNumberError}
           validation={employeeNumberValidation}
           setValidation={setEmployeeNumberValidation}
-          onEmployeeNumberChange={(value) => {
+          onIdentifierChange={(value) => {
             setEmployeeNumber(value);
             setEmployeeNumberError("");
           }}
@@ -2063,34 +2065,40 @@ function clearLoginFieldError(
   });
 }
 
-function UsernameLoginForm({
-  username,
+function LoginCredentialForm({
+  identifierType,
+  identifier,
   password,
   busy,
-  infoMessage,
+  infoMessage = "",
   errorMessage,
   validation,
   setValidation,
-  onUsernameChange,
+  onIdentifierChange,
   onPasswordChange,
   onSubmit
 }: {
-  username: string;
+  identifierType: LoginMethod;
+  identifier: string;
   password: string;
   busy: boolean;
-  infoMessage: string;
+  infoMessage?: string;
   errorMessage: string;
   validation: LoginFormValidationState;
   setValidation: LoginValidationSetter;
-  onUsernameChange: (value: string) => void;
+  onIdentifierChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
   onSubmit: (password: string) => Promise<void>;
 }) {
+  const usernameLogin = identifierType === "USERNAME";
+  const formPrefix = usernameLogin ? "username" : "employee-number";
+  const identifierId = `${formPrefix}-login-identifier`;
+  const passwordId = `${formPrefix}-login-password`;
   return (
     <form
-      id="username-login-form"
+      id={`${formPrefix}-login-form`}
       role="tabpanel"
-      aria-labelledby="username-login-tab"
+      aria-labelledby={`${formPrefix}-login-tab`}
       className="stack-form"
       noValidate
       onSubmit={(event) => {
@@ -2098,53 +2106,57 @@ function UsernameLoginForm({
         if (document.activeElement instanceof HTMLElement) {
           document.activeElement.blur();
         }
-        const errors = validateLoginForm("USERNAME", username, password);
+        const errors = validateLoginForm(identifierType, identifier, password);
         setValidation({ focused: null, errors });
         if (Object.keys(errors).length) return;
         void onSubmit(password);
       }}
     >
       <AuthFieldShell
-        id="username-login-identifier"
-        label={tr("用户名")}
+        id={identifierId}
+        label={usernameLogin ? tr("用户名") : tr("工号")}
         focused={validation.focused === "identifier"}
         error={validation.errors.identifier}
       >
         <input
-          id="username-login-identifier"
-          name="username"
+          id={identifierId}
+          name={usernameLogin ? "username" : "employeeNumber"}
           autoFocus
           autoComplete="username"
           aria-invalid={Boolean(validation.errors.identifier)}
           aria-describedby={
             validation.focused !== "identifier" &&
             validation.errors.identifier
-              ? "username-login-identifier-error"
+              ? `${identifierId}-error`
               : undefined
           }
-          value={username}
+          value={identifier}
           onFocus={() => focusLoginField(setValidation, "identifier")}
           onBlur={() => blurLoginField(setValidation)}
           onChange={(event) => {
             clearLoginFieldError(setValidation, "identifier");
-            onUsernameChange(event.target.value);
+            onIdentifierChange(
+              usernameLogin
+                ? event.target.value
+                : event.target.value.toLowerCase()
+            );
           }}
         />
       </AuthFieldShell>
       <AuthFieldShell
-        id="username-login-password"
+        id={passwordId}
         label={tr("密码")}
         focused={validation.focused === "password"}
         error={validation.errors.password}
       >
         <PasswordInput
-          id="username-login-password"
+          id={passwordId}
           name="password"
           autoComplete="current-password"
           aria-invalid={Boolean(validation.errors.password)}
           aria-describedby={
             validation.focused !== "password" && validation.errors.password
-              ? "username-login-password-error"
+              ? `${passwordId}-error`
               : undefined
           }
           value={password}
@@ -2159,113 +2171,6 @@ function UsernameLoginForm({
       {infoMessage && (
         <div className="inline-message"><Info size={16} />{infoMessage}</div>
       )}
-      {errorMessage && (
-        <AuthFeedback tone="error" anchored={false}>
-          {errorMessage}
-        </AuthFeedback>
-      )}
-      <button className="primary-button auth-submit" disabled={busy}>
-        <BusyButtonContent busy={busy} iconSize={16}>{tr("登录")}</BusyButtonContent>
-      </button>
-    </form>
-  );
-}
-
-function EmployeeNumberLoginForm({
-  employeeNumber,
-  password,
-  busy,
-  errorMessage,
-  validation,
-  setValidation,
-  onEmployeeNumberChange,
-  onPasswordChange,
-  onSubmit
-}: {
-  employeeNumber: string;
-  password: string;
-  busy: boolean;
-  errorMessage: string;
-  validation: LoginFormValidationState;
-  setValidation: LoginValidationSetter;
-  onEmployeeNumberChange: (value: string) => void;
-  onPasswordChange: (value: string) => void;
-  onSubmit: (password: string) => Promise<void>;
-}) {
-  return (
-    <form
-      id="employee-number-login-form"
-      role="tabpanel"
-      aria-labelledby="employee-number-login-tab"
-      className="stack-form"
-      noValidate
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (document.activeElement instanceof HTMLElement) {
-          document.activeElement.blur();
-        }
-        const errors = validateLoginForm(
-          "EMPLOYEE_NUMBER",
-          employeeNumber,
-          password
-        );
-        setValidation({ focused: null, errors });
-        if (Object.keys(errors).length) return;
-        void onSubmit(password);
-      }}
-    >
-      <AuthFieldShell
-        id="employee-number-login-identifier"
-        label={tr("工号")}
-        focused={validation.focused === "identifier"}
-        error={validation.errors.identifier}
-      >
-        <input
-          id="employee-number-login-identifier"
-          name="employeeNumber"
-          autoFocus
-          autoComplete="username"
-          aria-invalid={Boolean(validation.errors.identifier)}
-          aria-describedby={
-            validation.focused !== "identifier" &&
-            validation.errors.identifier
-              ? "employee-number-login-identifier-error"
-              : undefined
-          }
-          value={employeeNumber}
-          onFocus={() => focusLoginField(setValidation, "identifier")}
-          onBlur={() => blurLoginField(setValidation)}
-          onChange={(event) => {
-            clearLoginFieldError(setValidation, "identifier");
-            onEmployeeNumberChange(event.target.value.toLowerCase());
-          }}
-        />
-      </AuthFieldShell>
-      <AuthFieldShell
-        id="employee-number-login-password"
-        label={tr("密码")}
-        focused={validation.focused === "password"}
-        error={validation.errors.password}
-      >
-        <PasswordInput
-          id="employee-number-login-password"
-          name="password"
-          autoComplete="current-password"
-          aria-invalid={Boolean(validation.errors.password)}
-          aria-describedby={
-            validation.focused !== "password" && validation.errors.password
-              ? "employee-number-login-password-error"
-              : undefined
-          }
-          value={password}
-          onFieldFocus={() => focusLoginField(setValidation, "password")}
-          onFieldBlur={() => blurLoginField(setValidation)}
-          onChange={(event) => {
-            clearLoginFieldError(setValidation, "password");
-            onPasswordChange(event.target.value);
-          }}
-        />
-      </AuthFieldShell>
       {errorMessage && (
         <AuthFeedback tone="error" anchored={false}>
           {errorMessage}

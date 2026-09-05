@@ -45,6 +45,8 @@ npm run dev
 | `npm run backup` | 创建 SQLite 与私有反馈图片的配套校验备份集 |
 | `npm run admin:reset-password` | 在服务器端恢复 Administrator 密码 |
 
+新数据库不自动生成演示资源或占用。直接生产启动前须配置 `NODE_ENV=production`，首次初始化还必须配置 `BOOTSTRAP_ADMIN_PASSWORD`；`npm start` 不会自动设置运行模式。
+
 健康检查地址为 `/health`。详细的环境变量、Docker Compose、备份恢复和升级步骤见[部署与运维](docs/manual/operations.md)。
 
 ## 技术组成

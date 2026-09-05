@@ -37,6 +37,8 @@ Machine administrators can:
 
 Only system administrators can grant or revoke machine administrator status. Before removing a member, the page will explain the impact on their reservations.
 
+Machine-access review emails use overdue summaries rather than immediate mail for every request. Pending requests older than 15 minutes are checked every 30 minutes, with one reminder per request version per administrator. Bind an email address and enable Overdue reviews under Profile → Email notifications.
+
 ## Scheduling maintenance
 
 Maintenance can be applied to the entire machine or specified resource groups, with start time, end time, and reason set. Before submission, affected reservations are previewed; based on the overlap, the system may:

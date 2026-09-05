@@ -27,6 +27,14 @@ Check:
 - Confirm the machine or resource group is not disabled or deleted.
 - Machine administrators can only manage authorized machines.
 
+## No locate action in Reservations
+
+Reservations opens from the calendar title. The Ended section includes cancelled records, but cancelled records cannot be located. Deleted machines or groups and lost machine access also disable location. Select a machine before filtering resource groups; switching machines clears the group filter.
+
+## Editing sequence changed or submission result uncertain
+
+An administrator adjustment, cancellation, or an original reservation ending invalidates the sequence. Draft inputs remain available, but discard the edit and select current originals after reviewing them. Explicit conflict or validation failures apply none of the batch. If the request has a network failure, inspect the latest records before deciding whether it committed; do not treat an uncertain result as a definite failure and immediately retry.
+
 ## Conflict when submitting a reservation
 
 Resources can change between preview and submission. If the server reports a conflict, refresh the calendar and select new time slots from the latest data. Do not keep resubmitting an old draft.
@@ -45,7 +53,7 @@ System administrators should check:
 - Whether the site address is correct.
 - Whether the user's email is verified and its domain is in the allowlist.
 
-In-app notifications still work when email is disabled.
+In-app notifications still work when email is disabled. Not every notification sends an email: routine events and feedback updates normally stay in-app. Administrator review summaries cover requests pending for more than 15 minutes, checked every 30 minutes, and do not repeat for the same request version and administrator. Also check the user’s Schedule impact/Overdue reviews preferences.
 
 ## Password reset link invalid
 
@@ -66,6 +74,10 @@ First read the `error.code`, `error.message`, and `error.requestId` from the res
 | `429` | Exceeded overall request limits, or separate limits for preflight and submission | Read `Retry-After` and wait; reduce polling and concurrency frequency |
 
 See the live OpenAPI reference in [Official API](/docs/api) for each endpoint's status codes and error cases.
+
+## Initial production startup fails on the administrator password
+
+Check whether the log reports a missing or invalid `BOOTSTRAP_ADMIN_PASSWORD`, and confirm `NODE_ENV=production`. Direct startup reads `.env` from the working directory; Docker Compose uses `.env.production`. Correct the configuration and restart with the same database directory, keeping any empty schema and instance secrets. Existing accounts require an in-app password change or the server-side recovery command.
 
 ## Health check failure
 

@@ -127,6 +127,8 @@ The `prepare` request body in the endpoint reference provides complete JSON exam
 
 Machine administrators still cannot use the Official API to change another user's reservations.
 
+The calendar editing sequence is a web feature. Official API `UPDATE` remains a single-reservation operation: active reservations allow metadata changes but not time changes, and upcoming reservations may be rescheduled within their original resource group and scope. The official API does not accept the web-only `replaceReservations` or `expectedStateToken` fields or expose the internal batch-replacement endpoint. Separate cancellation and creation operations do not form one atomic transaction.
+
 ## Rate limiting
 
 - Each token: maximum 120 requests per minute.

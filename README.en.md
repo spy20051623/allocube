@@ -45,7 +45,9 @@ Open `http://localhost:5173`. Vite serves the frontend with hot reload and proxi
 | `npm run backup` | Create a coordinated backup set for SQLite and private feedback images with verification |
 | `npm run admin:reset-password` | Reset the Administrator password on the server side |
 
-The health check endpoint is `/health`. For detailed environment variables, Docker Compose, backup/restore, and upgrade procedures, see [Deployment & Operations](docs/manual/operations.md).
+New databases do not generate demo resources or reservations. Direct production startup requires `NODE_ENV=production`, and initial setup also requires `BOOTSTRAP_ADMIN_PASSWORD`; `npm start` does not set the runtime mode automatically.
+
+The health check endpoint is `/health`. For detailed environment variables, Docker Compose, backup/restore, and upgrade procedures, see [Deployment & Operations](docs/manual/en/operations.md).
 
 ## Technology Stack
 

@@ -46,9 +46,11 @@ Use maintenance for a known time window and disable a resource when it should re
 
 Modifying global rules does not automatically rewrite existing reservations. The site address must be a complete HTTP or HTTPS origin, and must not contain business paths, query parameters, or fragments.
 
+ICP and public-security filing numbers can also be configured in System settings. Valid values appear in the footer of authentication pages with links to their lookup pages; empty values are hidden.
+
 ## System announcements
 
-Announcements display important messages to everyone who can log in. Under "Admin → Announcements", you can create, edit, preview, publish, and unpublish them. The default list shows published announcements; open "History" to view and republish older ones.
+Announcements display important messages to everyone who can log in. Under "Admin → Announcements", you can create, edit, preview, publish, and unpublish them. The default list shows published announcements; enable "Show archived" to view and republish older ones.
 
 Announcement titles have a maximum of 120 characters, and the body has a maximum of 10,000 characters. The body supports common Markdown, including paragraphs, lists, blockquotes, tables, code, and links; raw HTML and images will not be rendered.
 
@@ -65,9 +67,17 @@ Links must use the standard Markdown syntax:
 
 Published announcements appear in publication order. Editing or republishing one creates a new version and updates its publication time, so users who saw the old version will see the new one. A browser remembers each dismissed version for that user, but this state does not sync across devices. Unpublishing an announcement hides it immediately without deleting it or its audit history.
 
+## Handling feedback
+
+Under Admin → Feedback, view issues and feature requests across the system, filter by type, status, or level, reply, change severity or urgency, and update status with a processing note. Issues use Confirmed/Fixed, while requests use Adopted/Implemented; both can be rejected. Processing activity and audit records are retained. Withdrawn tickets are entirely read-only and cannot be reopened. Being a machine administrator does not grant system-wide feedback management access.
+
 ## Email sending
 
 Once SMTP is enabled, registration verification codes, password resets, and event notifications enter a persistent outbox. Failed tasks are retried, and the management page displays the queue, recent errors, and test results.
+
+New registrations, profile changes, and machine-access requests no longer generate an immediate administrator email for every submission. Allocube checks on startup and then at 30-minute boundaries. Requests still pending after more than 15 minutes are combined into one summary per administrator; each administrator is reminded only once per request version. System administrators receive relevant system-wide reviews, and machine administrators receive access reviews for their machines. Recipients need an available email address and Overdue reviews enabled.
+
+Verification, password recovery, and account-blocking messages remain required email. Reservation-impact mail follows the user's Schedule impact preference. Ordinary feedback updates and routine business notifications stay in-app.
 
 The SMTP password is encrypted and saved using the instance secret key; the page and API will not echo the plaintext. If `instance-secrets.json` is replaced or lost, the SMTP password must be re-entered.
 

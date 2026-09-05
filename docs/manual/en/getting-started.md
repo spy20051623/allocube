@@ -2,11 +2,15 @@
 
 This chapter covers registration, approval, login, and the first steps after you sign in.
 
+## Interface language
+
+Use the language control in the upper-right corner to choose Simplified Chinese or English; the documentation center follows this choice. On first visit, Allocube uses a supported browser language. A manual choice is saved in the current browser and does not sync across devices. Switching language does not translate machine names, reservation notes, or other user-authored content.
+
 ## Register an account
 
 1.  On the login page, select "Sign up".
 2.  Fill in a unique username, your name, employee ID, and a password that meets the requirements.
-3.  If email is enabled, enter an address from an allowed domain and verify it with the code sent to you.
+3.  If email is enabled, follow the page requirements to enter an address from an allowed domain and verify it with the code sent to you. Administrators control whether it may be left blank.
 4.  Submit your registration and wait for a system administrator to approve it.
 
 You can log in with either your username or employee ID; email addresses are not login IDs. When email is disabled, no address is required. When email is enabled but optional, you may register without one, but you will not receive email notifications or be able to reset your password by email.
@@ -39,6 +43,8 @@ Changing or resetting your password invalidates old web sessions but does not re
 ### View the calendar
 
 Once access is approved, the machine and its resource groups appear in "Calendar". You can filter machines, move between dates, switch between day and week views, choose group or machine mode, and zoom the timeline.
+
+Open Reservations beside the calendar title to find your reservations across machines and locate them in the calendar. Create, edit, and release reservations in the calendar.
 
 ### Manage your profile
 

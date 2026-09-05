@@ -19,15 +19,26 @@ npm run dev
 
 ## 生产构建
 
+直接运行 Node.js 服务时，先在进程环境或工作目录的 `.env` 中设置 `NODE_ENV=production`；首次部署还必须设置 `BOOTSTRAP_ADMIN_PASSWORD`。例如 `.env` 的最小配置：
+
+```dotenv
+NODE_ENV=production
+BOOTSTRAP_ADMIN_PASSWORD='<ADMIN_PASSWORD>'
+```
+
+替换密码占位符后再运行下列命令。`npm run build` 和 `npm start` 不会自动把运行模式设为生产。服务自动读取工作目录的 `.env`，已有进程环境变量优先；直接运行时不会自动读取 `.env.production`，后者由下文 Docker Compose 加载。
+
 ```text
-npm ci
+npm ci --include=dev
 npm run build
 npm start
 ```
 
-生产构建由 Fastify 在一个端口同时提供静态页面和 API。
+生产构建由 Fastify 在一个端口同时提供静态页面和 API。构建需要开发依赖，因此即使安装时已设置 `NODE_ENV=production`，也要使用 `--include=dev`。
 
 ## 首次初始化
+
+全新数据库只创建初始化配置和 Administrator 账号，不自动生成机器、资源组、演示用户或示例占用。`BOOTSTRAP_DEMO_DATA` 已移除；升级不会自动删除已有数据。首次看到空日历是正常情况，应由系统管理员创建机器和资源组。验收数据应放在独立测试数据库中。
 
 每次启动读取：
 
@@ -38,7 +49,11 @@ npm start
 
 `BOOTSTRAP_*` 只在空数据库首次初始化时读取，包括管理员资料、站点地址、占用规则和 SMTP。之后修改环境变量不会覆盖数据库中的管理设置。
 
-生产部署必须为 `BOOTSTRAP_ADMIN_PASSWORD` 设置随机强密码，并保护 `.env.production`。
+生产首次初始化必须为 `BOOTSTRAP_ADMIN_PASSWORD` 显式设置随机强密码，并保护 `.env.production`。未设置、空值、旧默认管理员密码或不符合现有密码规则的值都会导致服务以非零状态退出，不开放 HTTP 端口。密码须为 8–64 位可打印半角字符，不含空格，包含字母和数字，且不能是常见密码或管理员用户名；服务不会自动修剪或改写输入。
+
+密码校验失败后可能留下空数据库结构和实例密钥，但不会写入管理员、持久配置或初始化完成标记。修正密码后使用原数据目录重新启动即可，无需删除数据库或密钥。开发与测试环境保留原有默认初始化行为。
+
+已初始化实例升级后无需补填此变量，也不会重新校验或覆盖已有管理员密码。本次修复不会消除已有实例的默认密码风险，运维人员仍需自行确认并更换；正常情况下登录后修改密码，无法登录时使用下文“管理员密码恢复”的服务器端命令。修改 `BOOTSTRAP_ADMIN_PASSWORD` 不会重置已有账号密码。
 
 部署配置中的待替换值同样使用统一占位符格式。例如：
 
@@ -52,6 +67,8 @@ BOOTSTRAP_SITE_ORIGIN=<BASE_URL>
 
 ## Docker Compose
 
+首次部署先将 `.env.production.example` 复制为 `.env.production`，填写域名和管理员强密码，再启动。已有部署沿用原数据卷和配置文件。
+
 ```text
 docker compose --env-file .env.production up -d --build
 ```
@@ -64,7 +81,9 @@ docker compose --env-file .env.production up -d --build
 sh scripts/build-docker-release.sh RELEASE_ID BUILD_CONTEXT
 ```
 
-脚本将依赖层保存为具名 Docker 镜像，并固定在 `/opt/allocube-build-cache` 保留按依赖输入区分、同时包含 Node 基础镜像的离线归档。每次构建先查找对应归档和镜像：命中时断网复用；确实没有时自动联网补齐一次，并立即写回该目录，下一次构建继续复用。依赖输入包括 `package.json`、`package-lock.json`、`Dockerfile`、基础镜像名称和软件源配置，避免错误复用或无故失效。清理 Docker 镜像时不得删除 `allocube-build-cache:*`，离线归档也应纳入服务器磁盘备份。
+脚本将依赖层保存为具名 Docker 镜像，并默认在 `/opt/allocube-build-cache` 保留按依赖输入区分、同时包含 Node 基础镜像的离线归档。每次构建先查找对应归档和镜像：命中时断网复用；确实没有时自动联网补齐一次，并立即写回该目录，下一次构建继续复用。依赖输入包括 `package.json`、`package-lock.json`、`Dockerfile`、基础镜像名称和软件源配置，避免错误复用或无故失效。清理 Docker 镜像时不得删除 `allocube-build-cache:*`，离线归档也应纳入服务器磁盘备份。
+
+缓存目录可通过 `ALLOCUBE_BUILD_CACHE_DIR` 修改，目录需可写；离线归档包含 `.tar` 和配套 `.manifest`。仅修改业务代码可复用依赖缓存，依赖输入变化或缓存丢失时需要联网补齐。缓存脚本默认使用阿里云 Debian 镜像，可通过 `DEBIAN_MIRROR`、`DEBIAN_SECURITY_MIRROR` 调整；直接 Docker 构建默认使用 Debian 官方源。镜像内已安装原生模块构建需要的 Python、make 和 C++ 编译器。
 
 ## 健康检查
 
@@ -98,6 +117,18 @@ npm run backup
 2. 生成并校验数据库加反馈图片备份集，另行备份实例密钥。
 3. 构建并启动新版本。
 4. 检查 `/health`、登录、“资源日历”、反馈创建与图片读取权限、通知红点、图片持久化、写操作、邮件和备份清单。
+
+当前数据库结构版本为 19，启动时会自动执行适用的迁移。近期涉及：
+
+| 版本 | 变化 |
+|---|---|
+| 17 | 反馈工单及私有图片 |
+| 18 | 站内通知的翻译模板与参数 |
+| 19 | 管理员超时审核邮件的去重记录 |
+
+本轮“我的占用”重构与生产初始化密码修复不新增数据库结构。升级后应检查日历编辑序列的整批提交、旧 `/reservations` 链接跳转，以及管理员审核提醒。现有实例无需补填初始化密码；此前的默认密码风险仍需自行排查。
+
+网页内部 `/api/v1/reservations/mine` 已改为分类查询、筛选和游标分页，默认只返回未开始占用。曾直接调用旧内部接口的脚本需适配，建议迁移到官方 `/api/open/v1`；本轮未改变官方 API 契约。
 
 数据库升级后，旧程序可能无法读取新结构。特别是结构版本 17 引入反馈数据和私有图片，回滚必须同时恢复升级前数据库、与其配套的图片备份、实例密钥和旧镜像，不能只回滚程序文件。
 

@@ -19,15 +19,26 @@ The development frontend runs by default on `http://localhost:5173`, and the Fas
 
 ## Production build
 
+When running Node.js directly, set `NODE_ENV=production` in the process environment or a `.env` file in the working directory before starting. Initial deployment also requires `BOOTSTRAP_ADMIN_PASSWORD`. A minimal `.env` is:
+
+```dotenv
+NODE_ENV=production
+BOOTSTRAP_ADMIN_PASSWORD='<ADMIN_PASSWORD>'
+```
+
+Replace the password placeholder before running the commands below. Neither `npm run build` nor `npm start` automatically selects production runtime mode. The service reads `.env` from its working directory; existing process environment variables take precedence. Direct Node.js startup does not automatically read `.env.production`; Docker Compose loads that file as described below.
+
 ```text
-npm ci
+npm ci --include=dev
 npm run build
 npm start
 ```
 
-The production build is served by Fastify on a single port, providing both static pages and the API.
+The production build is served by Fastify on a single port, providing both static pages and the API. Building requires development dependencies, so keep `--include=dev` even when `NODE_ENV=production` is already set during installation.
 
 ## Initial setup
+
+A new database creates only initial settings and the Administrator account. It does not generate machines, resource groups, demo users, or sample reservations. `BOOTSTRAP_DEMO_DATA` has been removed; upgrades do not automatically delete existing data. An empty calendar is expected until a system administrator creates machines and resource groups. Keep acceptance-test data in a separate database.
 
 Read on every startup:
 - `NODE_ENV`
@@ -37,7 +48,11 @@ Read on every startup:
 
 `BOOTSTRAP_*` variables are only read during the initial setup of an empty database. This includes administrator profile information, site address, reservation rules, and SMTP. Subsequent changes to environment variables will not overwrite administrative settings stored in the database.
 
-For production deployment, you must set `BOOTSTRAP_ADMIN_PASSWORD` to a random, strong password and protect the `.env.production` file.
+For initial production setup, you must explicitly set `BOOTSTRAP_ADMIN_PASSWORD` to a random, strong password and protect the `.env.production` file. An unset or empty value, the legacy default administrator password, or a value that fails the existing password policy causes the service to exit with a nonzero status without opening an HTTP port. Passwords must contain 8–64 printable ASCII characters with no spaces, include letters and digits, and must not be a common password or the administrator username. The service does not trim or rewrite the supplied password.
+
+Failed password validation may leave an empty database schema and instance secrets, but does not persist an administrator, configuration, or initialization marker. Correct the password and restart using the same data directory; do not delete the database or secrets. Development and test environments retain their existing default initialization behavior.
+
+Previously initialized instances do not need this variable when upgrading, and their administrator passwords are neither revalidated nor overwritten. This fix does not remove the default-password risk from existing instances: operators must check and change those passwords themselves. Change the password after signing in, or use the server-side command under “Administrator password recovery” below if you cannot sign in. Changing `BOOTSTRAP_ADMIN_PASSWORD` does not reset an existing account password.
 
 Values to be replaced in deployment configurations also use a unified placeholder format. For example:
 
@@ -50,6 +65,8 @@ BOOTSTRAP_SITE_ORIGIN=<BASE_URL>
 After copying, you must replace the entire `<PLACEHOLDER_NAME>`; do not use placeholders as-is for production startup.
 
 ## Docker Compose
+
+For a new deployment, copy `.env.production.example` to `.env.production` and set the domain and strong administrator password before starting. Existing deployments retain their current data volume and configuration file.
 
 ```text
 docker compose --env-file .env.production up -d --build
@@ -64,6 +81,8 @@ sh scripts/build-docker-release.sh RELEASE_ID BUILD_CONTEXT
 ```
 
 The script keeps dependency layers in named Docker images and stores stable offline archives under `/opt/allocube-build-cache`; each archive also contains the Node base image. Every build first looks for the archive and image matching its dependency inputs. A hit is reused with networking disabled. A genuine miss downloads the missing dependencies once and immediately writes the refreshed cache back to the same directory for later builds. The cache key covers `package.json`, `package-lock.json`, `Dockerfile`, the base image name, and package mirror settings so that valid caches are found reliably without unsafe reuse. Do not remove `allocube-build-cache:*` during Docker image cleanup, and include the offline archive in server disk backups.
+
+Override the writable cache location with `ALLOCUBE_BUILD_CACHE_DIR`; offline archives include a `.tar` and matching `.manifest`. Application-only changes can reuse the dependency cache, while changed dependency inputs or missing caches require an online fill. The cache script defaults to Aliyun Debian mirrors, configurable through `DEBIAN_MIRROR` and `DEBIAN_SECURITY_MIRROR`; direct Docker builds default to Debian's official mirrors. The build image includes Python, make, and a C++ compiler for native modules.
 
 ## Health check
 
@@ -96,6 +115,18 @@ Store instance secrets separately from the backup set. Before restoring, stop Al
 2. Generate and verify a database and feedback images backup set. Separately back up the instance secrets.
 3. Build and start the new version.
 4. Check `/health`, login, "Calendar", feedback and private images, notification badges, write operations, email delivery, and the backup manifest.
+
+The current database schema version is 19. Startup applies supported migrations automatically. Recent changes are:
+
+| Version | Change |
+|---|---|
+| 17 | Feedback tickets and private images |
+| 18 | Translation templates and parameters for in-app notifications |
+| 19 | Deduplication records for overdue administrator review emails |
+
+The Reservations redesign and production bootstrap-password fix add no schema changes. After upgrading, check atomic editing-sequence submissions, redirects from old `/reservations` links, and administrator review reminders. Existing instances do not need a bootstrap password variable, but operators must still check for legacy default passwords.
+
+The internal `/api/v1/reservations/mine` endpoint now uses category queries, filters, and cursor pagination, defaulting to upcoming reservations only. Scripts calling the former internal endpoint require adaptation; prefer the official `/api/open/v1` API. This update does not change the official API contract.
 
 Older Allocube versions may not understand a newer database schema. For example, schema version 17 added feedback data and private images. To roll back, restore the pre-upgrade database, matching image backup, instance secrets, and old application image together. Replacing only the application files is not enough.
 

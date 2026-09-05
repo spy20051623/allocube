@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { firstPasswordError } from "../src/shared/identity-rules.js";
 
 function loadEnvFile() {
   const envPath = path.resolve(process.cwd(), ".env");
@@ -199,11 +200,26 @@ function smtpBootstrapSettings() {
 const instanceSecrets = loadOrCreateInstanceSecrets();
 
 function loadBootstrapConfig() {
+  const adminPassword =
+    process.env.BOOTSTRAP_ADMIN_PASSWORD || (isProduction ? "" : "Admin12#$");
+  if (isProduction) {
+    if (!adminPassword) {
+      throw new Error("生产首次初始化必须设置 BOOTSTRAP_ADMIN_PASSWORD");
+    }
+    if (adminPassword === "Admin12#$") {
+      throw new Error("BOOTSTRAP_ADMIN_PASSWORD 不能使用旧默认管理员密码，请设置独立强密码");
+    }
+    const passwordError = firstPasswordError(adminPassword, {
+      username: "Administrator"
+    });
+    if (passwordError) {
+      throw new Error(`BOOTSTRAP_ADMIN_PASSWORD 不符合要求：${passwordError}`);
+    }
+  }
   const bootstrap = {
     adminName:
       process.env.BOOTSTRAP_ADMIN_NAME?.trim() || "系统管理员",
-    adminPassword:
-      process.env.BOOTSTRAP_ADMIN_PASSWORD || "Admin12#$",
+    adminPassword,
     siteOrigin:
       process.env.BOOTSTRAP_SITE_ORIGIN?.trim() ||
       (isProduction ? "" : "http://localhost:5173"),

@@ -481,5 +481,14 @@
   "SMTP 服务器证书验证失败": "SMTP server certificate verification failed.",
   "SMTP 密码密文格式无效": "SMTP password ciphertext format is invalid.",
   "SMTP 配置不完整或登录密码不可用": "SMTP configuration is incomplete or the login password is unavailable.",
-  "SMTP 配置加密密钥无效": "SMTP configuration encryption key is invalid."
+  "SMTP 配置加密密钥无效": "SMTP configuration encryption key is invalid.",
+  "不能重复选择同一条占用": "A reservation cannot be selected more than once.",
+  "分页条件无效，请刷新列表": "Invalid pagination parameters. Refresh the list.",
+  "占用列表已变化，请刷新列表": "The reservation list has changed. Refresh the list.",
+  "占用记录不存在或不可查看": "The reservation is unavailable.",
+  "占用记录已变化，请刷新后重新确认": "The reservation has changed. Refresh and confirm again.",
+  "所选占用已变化，本次未取消任何记录，请重新确认": "Selected reservations have changed. Nothing was cancelled. Review and confirm again.",
+  "筛选结束时间必须晚于开始时间": "The filter end time must be after the start time.",
+  "编辑序列中的占用已结束，请重新核对": "A reservation in the editing sequence has ended. Review the selection again.",
+  "不能同时使用单条和批量编辑参数": "Single and multiple replacement parameters cannot be combined."
 }

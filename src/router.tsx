@@ -1,4 +1,5 @@
 import {
+  redirect,
   createRootRoute,
   createRoute,
   createRouter
@@ -24,7 +25,8 @@ const routePaths = [
 const routes = routePaths.map((path) =>
   createRoute({
     getParentRoute: () => rootRoute,
-    path
+    path,
+    beforeLoad: path === "/reservations" ? () => { throw redirect({ href: "/calendar?mine=1", replace: true }); } : undefined
   })
 );
 

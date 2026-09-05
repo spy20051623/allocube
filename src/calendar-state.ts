@@ -710,10 +710,11 @@ export function splitDrafts(
 export function calendarDraftIssues(
   drafts: CalendarDraft[],
   rules: CalendarBookingRules,
-  now = Date.now()
+  now = Date.now(),
+  allowMixedScopes = false
 ) {
   const issues: string[] = [];
-  if (new Set(drafts.map((draft) => draft.scope ?? "RESOURCE_GROUP")).size > 1) {
+  if (!allowMixedScopes && new Set(drafts.map((draft) => draft.scope ?? "RESOURCE_GROUP")).size > 1) {
     issues.push(tr("整机占用和资源组占用不能同时提交"));
   }
   const grouped = new Map<string, CalendarDraft[]>();

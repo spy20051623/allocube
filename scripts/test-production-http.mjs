@@ -134,6 +134,33 @@ async function main() {
       throw new Error(`会话读取失败：HTTP ${session.status}`);
     }
 
+    const adminSettings = await fetch(`${origin}/api/v1/admin/settings`, {
+      headers: { cookie }
+    });
+    if (adminSettings.status !== 200) {
+      throw new Error(`初始管理员无法读取管理配置：HTTP ${adminSettings.status}`);
+    }
+
+    for (const category of ["ACTIVE", "UPCOMING", "HISTORY"]) {
+      const mine = await fetch(`${origin}/api/v1/reservations/mine?category=${category}&limit=20`, {
+        headers: { cookie }
+      });
+      const result = await mine.json();
+      if (mine.status !== 200 || result.total !== 0 || result.nextCursor !== null ||
+          result.reservations?.length !== 0 || result.counts?.[category] !== 0 ||
+          !Number.isFinite(Date.parse(result.serverNow)) || !Number.isInteger(result.revision)) {
+        throw new Error(`本人占用分页契约检查失败：${category} HTTP ${mine.status}`);
+      }
+    }
+    const anonymousMine = await fetch(`${origin}/api/v1/reservations/mine`);
+    if (anonymousMine.status !== 401) throw new Error("本人占用接口允许了匿名读取");
+    const emptyBatch = await fetch(`${origin}/api/v1/reservations/mine/cancel-batch`, {
+      method: "POST",
+      headers: { cookie, origin, "content-type": "application/json", "x-csrf-token": loginBody.csrfToken },
+      body: JSON.stringify({ reservations: [] })
+    });
+    if (emptyBatch.status !== 400) throw new Error("批量取消接口没有拒绝空集合");
+
     const tokenCreation = await fetch(`${origin}/api/v1/auth/api-tokens`, {
       method: "POST",
       headers: {
@@ -255,6 +282,7 @@ async function main() {
         legacyDocsRedirect: legacyDocs.status,
         login: login.status,
         session: session.status,
+        adminSettings: adminSettings.status,
         tokenCreation: tokenCreation.status,
         openApiIdentity: openIdentity.status,
         openApiBearerMutation: bearerMutationWithoutBrowserHeaders.status,

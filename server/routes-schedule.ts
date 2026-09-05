@@ -1,3 +1,4 @@
+import { replacementSelectionSchema, previewMultipleReplacement, replaceMultipleReservations } from "./scheduling.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -33,11 +34,9 @@ import {
 } from "./scheduling.js";
 import {
   machineResourceSummary,
-  mapResourceGroup,
-  mapResourceGroups,
-  resourceAllocationSummary
+  mapResourceGroups
 } from "./resources.js";
-import type { ResourceAllocation } from "../src/shared/types.js";
+import { registerMyReservationRoutes } from "./my-reservations.js";
 
 export function registerScheduleRoutes(
   app: FastifyInstance,
@@ -517,14 +516,16 @@ export function registerScheduleRoutes(
   app.post("/api/v1/reservations/preview", async (request, reply) => {
     const auth = requireAuth(request, reply);
     if (!auth) return;
-    const { segments, replaceReservationId } = z
+    const { segments, replaceReservationId, replaceReservations } = z
       .object({
         segments: z.array(z.unknown()).min(1).max(100),
-        replaceReservationId: z.string().uuid().optional()
+        replaceReservationId: z.string().uuid().optional(),
+        replaceReservations: replacementSelectionSchema.optional()
       })
       .parse(request.body);
     assertUserCanAccessSegments(auth.user.id, segments);
-    const items = replaceReservationId
+    if (replaceReservationId && replaceReservations) throw new BusinessError("不能同时使用单条和批量编辑参数");
+    const items = replaceReservations ? previewMultipleReplacement(auth.user.id, replaceReservations, segments) : replaceReservationId
         ? previewReplacementSegments(
             auth.user.id,
             replaceReservationId,
@@ -537,13 +538,15 @@ export function registerScheduleRoutes(
   app.post("/api/v1/reservations/batch", async (request, reply) => {
     const auth = requireAuth(request, reply);
     if (!auth) return;
-    const { segments, replaceReservationId } = z
+    const { segments, replaceReservationId, replaceReservations } = z
       .object({
         segments: z.array(z.unknown()).min(1).max(100),
-        replaceReservationId: z.string().uuid().optional()
+        replaceReservationId: z.string().uuid().optional(),
+        replaceReservations: replacementSelectionSchema.optional()
       })
       .parse(request.body);
-    const result = replaceReservationId
+    if (replaceReservationId && replaceReservations) throw new BusinessError("不能同时使用单条和批量编辑参数");
+    const result = replaceReservations ? replaceMultipleReservations(auth.user.id, replaceReservations, segments) : replaceReservationId
       ? replaceReservationBatch(
           auth.user.id,
           replaceReservationId,
@@ -558,7 +561,10 @@ export function registerScheduleRoutes(
     const auth = requireAuth(request, reply);
     if (!auth) return;
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    const result = updateReservation(id, auth.user.id, request.body);
+    const { expectedStateToken } = z.object({
+      expectedStateToken: z.string().regex(/^[a-f0-9]{64}$/).optional()
+    }).parse(request.body);
+    const result = updateReservation(id, auth.user.id, request.body, undefined, expectedStateToken);
     publishRevision(result.revision);
     return result;
   });
@@ -567,14 +573,17 @@ export function registerScheduleRoutes(
     const auth = requireAuth(request, reply);
     if (!auth) return;
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    const { reason } = z.object({ reason: z.string().max(500).optional().default("") }).parse(request.body ?? {});
+    const { reason, expectedStateToken } = z.object({
+      reason: z.string().max(500).optional().default(""),
+      expectedStateToken: z.string().regex(/^[a-f0-9]{64}$/).optional()
+    }).parse(request.body ?? {});
     const row = db
       .prepare("SELECT machine_id FROM reservations WHERE id = ?")
       .get(id) as { machine_id: string } | undefined;
     const canManage = row
       ? canManageMachine(auth.user.id, auth.user.role, row.machine_id)
       : false;
-    cancelReservation(id, auth.user.id, canManage, reason);
+    cancelReservation(id, auth.user.id, canManage, reason, undefined, expectedStateToken);
     const revision = getScheduleRevision();
     publishRevision(revision);
     return { message: "占用已取消", revision };
@@ -584,8 +593,8 @@ export function registerScheduleRoutes(
     const auth = requireAuth(request, reply);
     if (!auth) return;
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    const { reason } = z
-      .object({ reason: z.string().max(500).optional().default("") })
+    const { reason, expectedStateToken } = z
+      .object({ reason: z.string().max(500).optional().default(""), expectedStateToken: z.string().regex(/^[a-f0-9]{64}$/).optional() })
       .parse(request.body ?? {});
     const row = db
       .prepare("SELECT machine_id FROM reservations WHERE id = ?")
@@ -597,7 +606,9 @@ export function registerScheduleRoutes(
       id,
       auth.user.id,
       canManage,
-      reason
+      reason,
+      undefined,
+      expectedStateToken
     );
     const revision = getScheduleRevision();
     publishRevision(revision);
@@ -608,89 +619,7 @@ export function registerScheduleRoutes(
     };
   });
 
-  app.get("/api/v1/reservations/mine", async (request, reply) => {
-    const auth = requireAuth(request, reply);
-    if (!auth) return;
-    const rows = db
-      .prepare(
-        `SELECT
-          r.*,
-          CASE WHEN drgt.resource_group_id IS NOT NULL
-            THEN '资源组已删除' ELSE rg.name END AS current_group_name,
-          CASE WHEN dmt.machine_id IS NOT NULL
-            THEN '机器已删除' ELSE m.name END AS machine_name,
-          drgt.resource_group_id IS NOT NULL AS resource_group_deleted,
-          dmt.machine_id IS NOT NULL AS machine_deleted
-         FROM reservations r
-         JOIN resource_groups rg ON rg.id = r.resource_group_id
-         JOIN machines m ON m.id = r.machine_id
-         LEFT JOIN deleted_resource_group_tombstones drgt
-           ON drgt.resource_group_id = rg.id
-         LEFT JOIN deleted_machine_tombstones dmt
-           ON dmt.machine_id = m.id
-         WHERE r.user_id = ?
-         ORDER BY r.start_at DESC LIMIT 200`
-      )
-      .all(auth.user.id) as Array<Record<string, unknown>>;
-    return {
-      reservations: rows.map((row) => {
-        const resourceGroupDeleted = Boolean(row.resource_group_deleted);
-        const machineDeleted = Boolean(row.machine_deleted);
-        const currentRow = resourceGroupDeleted
-          ? null
-          : db
-              .prepare("SELECT * FROM resource_groups WHERE id = ?")
-              .get(row.resource_group_id) as Record<string, unknown>;
-        const current = currentRow ? mapResourceGroup(currentRow) : null;
-        const snapshotAllocations = JSON.parse(
-          String(row.snapshot_resource_config_json)
-        ) as ResourceAllocation[];
-        const snapshotResourceSummary = resourceGroupDeleted
-          ? "资源已删除"
-          : resourceAllocationSummary(snapshotAllocations);
-        const currentResourceSummary = resourceGroupDeleted
-          ? "资源已删除"
-          : current!.resourceSummary;
-        return {
-          id: row.id,
-          scope: row.scope,
-          machineId: row.machine_id,
-          machineName: row.machine_name,
-          resourceGroupId: row.resource_group_id,
-          resourceGroupName:
-            row.scope === "MACHINE" ? "整机" : row.current_group_name,
-          currentResourceSummary:
-            row.scope === "MACHINE" ? "机器全部资源" : currentResourceSummary,
-          snapshotGroupName: row.scope === "MACHINE"
-            ? "整机"
-            : resourceGroupDeleted
-            ? "资源组已删除"
-            : row.snapshot_group_name,
-          snapshotResourceSummary:
-            row.scope === "MACHINE" ? "机器全部资源" : snapshotResourceSummary,
-          changedSinceBooking:
-            machineDeleted ||
-            (row.scope !== "MACHINE" &&
-              (resourceGroupDeleted ||
-                row.snapshot_group_name !== row.current_group_name ||
-                snapshotResourceSummary !== currentResourceSummary)),
-          resourceGroupDeleted,
-          machineDeleted,
-          startAt: row.start_at,
-          endAt: row.end_at,
-          initialStartAt: row.initial_start_at,
-          initialEndAt: row.initial_end_at,
-          adjustmentType: row.adjustment_type,
-          adjustmentReason: row.adjustment_reason,
-          title: row.title,
-          purpose: row.purpose,
-          note: row.note,
-          status: row.status,
-          cancellationReason: row.cancellation_reason
-        };
-      })
-    };
-  });
+  registerMyReservationRoutes(app, publishRevision);
 
   app.get("/api/v1/notifications", async (request, reply) => {
     const auth = requireSession(request, reply);

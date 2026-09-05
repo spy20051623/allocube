@@ -1010,7 +1010,7 @@ describe("机器使用权与管理员专用信息", () => {
     ).toEqual({ count: 1 });
     const history = await app.inject({
       method: "GET",
-      url: "/api/v1/reservations/mine",
+      url: "/api/v1/reservations/mine?category=HISTORY",
       headers: { cookie: adminCookie }
     });
     expect(history.statusCode).toBe(200);
@@ -1182,7 +1182,7 @@ describe("机器使用权与管理员专用信息", () => {
 
     const managerHistory = await app.inject({
       method: "GET",
-      url: "/api/v1/reservations/mine",
+      url: "/api/v1/reservations/mine?category=HISTORY",
       headers: { cookie: managerCookie }
     });
     expect(managerHistory.statusCode).toBe(200);

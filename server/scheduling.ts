@@ -1,3 +1,4 @@
+import { assertReservationState } from "./reservation-state.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type {
@@ -144,7 +145,7 @@ function getBusyIntervals(
   scope: "RESOURCE_GROUP" | "MACHINE",
   startAt: string,
   endAt: string,
-  excludeReservationId?: string
+  excludeReservationId?: string | readonly string[]
 ): BusyInterval[] {
   const reservations = db
     .prepare(
@@ -157,7 +158,7 @@ function getBusyIntervals(
          )
          AND status = 'CONFIRMED'
          AND start_at < ? AND end_at > ?
-         AND (? IS NULL OR id != ?)`
+         AND id NOT IN (SELECT value FROM json_each(?))`
     )
     .all(
       group.machine_id,
@@ -165,8 +166,7 @@ function getBusyIntervals(
       group.id,
       endAt,
       startAt,
-      excludeReservationId ?? null,
-      excludeReservationId ?? null
+      JSON.stringify(excludeReservationId ? (typeof excludeReservationId === "string" ? [excludeReservationId] : excludeReservationId) : [])
     ) as Array<{ start_at: string; end_at: string }>;
   const unavailability = db
     .prepare(
@@ -257,7 +257,7 @@ function splitByBusy(
 
 export function previewSegments(
   rawSegments: unknown[],
-  excludeReservationId?: string,
+  excludeReservationId?: string | readonly string[],
   serverMinute = currentMinuteIso()
 ): ReservationPreviewItem[] {
   const settings = getSettings();
@@ -749,11 +749,68 @@ export function replaceReservationBatch(
   };
 }
 
+export const replacementSelectionSchema = z.array(z.object({
+  id: z.string().uuid(), stateToken: z.string().regex(/^[a-f0-9]{64}$/)
+}).strict()).min(1).max(100).refine(items => new Set(items.map(item => item.id)).size === items.length, {
+  message: "不能重复选择同一条占用"
+});
+
+function prepareMultipleReplacement(userId: string, rawSelection: unknown, rawSegments: unknown[]) {
+  const selection = replacementSelectionSchema.parse(rawSelection);
+  const parsed = z.array(segmentSchema).min(1).max(100).parse(rawSegments);
+  const now = nowIso(), minute = currentMinuteIso(new Date(now).getTime());
+  const originals = selection.map(item => {
+    const row = getReplaceableReservation(item.id, userId);
+    assertReservationState(row, item.stateToken);
+    if (String(row.end_at) <= now) throw new BusinessError("编辑序列中的占用已结束，请重新核对", 409, { id: item.id }, "REPLACEMENT_CHANGED");
+    return row;
+  });
+  const segments = parsed.map(segment => normalizeSegmentStart(segment, minute));
+  segments.forEach(segment => validateSegmentTimes(segment, minute));
+  validateNoInternalOverlap(segments);
+  assertUserCanAccessSegments(userId, segments);
+  const items = previewSegments(segments, selection.map(item => item.id), minute);
+  return { originals, segments, items, now, minute };
+}
+
+export function previewMultipleReplacement(userId: string, selection: unknown, segments: unknown[]) {
+  return withImmediateTransaction(() => prepareMultipleReplacement(userId, selection, segments).items);
+}
+
+export function replaceMultipleReservations(userId: string, selection: unknown, rawSegments: unknown[]) {
+  return withImmediateTransaction(() => {
+    const { originals, segments, items, now, minute } = prepareMultipleReplacement(userId, selection, rawSegments);
+    if (items.some(item => !item.available)) {
+      throw new BusinessError("资源可用情况已更新，原占用保持不变，请重新确认", 409, items);
+    }
+    for (const original of originals) {
+      const id = String(original.id);
+      if (String(original.start_at) < minute) {
+        db.prepare(`UPDATE reservations SET end_at=?, adjustment_type='USER_REPLACED', adjustment_reason=?, updated_at=? WHERE id=?`)
+          .run(minute, "用户编辑占用", now, id);
+      } else {
+        db.prepare(`UPDATE reservations SET status='CANCELLED',cancelled_at=?,cancelled_by=?,cancellation_reason=?,updated_at=? WHERE id=?`)
+          .run(now, userId, "用户编辑占用", now, id);
+      }
+    }
+    const created = insertReservationBatch(userId, segments, originals.length === 1 ? String(originals[0].id) : undefined);
+    const replacedIds = originals.map(row => String(row.id));
+    for (const original of originals) {
+      addAudit(userId, "RESERVATION_REPLACE", "reservation", String(original.id), original, {
+        replacementBatchId: created.batchId, replacedReservationIds: replacedIds,
+        newReservationIds: created.reservations.map(row => row.id), segmentCount: segments.length
+      });
+    }
+    return { ...created, replacedIds, revision: bumpScheduleRevision(), serverNow: nowIso() };
+  });
+}
+
 export function updateReservation(
   reservationId: string,
   actorUserId: string,
   rawSegment: unknown,
-  auditContext?: ApiAuditContext
+  auditContext?: ApiAuditContext,
+  expectedStateToken?: string
 ) {
   const segment = segmentSchema.parse(rawSegment);
   const result = withImmediateTransaction(() => {
@@ -766,6 +823,7 @@ export function updateReservation(
     if (existing.user_id !== actorUserId) {
       throw new BusinessError("只能修改自己的占用", 403);
     }
+    assertReservationState(existing, expectedStateToken);
     if (!userCanAccessMachine(actorUserId, String(existing.machine_id))) {
       throw new BusinessError("你没有这台机器的使用权限", 403);
     }
@@ -826,7 +884,8 @@ export function cancelReservation(
   actorUserId: string,
   canManage: boolean,
   reason = "",
-  auditContext?: ApiAuditContext
+  auditContext?: ApiAuditContext,
+  expectedStateToken?: string
 ) {
   withImmediateTransaction(() => {
     const existing = db
@@ -838,6 +897,7 @@ export function cancelReservation(
     if (existing.user_id !== actorUserId && !canManage) {
       throw new BusinessError("无权取消此占用", 403);
     }
+    assertReservationState(existing, expectedStateToken);
     const now = nowIso();
     if (String(existing.end_at) <= now) {
       throw new BusinessError("已结束的占用不能取消");
@@ -879,7 +939,8 @@ export function endReservationEarly(
   actorUserId: string,
   canManage = false,
   reason = "",
-  auditContext?: ApiAuditContext
+  auditContext?: ApiAuditContext,
+  expectedStateToken?: string
 ) {
   const result = withImmediateTransaction(() => {
     const existing = db
@@ -892,6 +953,7 @@ export function endReservationEarly(
     if (releasedByManager && !canManage) {
       throw new BusinessError("无权释放此占用", 403);
     }
+    assertReservationState(existing, expectedStateToken);
     const now = nowIso();
     if (String(existing.start_at) > now || String(existing.end_at) <= now) {
       throw new BusinessError("只有进行中的占用可以提前结束");

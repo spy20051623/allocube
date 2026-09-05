@@ -1,3 +1,9 @@
+import { PageHeader } from "./PageHeader";
+import { CalendarMyReservations } from "./CalendarMyReservations";
+import type { OwnReservation, OwnReservationDetail } from "./shared/my-reservations";
+import { useReservationRefresh } from "./useMyReservations";
+import { Modal } from "./Modal";
+import { ServerClockProvider, useServerClock } from "./ServerClock";
 import {
   currentLocale,
   tr,
@@ -200,10 +206,8 @@ import {
   calendarMonthDates,
   calendarMonthLabel,
   calendarWeekdayLabels,
-  chinaDateDayOffset,
   chinaLocalToIso,
   clientUsesUtcPlus8,
-  compactDurationText,
   compactHoursText,
   durationText,
   formatBeijing,
@@ -223,10 +227,8 @@ import {
   calendarDraftFieldIssues,
   calendarDraftIssues,
   calendarDragAction,
-  calendarEditUrl,
   calendarQueryUrl,
   calendarUrlWithoutEditRequest,
-  calendarUrlWithEditRequest,
   currentMinuteStart,
   defaultDayWindowStartMinutes,
   draggedTimeRange,
@@ -247,8 +249,6 @@ import {
   advanceCalendarDrafts,
   type CalendarDraft,
   type CalendarMetadata,
-  createServerClockAnchor,
-  serverTimeFromAnchor,
   type CalendarTimeRange,
   type CalendarView
 } from "./calendar-state";
@@ -278,8 +278,6 @@ import type {
 } from "./shared/types";
 import {
   auditActionLabel,
-  reservationStatusClass,
-  reservationStatusLabel,
   userStatusLabel
 } from "./ui-copy";
 
@@ -466,116 +464,6 @@ function useAppDialog() {
   const value = useContext(DialogContext);
   if (!value) throw new Error("DialogProvider is missing");
   return value;
-}
-
-type ServerClockContextValue = {
-  currentTime: number;
-  ready: boolean;
-  synchronize: (
-    serverNow: string,
-    requestStartedAt: number,
-    responseReceivedAt?: number
-  ) => void;
-};
-
-const ServerClockContext = createContext<ServerClockContextValue | null>(null);
-
-function useServerClock() {
-  const value = useContext(ServerClockContext);
-  if (!value) throw new Error("ServerClockProvider is missing");
-  return value;
-}
-
-function ServerClockProvider({
-  initialServerNow,
-  children
-}: {
-  initialServerNow: string;
-  children: React.ReactNode;
-}) {
-  const anchorRef = useRef<ReturnType<typeof createServerClockAnchor>>(null);
-  const initialMonotonicTime = performance.now();
-  if (!anchorRef.current) {
-    anchorRef.current = createServerClockAnchor(
-      initialServerNow,
-      initialMonotonicTime,
-      initialMonotonicTime
-    );
-  }
-  const [currentTime, setCurrentTime] = useState(
-    () =>
-      anchorRef.current
-        ? serverTimeFromAnchor(anchorRef.current, performance.now())
-        : 0
-  );
-  const [ready, setReady] = useState(Boolean(anchorRef.current));
-
-  const synchronize = useCallback(
-    (
-      serverNow: string,
-      requestStartedAt: number,
-      responseReceivedAt = performance.now()
-    ) => {
-      const anchor = createServerClockAnchor(
-        serverNow,
-        requestStartedAt,
-        responseReceivedAt
-      );
-      if (!anchor) return;
-      anchorRef.current = anchor;
-      setCurrentTime(serverTimeFromAnchor(anchor, responseReceivedAt));
-      setReady(true);
-    },
-    []
-  );
-
-  useEffect(() => {
-    const receivedAt = performance.now();
-    synchronize(initialServerNow, receivedAt, receivedAt);
-  }, [initialServerNow, synchronize]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const anchor = anchorRef.current;
-      if (anchor) {
-        setCurrentTime(serverTimeFromAnchor(anchor, performance.now()));
-      }
-    }, 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const refresh = useCallback(async () => {
-    const requestStartedAt = performance.now();
-    try {
-      const result = await api<{ serverNow: string }>("/server-time");
-      synchronize(result.serverNow, requestStartedAt);
-    } catch {
-      // 保留现有服务器时间基准继续计时，等待下一次校准。
-    }
-  }, [synchronize]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => void refresh(), 5 * 60_000);
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") void refresh();
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [refresh]);
-
-  const value = useMemo(
-    () => ({ currentTime, ready, synchronize }),
-    [currentTime, ready, synchronize]
-  );
-
-  return (
-    <ServerClockContext.Provider value={value}>
-      {children}
-    </ServerClockContext.Provider>
-  );
 }
 
 export function App() {
@@ -878,20 +766,6 @@ export function App() {
               user={bootstrap.user}
               notify={notify}
               navigate={navigate}
-            />
-          )}
-          {visiblePage === "my" && (
-            <MyReservationsPage
-              notify={notify}
-              onEditReservation={(reservation) => {
-                void routeNavigate({
-                  href: calendarEditUrl({
-                    reservationId: reservation.id,
-                    date: isoToChinaLocal(reservation.startAt).slice(0, 10),
-                    machineId: reservation.machineId
-                  })
-                });
-              }}
             />
           )}
           {visiblePage === "profile" && (
@@ -1269,28 +1143,6 @@ function AuthLayout({
           </div>
         </div>
       </section>
-    </div>
-  );
-}
-
-function PageHeader({
-  title,
-  titleExtras,
-  actions,
-  className = ""
-}: {
-  title: string;
-  titleExtras?: React.ReactNode;
-  actions?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`page-header${className ? ` ${className}` : ""}`}>
-      <div className="page-header-title-group">
-        <h1>{title}</h1>
-        {titleExtras}
-      </div>
-      {actions && <div className="page-header-actions">{actions}</div>}
     </div>
   );
 }
@@ -4951,7 +4803,6 @@ function Topbar({
     ? []
     : [
         { id: "calendar" as const, label: tr("资源日历"), icon: CalendarDays },
-        { id: "my" as const, label: tr("我的占用"), icon: Clock3 },
         ...(showAdmin
           ? [{ id: "admin" as const, label: tr("管理"), icon: Settings }]
           : [])
@@ -5644,10 +5495,6 @@ function CalendarPage({
     () => parseCalendarEditRoute(routeLocation.searchStr),
     [routeLocation.searchStr]
   );
-  const requestedEditReservationId =
-    calendarEditRoute.kind === "EDIT"
-      ? calendarEditRoute.reservationId
-      : "";
   const initialCalendarPreference = useMemo(
     () => readCalendarPreference(),
     []
@@ -5688,11 +5535,19 @@ function CalendarPage({
     () => new Set(readCollapsedCalendarMachineIds(user.id))
   );
   const [drafts, setDrafts] = useState<CalendarDraft[]>([]);
-  const [editingReservation, setEditingReservation] = useState<{
-    id: string;
-    scope: "RESOURCE_GROUP" | "MACHINE";
-    endAt: string;
-  } | null>(null);
+  const [editingReservations, setEditingReservations] = useState<OwnReservation[]>([]);
+  const editingReservation = editingReservations[0] ?? null;
+  const editingIds = useMemo(() => new Set(editingReservations.map(item => item.id)), [editingReservations]);
+  const addingEdit = useRef(false);
+  const submittingRef = useRef(false);
+  const [editingChanged, setEditingChanged] = useState(false);
+  const [submissionUncertain, setSubmissionUncertain] = useState(false);
+  const [myReservationsOpen, setMyReservationsOpen] = useState(() => new URLSearchParams(routeLocation.searchStr).get("mine") === "1");
+  const [pendingReservationLocation, setPendingReservationLocation] = useState<OwnReservation | null>(null);
+  useEffect(() => {
+    if (new URLSearchParams(routeLocation.searchStr).get("mine") === "1") setMyReservationsOpen(true);
+  }, [routeLocation.searchStr]);
+  const { epoch: editEpoch, refresh: refreshOwnReservations } = useReservationRefresh();
   const [editingDraftTime, setEditingDraftTime] = useState(false);
   const [metadata, setMetadata] = useState<CalendarMetadata>({
     title: "",
@@ -5999,6 +5854,16 @@ function CalendarPage({
   }, [routeLocation.searchStr]);
 
   useEffect(() => {
+    if (!pendingReservationLocation || !timeline || refreshing || initialLoading) return;
+    const targetDate = isoToChinaLocal(pendingReservationLocation.startAt).slice(0, 10);
+    if (date !== targetDate || view !== "day" || !timeline.reservations.some(item => item.id === pendingReservationLocation.id)) return;
+    setCalendarSearchTarget({ machineId: pendingReservationLocation.machineId, groupId: pendingReservationLocation.resourceGroupId, revision: Date.now() });
+    const time = isoToChinaLocal(pendingReservationLocation.startAt).slice(11, 16).split(":").map(Number);
+    setTimelineScrollTarget(current => ({ startMinutes: Math.max(0, time[0] * 60 + time[1] - 30), revision: current.revision + 1 }));
+    setPendingReservationLocation(null);
+  }, [pendingReservationLocation, timeline, refreshing, initialLoading, date, view]);
+
+  useEffect(() => {
     if (!serverClockReady || serverDateCorrectionAppliedRef.current) return;
     serverDateCorrectionAppliedRef.current = true;
     const params = new URLSearchParams(
@@ -6276,12 +6141,12 @@ function CalendarPage({
           ? (timeline?.reservations ?? []).filter(
               (item) =>
                 item.machineId === target.machineId &&
-                item.id !== editingReservation?.id
+                !editingIds.has(item.id)
             )
           : [
               ...(reservationsByGroup.get(target.resourceGroupId) ?? []),
               ...(machineReservationsByMachine.get(target.machineId) ?? [])
-            ].filter((item) => item.id !== editingReservation?.id);
+            ].filter((item) => !editingIds.has(item.id));
       const unavailable =
         target.scope === "MACHINE"
           ? (timeline?.unavailability ?? []).filter(
@@ -6301,7 +6166,7 @@ function CalendarPage({
     },
     [
       groupById,
-      editingReservation,
+      editingIds,
       machineUnavailability,
       machineReservationsByMachine,
       reservationsByGroup,
@@ -6351,8 +6216,8 @@ function CalendarPage({
     () =>
       editingDraftTime
         ? []
-        : calendarDraftIssues(drafts, settings, currentTime),
-    [currentTime, drafts, editingDraftTime, i18n.resolvedLanguage, settings]
+        : calendarDraftIssues(drafts, settings, currentTime, editingReservations.length > 0),
+    [currentTime, drafts, editingDraftTime, editingReservations.length, i18n.resolvedLanguage, settings]
   );
   const draftFieldIssuesById = useMemo(
     () =>
@@ -6364,7 +6229,7 @@ function CalendarPage({
             : calendarDraftFieldIssues(draft, settings, currentTime)
         ])
       ),
-    [currentTime, drafts, editingDraftTime, i18n.resolvedLanguage, settings]
+    [currentTime, drafts, editingDraftTime, editingReservations.length, i18n.resolvedLanguage, settings]
   );
   const generalDraftIssues = useMemo(() => {
     const fieldMessages = new Set(
@@ -6469,7 +6334,8 @@ function CalendarPage({
 
   const resetReservationDetailsState = () => {
     setDrafts([]);
-    setEditingReservation(null);
+    setEditingReservations([]);
+    setEditingChanged(false); setSubmissionUncertain(false);
     setEditingDraftTime(false);
     setMetadata({ title: "", purpose: "", note: "" });
     setPreviewByDraft(new Map());
@@ -6485,200 +6351,73 @@ function CalendarPage({
     resetReservationDetailsState();
   };
 
-  const requestEditingReservation = async (item: TimelineReservation) => {
-    if (!item.mine || new Date(item.endAt).getTime() <= currentTime) return;
-    if (
-      requestedEditReservationId === item.id &&
-      editingReservation?.id === item.id
-    ) {
-      setReservationDetail(null);
-      return;
-    }
-    if (
-      (drafts.length || editingReservation) &&
-      !(await dialog.confirm({
-        title: tr("开始编辑占用"),
-        message: tr("当前未提交的占用草稿将被替换，原占用仍会保留到你提交修改为止。"),
-        confirmLabel: tr("继续编辑")
-      }))
-    ) {
-      return;
-    }
-    setReservationDetail(null);
-    void calendarRouteNavigate({
-      href: calendarUrlWithEditRequest(routeLocation.searchStr, item.id),
-      replace: true
-    });
-  };
-
-  const activateEditingReservation = (item: TimelineReservation) => {
-    const currentMinute = currentMinuteStart(currentTime);
-    const startAt =
-      new Date(item.startAt).getTime() < new Date(currentMinute).getTime()
-        ? currentMinute
-        : item.startAt;
-    if (
-      minuteDifference(startAt, item.endAt) < settings.minBookingMinutes
-    ) {
-      notify("error", tr("该占用剩余时间过短，无法进入编辑状态"));
-      return false;
-    }
-    setReservationMode(item.scope);
-    setEditingReservation({
-      id: item.id,
-      scope: item.scope,
-      endAt: item.endAt
-    });
-    setDrafts([
-      {
-        id: createClientId(),
-        scope: item.scope,
-        machineId: item.machineId,
-        resourceGroupId: item.resourceGroupId,
-        startMode:
-          new Date(startAt).getTime() <= new Date(currentMinute).getTime()
-            ? "IMMEDIATE"
-            : "SCHEDULED",
-        startAt,
-        endAt: item.endAt
+  const requestEditingReservation = async (item: Pick<TimelineReservation, "id" | "mine" | "endAt">) => {
+    if (!item.mine || editingIds.has(item.id) || addingEdit.current || submittingRef.current) return;
+    if (editingReservations.length >= 100) { notify("error", tr("一次最多编辑 100 条占用")); return; }
+    addingEdit.current = true;
+    try {
+      const result = await api<OwnReservationDetail>(`/reservations/mine/${item.id}`);
+      const original = result.reservation;
+      if (!original.canEdit || original.status !== "CONFIRMED" || Date.parse(original.endAt) <= currentTime) {
+        notify("error", tr("该占用已经结束或无法修改")); return;
       }
-    ]);
-    setMetadata({
-      title: item.title ?? "",
-      purpose: item.purpose ?? "",
-      note: item.note ?? ""
-    });
-    setEditingDraftTime(false);
-    setPreviewByDraft(new Map());
-    setReservationDetail(null);
-    window.requestAnimationFrame(() => {
-      if (bookingDrawerRef.current) bookingDrawerRef.current.scrollTop = 0;
-    });
-    return true;
+      const minute = currentMinuteStart(currentTime);
+      const startAt = original.startAt < minute ? minute : original.startAt;
+      if (minuteDifference(startAt, original.endAt) < settings.minBookingMinutes) {
+        notify("error", tr("该占用剩余时间过短，无法进入编辑状态")); return;
+      }
+      if (!editingReservations.length && !drafts.length) {
+        setReservationMode(original.scope);
+        setMetadata({ title: original.title, purpose: original.purpose, note: original.note });
+      }
+      setEditingReservations(current => [...current, original]);
+      setDrafts(current => mergeCalendarDrafts(current, [{
+        scope: original.scope, machineId: original.machineId,
+        resourceGroupId: original.resourceGroupId, startMode: startAt <= minute ? "IMMEDIATE" : "SCHEDULED",
+        startAt, endAt: original.endAt
+      }], () => createClientId(), minute));
+      setReservationDetail(null); setPreviewByDraft(new Map());
+    } catch (error) { notify("error", error instanceof Error ? error.message : tr("请求失败")); }
+    finally { addingEdit.current = false; }
   };
+  useEffect(() => {
+    if (calendarEditRoute.kind !== "EDIT" || !timeline || refreshing || initialLoading) return;
+    const item = timeline.reservations.find(row => row.id === calendarEditRoute.reservationId);
+    if (item) void requestEditingReservation(item);
+    else notify("error", tr("该占用已经结束或无法修改"));
+    void calendarRouteNavigate({ href: calendarUrlWithoutEditRequest(routeLocation.searchStr), replace: true });
+  }, [calendarEditRoute, timeline, refreshing, initialLoading]);
 
   useEffect(() => {
-    if (!timeline) return;
-    if (calendarEditRoute.kind === "NONE") {
-      if (editingReservation) resetReservationDetailsState();
-      return;
-    }
-    if (calendarEditRoute.kind === "INVALID") {
-      if (editingReservation) resetReservationDetailsState();
-      notify("error", tr("占用编辑地址无效"));
-      void calendarRouteNavigate({
-        href: calendarUrlWithoutEditRequest(routeLocation.searchStr),
-        replace: true
-      });
-      return;
-    }
-    const reservationId = calendarEditRoute.reservationId;
-    if (editingReservation?.id === reservationId) return;
-    const item = timeline.reservations.find(
-      (reservation) => reservation.id === reservationId
-    );
-    if (
-      !item ||
-      !item.mine ||
-      new Date(item.endAt).getTime() <= currentTime
-    ) {
-      if (editingReservation) resetReservationDetailsState();
-      notify("error", tr("该占用已经结束或无法修改"));
-      void calendarRouteNavigate({
-        href: calendarUrlWithoutEditRequest(routeLocation.searchStr),
-        replace: true
-      });
-      return;
-    }
-    if (!activateEditingReservation(item)) {
-      void calendarRouteNavigate({
-        href: calendarUrlWithoutEditRequest(routeLocation.searchStr),
-        replace: true
-      });
-    }
-  }, [
-    calendarRouteNavigate,
-    calendarEditRoute,
-    currentTime,
-    editingReservation,
-    notify,
-    routeLocation.searchStr,
-    settings.minBookingMinutes,
-    timeline,
-  ]);
+    if (!editingReservations.length) { setEditingChanged(false); return; }
+    const controller = new AbortController();
+    void api<{ reservations: OwnReservation[] }>("/reservations/mine/inspect", {
+      method: "POST", body: jsonBody({ ids: editingReservations.map(item => item.id) }), signal: controller.signal
+    }).then(result => {
+      if (controller.signal.aborted) return;
+      const latest = new Map(result.reservations.map(item => [item.id, item]));
+      setEditingChanged(editingReservations.some(item => {
+        const current = latest.get(item.id);
+        return !current || !current.canEdit || current.status !== "CONFIRMED" || current.stateToken !== item.stateToken;
+      }));
+    }).catch(() => { if (!controller.signal.aborted) setEditingChanged(true); });
+    return () => controller.abort();
+  }, [editEpoch, editingReservations]);
 
   useEffect(() => {
     if (editingDraftTime) return;
-    const currentMinute = currentMinuteStart(currentTime);
-    const originalEnded =
-      Boolean(editingReservation) &&
-      new Date(editingReservation!.endAt).getTime() <=
-        new Date(currentMinute).getTime();
-    if (!drafts.length) {
-      if (originalEnded) {
-        setEditingReservation(null);
-        void calendarRouteNavigate({
-          href: calendarUrlWithoutEditRequest(routeLocation.searchStr),
-          replace: true
-        });
-        setMetadata({ title: "", purpose: "", note: "" });
-        setPreviewByDraft(new Map());
-        notify("success", tr("原占用已结束，本次编辑已结束"));
-      }
+    if (editingReservations.length) {
+      if (editingReservations.some(item => Date.parse(item.endAt) <= currentTime)) setEditingChanged(true);
       return;
     }
-    const advanced = advanceCalendarDrafts(
-      drafts,
-      currentMinute,
-      settings.minBookingMinutes
-    );
-    const merged = advanced.changed
-      ? mergeCalendarDrafts(
-          advanced.drafts,
-          [],
-          () => createClientId(),
-          currentMinute
-        )
-      : advanced.drafts;
+    const minute = currentMinuteStart(currentTime);
+    const advanced = advanceCalendarDrafts(drafts, minute, settings.minBookingMinutes);
     if (advanced.changed) {
-      setDrafts(merged);
+      setDrafts(mergeCalendarDrafts(advanced.drafts, [], () => createClientId(), minute));
       setPreviewByDraft(new Map());
-      if (!originalEnded && merged.length < drafts.length) {
-        notify(
-          "success",
-          merged.length
-            ? tr("部分未提交时段已经结束并被移除")
-            : tr("未提交的占用时段已结束")
-        );
-      }
+      if (!advanced.drafts.length) setMetadata({ title: "", purpose: "", note: "" });
     }
-    if (originalEnded) {
-      setEditingReservation(null);
-      void calendarRouteNavigate({
-        href: calendarUrlWithoutEditRequest(routeLocation.searchStr),
-        replace: true
-      });
-      setPreviewByDraft(new Map());
-      notify(
-        "success",
-        merged.length
-          ? tr("原占用已结束，剩余时段已转为新的占用草稿")
-          : tr("原占用已结束，本次编辑已结束")
-      );
-    }
-    if (!merged.length) {
-      setMetadata({ title: "", purpose: "", note: "" });
-    }
-  }, [
-    currentTime,
-    calendarRouteNavigate,
-    drafts,
-    editingReservation,
-    editingDraftTime,
-    notify,
-    routeLocation.searchStr,
-    settings.minBookingMinutes
-  ]);
+  }, [currentTime, editingReservations, editingDraftTime, drafts, settings.minBookingMinutes]);
 
   const clearReservationDetailsWithConfirmation = async () => {
     if (
@@ -6764,7 +6503,7 @@ function CalendarPage({
           body: jsonBody({
             segments,
             ...(editingReservation
-              ? { replaceReservationId: editingReservation.id }
+              ? { replaceReservations: editingReservations.map(({ id, stateToken }) => ({ id, stateToken })) }
               : {})
           })
         }
@@ -6788,7 +6527,7 @@ function CalendarPage({
   }, [
     draftIssues.length,
     drafts,
-    editingReservation,
+    editingReservations,
     metadata,
     notify,
     synchronizeServerClock
@@ -6836,8 +6575,8 @@ function CalendarPage({
   };
 
   const submitDrafts = async () => {
-    if (!drafts.length || draftIssues.length) return;
-    setSubmitting(true);
+    if (!drafts.length || draftIssues.length || editingChanged || submissionUncertain || submittingRef.current) return;
+    submittingRef.current = true; setSubmitting(true);
     try {
       const checked = await runPreview();
       if (checked === null) return;
@@ -6852,7 +6591,7 @@ function CalendarPage({
         body: jsonBody({
           segments,
           ...(editingReservation
-            ? { replaceReservationId: editingReservation.id }
+            ? { replaceReservations: editingReservations.map(({ id, stateToken }) => ({ id, stateToken })) }
             : {})
           })
       });
@@ -6868,6 +6607,8 @@ function CalendarPage({
       clearReservationDetails();
       await loadTimeline(true);
     } catch (error) {
+      if (!(error instanceof ApiError) || error.status >= 500) setSubmissionUncertain(true);
+      refreshOwnReservations();
       notify("error", error instanceof Error ? error.message : tr("提交失败"));
       if (error instanceof ApiError && Array.isArray(error.details)) {
         setPreviewByDraft(
@@ -6878,7 +6619,7 @@ function CalendarPage({
         );
       }
     } finally {
-      setSubmitting(false);
+      submittingRef.current = false; setSubmitting(false);
     }
   };
 
@@ -7059,7 +6800,7 @@ function CalendarPage({
     const track = event.currentTarget.closest<HTMLElement>(".time-track");
     const trackRect = track?.getBoundingClientRect();
     const candidates = rowReservations
-      .filter((item) => item.id !== editingReservation?.id)
+      .filter((item) => !editingIds.has(item.id))
       .sort((left, right) => left.startAt.localeCompare(right.startAt));
     if (!trackRect || trackRect.width <= 0) {
       setNearbyReservations(null);
@@ -7115,6 +6856,7 @@ function CalendarPage({
           title={tr("资源日历")}
           actions={(
             <div className="calendar-header-actions">
+              <button className="secondary-button" onClick={() => setMyReservationsOpen(true)}><Clock3 size={16} />{tr("我的占用")}</button>
               <button className="secondary-button" onClick={() => navigate("resources")}>
                 <Server size={16} />{tr("全部资源")}</button>
             </div>
@@ -7404,7 +7146,7 @@ function CalendarPage({
                   ];
                   const currentMinute = currentMinuteStart(currentTime);
                   const visibleReservations = reservations.flatMap((item) => {
-                    if (item.id !== editingReservation?.id) return [item];
+                    if (!editingIds.has(item.id)) return [item];
                     if (item.startAt >= currentMinute) return [];
                     return [
                       {
@@ -7482,7 +7224,7 @@ function CalendarPage({
                       const event: CalendarEventModel = {
                         ...reservationCalendarEvent(item),
                         stage:
-                          item.id === editingReservation?.id
+                          editingIds.has(item.id)
                             ? "EDITING_HISTORY"
                             : "COMMITTED"
                       };
@@ -7748,7 +7490,7 @@ function CalendarPage({
                                     }
                                   : reservation &&
                                       !longTermDisabled &&
-                                      reservation.id !== editingReservation?.id
+                                      !editingIds.has(reservation.id)
                                     ? (clickEvent) =>
                                         openTimelineReservation(
                                           clickEvent,
@@ -7884,6 +7626,19 @@ function CalendarPage({
             </div>
           )}
         </div>
+            {editingReservations.length > 0 && <div className="calendar-edit-sequence">
+              <strong>{tr("编辑序列")} · {editingReservations.length}</strong>
+              {editingReservations.map(item => <div key={item.id}>
+                <span title={`${item.machineName} · ${item.resourceGroupName}`}>{item.machineName} · {item.resourceGroupName}</span>
+                <small>{formatChinaFullMinute(item.startAt)} → {formatChinaFullMinute(item.endAt)}</small>
+                <button type="button" className="secondary-button" disabled={submitting} onClick={() => {
+                  setEditingReservations(current => current.filter(row => row.id !== item.id)); setPreviewByDraft(new Map());
+                }}>{tr("移出编辑序列")}</button>
+              </div>)}
+            </div>}
+            {(editingChanged || submissionUncertain) && <div className="draft-issues" role="alert">
+              {submissionUncertain ? tr("提交结果暂不明确，请先核对占用记录，勿重复提交。") : tr("编辑序列中的记录已变化，请放弃本次编辑后重新选择。")}
+            </div>}
         {!drafts.length && (
           <div className="drawer-empty">
             <Clock3 className="drawer-empty-icon" size={28} />
@@ -7900,12 +7655,6 @@ function CalendarPage({
         )}
         {!!drafts.length && (
           <>
-            {editingReservation && (
-              <div className="editing-reservation-banner">
-                <Pencil size={14} />
-                <span>{tr("正在编辑占用，原时段会保留到提交成功。")}</span>
-              </div>
-            )}
             <div className="selected-summary">
               <span>{new Set(drafts.map(reservationTargetKey)).size}</span>
               <div><strong>{tr("个占用目标，")}{drafts.length} {tr("条占用")}</strong></div>
@@ -8027,7 +7776,7 @@ function CalendarPage({
                 {[...previewByDraft.values()].some((item) => !item.available) && (
                   <button className="secondary-button accent" onClick={applySplit}><Sparkles size={16} />{tr("自动拆分")}</button>
                 )}
-                <button className="primary-button" disabled={submitting || previewing || !!draftIssues.length} onClick={() => void submitDrafts()}>
+                <button className="primary-button" disabled={submitting || previewing || !!draftIssues.length || editingChanged || submissionUncertain} onClick={() => void submitDrafts()}>
                   {submitting ? <RefreshCw size={16} className="spin" /> : <Check size={16} />}
                   {editingReservation ? tr("提交修改") : tr("提交占用")}
                 </button>
@@ -8035,6 +7784,16 @@ function CalendarPage({
           </>
         )}
       </aside>
+      {myReservationsOpen && <CalendarMyReservations onClose={() => setMyReservationsOpen(false)} onLocate={async selected => {
+        try {
+          const { reservation: item } = await api<OwnReservationDetail>(`/reservations/mine/${selected.id}`);
+          if (item.status !== "CONFIRMED" || !item.canViewCalendar) { notify("error", tr("该占用无法定位到日历")); return; }
+          setMyReservationsOpen(false); setSearch(""); setView("day");
+          setDate(isoToChinaLocal(item.startAt).slice(0, 10));
+          writeCalendarRoute({ date: isoToChinaLocal(item.startAt).slice(0, 10), view: "day", machineId: item.machineId });
+          setPendingReservationLocation(item);
+        } catch (error) { notify("error", error instanceof Error ? error.message : tr("请求失败")); }
+      }} />}
       {reservationDetail &&
         createPortal(
           <CalendarReservationPopover
@@ -9469,283 +9228,6 @@ function initialReservationTime(nowTime: number) {
     start: isoToChinaLocal(startAt),
     end: isoToChinaLocal(endAt)
   };
-}
-
-function MyReservationsPage({
-  notify,
-  onEditReservation
-}: {
-  notify: (kind: "success" | "error", message: string) => void;
-  onEditReservation: (reservation: {
-    id: string;
-    startAt: string;
-    machineId: string;
-  }) => void;
-}) {
-  const dialog = useAppDialog();
-  const { currentTime } = useServerClock();
-  const [category, setCategory] = useState<"CURRENT" | "HISTORY">("CURRENT");
-  const [reservations, setReservations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const reservationResult = await api<{ reservations: any[] }>(
-        "/reservations/mine"
-      );
-      setReservations(reservationResult.reservations);
-    } catch (error) {
-      notify("error", error instanceof Error ? error.message : tr("加载失败"));
-    } finally {
-      setLoading(false);
-    }
-  }, [notify]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const categorizedReservations = useMemo(() => {
-    const current: any[] = [];
-    const history: any[] = [];
-    for (const reservation of reservations) {
-      const state = bookingState(reservation, currentTime);
-      if (state === tr("进行中") || state === tr("未开始")) {
-        current.push(reservation);
-      } else {
-        history.push(reservation);
-      }
-    }
-    current.sort((left, right) => {
-      const leftState = bookingState(left, currentTime);
-      const rightState = bookingState(right, currentTime);
-      if (leftState !== rightState) return leftState === tr("进行中") ? -1 : 1;
-      return new Date(left.startAt).getTime() - new Date(right.startAt).getTime();
-    });
-    history.sort(
-      (left, right) =>
-        new Date(right.endAt).getTime() - new Date(left.endAt).getTime()
-    );
-    return { current, history };
-  }, [currentTime, reservations]);
-
-  const visibleReservations =
-    category === "CURRENT"
-      ? categorizedReservations.current
-      : categorizedReservations.history;
-
-  const action = async (path: string, message: string) => {
-    try {
-      const result = await api<{ message?: string }>(path, {
-        method: "POST",
-        body: "{}"
-      });
-      notify("success", result.message ?? message);
-      await load();
-    } catch (error) {
-      notify("error", error instanceof Error ? error.message : tr("操作失败"));
-    }
-  };
-
-  return (
-    <div className="page-shell my-reservations-page">
-      <PageHeader title={tr("我的占用")} />
-      <section className="card reservation-list-panel">
-        <div className="reservation-list-toolbar">
-          <div
-            className="segmented reservation-category-tabs"
-            role="tablist"
-            aria-label={tr("占用记录分类")}
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={category === "CURRENT"}
-              className={category === "CURRENT" ? "active" : ""}
-              onClick={() => setCategory("CURRENT")}
-            >
-              <Clock3 size={16} />
-              {tr("当前占用")}<span className="reservation-tab-count">
-                {categorizedReservations.current.length}
-              </span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={category === "HISTORY"}
-              className={category === "HISTORY" ? "active" : ""}
-              onClick={() => setCategory("HISTORY")}
-            >
-              <CalendarDays size={16} />
-              {tr("历史记录")}<span className="reservation-tab-count">
-                {categorizedReservations.history.length}
-              </span>
-            </button>
-          </div>
-        </div>
-        {loading ? (
-          <div className="content-loading reservation-list-loading">
-            <RefreshCw className="spin" />{tr("正在载入")}</div>
-        ) : visibleReservations.length ? (
-          <div className="booking-table">
-            <div className="table-row table-head">
-              <span>{tr("机器 / 资源组")}</span>
-              <span>{tr("占用时间")}</span>
-              <span>{tr("占用时长")}</span>
-              <span>{tr("占用信息")}</span>
-              <span>{tr("状态")}</span>
-              <span />
-            </div>
-            {visibleReservations.map((item) => {
-              const state = bookingState(item, currentTime);
-              const endDayOffset = chinaDateDayOffset(
-                item.startAt,
-                item.endAt
-              );
-              const withinFirstMinute =
-                state === tr("进行中") &&
-                currentTime - new Date(item.startAt).getTime() < 60_000;
-              return (
-                <div className="table-row" key={item.id}>
-                  <div className="resource-title">
-                    <span className="machine-glyph"><Server size={17} /></span>
-                    <div>
-                      <strong>{item.machineName}</strong>
-                      <span>
-                        {item.scope === "MACHINE"
-                          ? tr("整机")
-                          : item.resourceGroupName}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="time-copy">
-                    <strong>{formatChinaDate(item.startAt)}</strong>
-                    <span>
-                      {formatChina(item.startAt, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false
-                      })}
-                      {" — "}
-                      {endDayOffset > 0 && `(+${endDayOffset}) `}
-                      {formatChina(item.endAt, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false
-                      })}
-                    </span>
-                    {item.adjustmentType && (
-                      <small className="change-note">
-                        <PowerOff size={12} />{tr("因维护或停用调整")}</small>
-                    )}
-                  </div>
-                  <div className="reservation-duration">
-                    <strong>
-                      {compactDurationText(
-                        minuteDifference(item.startAt, item.endAt)
-                      )}
-                    </strong>
-                  </div>
-                  <div className="booking-copy">
-                    <strong>{item.title || tr("未填写标题")}</strong>
-                    <span>{item.purpose || "—"}</span>
-                  </div>
-                  <span className={`state-chip ${reservationStatusClass(item.status, item.startAt, item.endAt, currentTime)}`}>{state}</span>
-                  <div className="row-actions">
-                    {state === tr("未开始") && (
-                      <>
-                        <button
-                          type="button"
-                          className="icon-button tiny reservation-action-button edit"
-                          title={tr("修改占用")}
-                          aria-label={tr("修改占用")}
-                          onClick={() => onEditReservation(item)}
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-button tiny reservation-action-button danger"
-                          title={tr("取消占用")}
-                          aria-label={tr("取消占用")}
-                          onClick={async () => {
-                          if (await dialog.confirm({
-                            title: tr("取消占用"),
-                            message: tr("确认取消这条占用？取消后该时段会立即释放。"),
-                            confirmLabel: tr("确认取消"),
-                            tone: "danger"
-                          })) {
-                            await action(`/reservations/${item.id}/cancel`, tr("占用已取消"));
-                          }
-                        }}>
-                          <X size={15} />
-                        </button>
-                      </>
-                    )}
-                    {state === tr("进行中") && (
-                      <>
-                        <button
-                          type="button"
-                          className="icon-button tiny reservation-action-button edit"
-                          title={tr("修改占用")}
-                          aria-label={tr("修改占用")}
-                          onClick={() => onEditReservation(item)}
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-button tiny reservation-action-button danger"
-                          title={withinFirstMinute ? tr("撤销占用") : tr("提前结束")}
-                          aria-label={withinFirstMinute ? tr("撤销占用") : tr("提前结束")}
-                          onClick={async () => {
-                            if (await dialog.confirm({
-                              title: withinFirstMinute
-                                ? tr("撤销占用")
-                                : tr("提前结束占用"),
-                              message: withinFirstMinute
-                                ? tr("该占用开始不足一分钟，确认后会撤销整条占用记录并立即释放资源。")
-                                : tr("确认现在结束占用并释放剩余时段？"),
-                              confirmLabel: withinFirstMinute
-                                ? tr("确认撤销")
-                                : tr("提前结束"),
-                              tone: "danger"
-                            })) {
-                              await action(`/reservations/${item.id}/end`, tr("资源已提前释放"));
-                            }
-                          }}
-                        >
-                          {withinFirstMinute
-                            ? <X size={15} />
-                            : <PowerOff size={15} />}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="reservation-empty-state">
-            <div>
-              {category === "CURRENT"
-                ? <Clock3 size={24} />
-                : <CalendarDays size={24} />}
-            </div>
-            <h3>
-              {category === "CURRENT" ? tr("暂无当前占用") : tr("暂无历史记录")}
-            </h3>
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function bookingState(item: any, now: number) {
-  return reservationStatusLabel(item.status, item.startAt, item.endAt, now);
 }
 
 type FeedbackNotify = (kind: "success" | "error", message: string) => void;
@@ -16045,94 +15527,6 @@ function Field({
       {children}
       {error && <small className="field-inline-error" role="alert">{error}</small>}
     </label>
-  );
-}
-
-function Modal({
-  title,
-  onClose,
-  wide,
-  large,
-  className,
-  children
-}: {
-  title: string;
-  onClose: () => void;
-  wide?: boolean;
-  large?: boolean;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  const headingId = useId();
-  const dialogRef = useRef<HTMLElement | null>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  useEffect(() => {
-    const previousFocus = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const focusableSelector = [
-      "button:not([disabled])",
-      "input:not([disabled])",
-      "textarea:not([disabled])",
-      "select:not([disabled])",
-      "[tabindex]:not([tabindex='-1'])"
-    ].join(",");
-    const focusDialog = window.requestAnimationFrame(() => {
-      const dialog = dialogRef.current;
-      const preferred = dialog?.querySelector<HTMLElement>("[autofocus]");
-      const first = dialog?.querySelector<HTMLElement>(focusableSelector);
-      (preferred ?? first)?.focus();
-    });
-    const handleKeyboard = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab" || !dialogRef.current) return;
-      const focusable = Array.from(
-        dialogRef.current.querySelectorAll<HTMLElement>(focusableSelector)
-      );
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", handleKeyboard);
-    return () => {
-      window.cancelAnimationFrame(focusDialog);
-      window.removeEventListener("keydown", handleKeyboard);
-      document.body.style.overflow = previousOverflow;
-      previousFocus?.focus();
-    };
-  }, []);
-  return (
-    <div className="modal-backdrop" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <section
-        ref={dialogRef}
-        className={`modal ${large ? "large" : wide ? "wide" : ""}${className ? ` ${className}` : ""}`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={headingId}
-      >
-        <header>
-          <h2 id={headingId}>{title}</h2>
-          <button type="button" className="icon-button" aria-label={tr("关闭")} onClick={onClose}>
-            <X size={18} />
-          </button>
-        </header>
-        {children}
-      </section>
-    </div>
   );
 }
 

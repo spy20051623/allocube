@@ -64,7 +64,7 @@ docker compose --env-file .env.production up -d --build
 sh scripts/build-docker-release.sh RELEASE_ID BUILD_CONTEXT
 ```
 
-脚本将依赖层保存为具名 Docker 镜像，并在 `/opt/allocube-build-cache` 保留按 `package-lock.json` 区分、同时包含 Node 基础镜像的离线镜像归档。已有缓存时构建会强制禁用网络；依赖缓存或基础镜像无法从磁盘恢复时，构建将直接失败，不会静默联网下载。只有依赖确实发生变化时，才应为一次构建显式设置 `ALLOCUBE_ALLOW_DEPENDENCY_DOWNLOAD=1`，随后生成的新缓存可供后续版本离线复用。清理 Docker 镜像时不得删除 `allocube-build-cache:*`，离线归档也应纳入服务器磁盘备份。
+脚本将依赖层保存为具名 Docker 镜像，并固定在 `/opt/allocube-build-cache` 保留按依赖输入区分、同时包含 Node 基础镜像的离线归档。每次构建先查找对应归档和镜像：命中时断网复用；确实没有时自动联网补齐一次，并立即写回该目录，下一次构建继续复用。依赖输入包括 `package.json`、`package-lock.json`、`Dockerfile`、基础镜像名称和软件源配置，避免错误复用或无故失效。清理 Docker 镜像时不得删除 `allocube-build-cache:*`，离线归档也应纳入服务器磁盘备份。
 
 ## 健康检查
 

@@ -490,5 +490,8 @@
   "所选占用已变化，本次未取消任何记录，请重新确认": "Selected reservations have changed. Nothing was cancelled. Review and confirm again.",
   "筛选结束时间必须晚于开始时间": "The filter end time must be after the start time.",
   "编辑序列中的占用已结束，请重新核对": "A reservation in the editing sequence has ended. Review the selection again.",
-  "不能同时使用单条和批量编辑参数": "Single and multiple replacement parameters cannot be combined."
+  "不能同时使用单条和批量编辑参数": "Single and multiple replacement parameters cannot be combined.",
+  "统计日期无效": "Invalid statistics date",
+  "统计结束日期不能早于开始日期": "The end date must not precede the start date",
+  "所选日期尚未完成统计，暂不能导出": "Statistics for the selected dates are not ready for export"
 }

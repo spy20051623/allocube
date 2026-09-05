@@ -1,0 +1,31 @@
+.report-rebuild-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.report-rebuild-button { min-height: 30px; padding: 5px 9px; font-size: 12px; }
+.report-status { color: var(--text-muted, #64748b); font-size: 12px; overflow-wrap: anywhere; }
+.report-pending { margin-left: 12px; }
+.report-pending-dates { flex-shrink: 0; font-size: 12px; overflow-wrap: anywhere; }
+.report-pending-dates summary { cursor: pointer; }
+.report-pending-dates { max-height: 90px; overflow: auto; }
+.admin-shell.report-admin-shell { grid-template-columns: 230px minmax(0, 1fr); }
+.report-page > .report-status { flex-shrink: 0; margin: 0 0 10px; }
+@media (max-width: 1200px) {
+  .report-page .report-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .report-page .metric-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .report-page .metric-card { min-height: 62px; padding: 10px 16px; }
+}
+@media (max-width: 700px) {
+  .admin-shell.report-admin-shell { grid-template-columns: minmax(0, 1fr); }
+  .report-admin-shell > .admin-sidebar { position: static; height: auto; min-width: 0; padding: 8px 12px; }
+  .report-admin-shell > .admin-sidebar > div:first-child { display: none; }
+  .report-admin-shell > .admin-sidebar nav { flex-direction: row; overflow-x: auto; }
+  .report-admin-shell > .admin-sidebar nav button { flex-shrink: 0; }
+  .report-admin-shell > .report-management-content { height: auto; padding: 20px 14px; overflow: visible; }
+  .report-page { height: auto; }
+  .report-page .page-header-title-group { flex-wrap: wrap; }
+  .report-rebuild-controls { max-width: 100%; }
+  .report-page .report-layout { grid-template-columns: minmax(0, 1fr); }
+  .report-page .report-card { height: auto; min-height: 180px; max-height: 400px; }
+  .report-page .report-filters { padding: 12px; gap: 12px; }
+  .report-page .report-filters .field { min-width: 0; }
+  .report-page .report-filters .select-control { min-width: 0; }
+  .report-page .metric-grid { grid-template-columns: minmax(0, 1fr); }
+}

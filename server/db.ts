@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import Database from "better-sqlite3";
 import { config, getBootstrapConfig } from "./config.js";
 import { FINAL_SCHEMA_SQL, FINAL_SCHEMA_VERSION } from "./schema.js";
+import { REPORT_SCHEMA_SQL } from "./report-schema.js";
 import { bootstrapAdministrator } from "./bootstrap-admin.js";
 import { normalizeAllowedEmailDomains } from "../src/shared/email-domain-rules.js";
 import {
@@ -19,6 +20,7 @@ import {
 export type Db = Database.Database;
 
 const REQUIRED_TABLES = [
+  "report_versions", "report_state", "report_days", "report_group_days", "report_reservation_days", "report_jobs",
   "schema_migrations",
   "users",
   "sessions",
@@ -580,6 +582,13 @@ export async function initializeDatabase() {
       db.exec("ROLLBACK");
       throw error;
     }
+  }
+  if (schemaVersion.version === 19 && FINAL_SCHEMA_VERSION >= 20) {
+    db.transaction(() => {
+      db.exec(REPORT_SCHEMA_SQL);
+      db.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES(20, ?)").run(nowIso());
+    }).exclusive();
+    schemaVersion = { version: 20 };
   }
   if (schemaVersion.version !== FINAL_SCHEMA_VERSION) {
     throw new Error(

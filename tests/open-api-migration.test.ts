@@ -1,3 +1,4 @@
+import { REPORT_SCHEMA_SQL } from "../server/report-schema.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -39,7 +40,7 @@ beforeAll(async () => {
     .replace("    api_operation_id TEXT,\n", "");
   const legacy = new Database(databasePath);
   legacy.pragma("foreign_keys = ON");
-  legacy.exec(version13Schema);
+  legacy.exec(version13Schema.replace(REPORT_SCHEMA_SQL, ""));
   legacy
     .prepare("INSERT INTO schema_migrations(version, applied_at) VALUES(13, ?)")
     .run(new Date().toISOString());

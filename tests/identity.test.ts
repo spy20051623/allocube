@@ -1,3 +1,5 @@
+import { ReportStore } from "../server/report-store";
+import { reportDate } from "../src/shared/reports";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -1499,12 +1501,12 @@ describe("用户身份与审批生命周期", () => {
   });
 
   it("普通用户可以打开使用统计，但只能看到有权限机器的数据", async () => {
+    const store = new ReportStore(dbModule.db);
+    store.settleDay(store.state()!.active_version, reportDate());
     const userCookie = await loginCookie("更新用户名");
     const response = await app.inject({
       method: "GET",
-      url: `/api/v1/admin/report?from=${encodeURIComponent(
-        new Date(Date.now() + 60 * 60_000).toISOString()
-      )}&to=${encodeURIComponent(new Date(Date.now() + 240 * 60_000).toISOString())}`,
+      url: `/api/v1/admin/report?fromDate=${reportDate()}&toDate=${reportDate()}`,
       headers: { cookie: userCookie }
     });
     expect(response.statusCode).toBe(200);
@@ -2248,12 +2250,13 @@ describe("用户身份与审批生命周期", () => {
       )
     ).toBe(false);
 
+    const statistics = new ReportStore(dbModule.db);
+    statistics.requestRebuild(adminUser.id, Date.parse(now) + 2 * 86400000);
+    for (let i = 0; i < 1000 && statistics.step(Date.parse(now) + 2 * 86400000); i++) { /* settle fixtures */ }
     const report = await app.inject({
       method: "GET",
       url:
-        `/api/v1/admin/report?from=${encodeURIComponent(
-          new Date(Date.now() - 3 * 60 * 60_000).toISOString()
-        )}&to=${encodeURIComponent(now)}&machineId=${machine.id}`,
+        `/api/v1/admin/report?fromDate=${reportDate(Date.parse(now) - 3 * 60 * 60_000)}&toDate=${reportDate(Date.parse(now))}&machineId=${machine.id}`,
       headers: { cookie: adminCookie }
     });
     expect(report.statusCode).toBe(200);

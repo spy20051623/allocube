@@ -1,6 +1,9 @@
-export const FINAL_SCHEMA_VERSION = 19;
+import { REPORT_SCHEMA_SQL } from "./report-schema.js";
+
+export const FINAL_SCHEMA_VERSION = 20;
 
 export const FINAL_SCHEMA_SQL = `
+  ${REPORT_SCHEMA_SQL}
   CREATE TABLE schema_migrations (
     version INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL

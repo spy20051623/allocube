@@ -1,3 +1,5 @@
+import { ReportStore } from "../server/report-store";
+import { reportDate } from "../src/shared/reports";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -779,7 +781,10 @@ describe("通用资源配置", () => {
       startAt,
       endAt
     }]);
-    const query = `from=${encodeURIComponent(new Date(Date.now() - 60_000).toISOString())}&to=${encodeURIComponent(new Date(Date.now() + 2 * 3_600_000).toISOString())}&machineId=${machineId}`;
+    const store = new ReportStore(dbModule.db);
+    const day = reportDate(Date.parse(startAt));
+    store.settleDay(store.state()!.active_version, day);
+    const query = `fromDate=${day}&toDate=${day}&machineId=${machineId}`;
     const report = await app.inject({
       method: "GET",
       url: `/api/v1/admin/report?${query}`,
@@ -787,7 +792,7 @@ describe("通用资源配置", () => {
     });
     expect(report.statusCode).toBe(200);
     expect(report.json().summary.reservedMinutes).toBe(60);
-    expect(report.json().groups[0].resourceSummary).toContain("逻辑核 · 0–1");
+    expect(report.json().groups.find((row: { resourceGroupId: string }) => row.resourceGroupId === reusedGroupId).resourceSummary).toContain("逻辑核 · 0–1");
     expect(report.json().users[0]).not.toHaveProperty("coreMinutes");
 
     const csv = await app.inject({

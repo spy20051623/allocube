@@ -86,5 +86,20 @@
   "重新启用系统公告": "Re-enable system announcement",
   "资料修改待审核": "Profile update pending review",
   "资料修改审核状态更新": "Profile review updated",
-  "资料修改已提交审核": "Profile update submitted for review"
+  "资料修改已提交审核": "Profile update submitted for review",
+  "全部重新统计": "Recalculate all",
+  "重新统计中": "Recalculating",
+  "正在核对任务状态": "Checking task status",
+  "重新统计失败，原统计结果仍可使用": "Recalculation failed. Previous statistics remain available.",
+  "将按现存记录重新统计全部机器和历史日期，不受当前筛选影响。期间旧统计仍可使用，完成后统一替换。": "Recalculate all machines and historical dates from current records, regardless of the selected filters. Previous statistics remain available until the new results are complete.",
+  "开始重新统计": "Start recalculation",
+  "统计截至 {{date}}": "Statistics through {{date}}",
+  "正在加载统计": "Loading statistics",
+  "统计准备中": "Preparing statistics",
+  "所选范围有 {{count}} 天待统计": "{{count}} days in this range are pending",
+  "查看待统计日期": "View pending dates",
+  "全部重新统计完成": "Recalculation complete",
+  "提交结果未确认，请核对任务状态后再操作": "Submission outcome is uncertain. Check the task status before trying again.",
+  "发起全部重新统计": "Requested full statistics recalculation",
+  "全部重新统计失败": "Full statistics recalculation failed"
 }

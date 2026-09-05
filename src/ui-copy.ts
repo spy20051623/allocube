@@ -56,6 +56,9 @@ export function reservationStatusClass(
 export function auditActionLabel(action: string) {
   return (
     {
+      REPORT_REBUILD_REQUEST: tr("发起全部重新统计"),
+      REPORT_REBUILD_SUCCEEDED: tr("全部重新统计完成"),
+      REPORT_REBUILD_FAILED: tr("全部重新统计失败"),
       USER_REGISTER: tr("提交注册申请"),
       USER_LOGIN: tr("用户登录"),
       USER_STATUS_CHANGE: tr("更改用户状态"),

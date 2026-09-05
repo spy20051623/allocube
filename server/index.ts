@@ -1,3 +1,4 @@
+import { startReportScheduler } from "./report-scheduler.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
@@ -466,7 +467,11 @@ if (passwordReminder) {
   app.log.warn("Administrator 仍在使用初始化或恢复密码，建议尽快修改");
 }
 
+let stopReports: (() => Promise<void>) | undefined;
+app.addHook("onClose", async () => { await stopReports?.(); });
 await app.listen({
   host: config.host,
   port: config.port
 });
+
+stopReports = startReportScheduler(config.databasePath, app.log);

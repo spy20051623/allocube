@@ -161,6 +161,34 @@ async function main() {
     });
     if (emptyBatch.status !== 400) throw new Error("批量取消接口没有拒绝空集合");
 
+    const rebuildUrl = `${origin}/api/v1/admin/report/rebuild`;
+    const noCsrfRebuild = await fetch(rebuildUrl, {
+      method: "POST", headers: { cookie, origin, "content-type": "application/json" }, body: "{}"
+    });
+    if (noCsrfRebuild.status !== 403) throw new Error("全量统计重算未校验 CSRF");
+    const rebuild = await fetch(rebuildUrl, {
+      method: "POST", headers: { cookie, origin, "content-type": "application/json", "x-csrf-token": loginBody.csrfToken }, body: "{}"
+    });
+    const rebuildBody = await rebuild.json();
+    if (rebuild.status !== 202 || !rebuildBody.job?.id) throw new Error("无法发起全量统计重算");
+    let completedReportJob;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const status = await fetch(rebuildUrl, { headers: { cookie } });
+      const { job } = await status.json();
+      if (job?.status === "FAILED") throw new Error("生产 Worker 统计重算失败");
+      if (job?.status === "SUCCEEDED") { completedReportJob = job; break; }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!completedReportJob) throw new Error("生产 Worker 未完成统计重算");
+    const statisticsQuery = new URLSearchParams({ fromDate: completedReportJob.toDate, toDate: completedReportJob.toDate });
+    const statistics = await fetch(`${origin}/api/v1/admin/report?${statisticsQuery}`, { headers: { cookie } });
+    const statisticsBody = await statistics.json();
+    if (statistics.status !== 200 || !statisticsBody.coverage?.version || statisticsBody.summary?.reservationCount !== 0) {
+      throw new Error("每日统计查询契约不正确");
+    }
+    const statisticsCsv = await fetch(`${origin}/api/v1/admin/report.csv?${statisticsQuery}&locale=en`, { headers: { cookie } });
+    if (statisticsCsv.status !== 200 || !(await statisticsCsv.text()).includes('"Machine","Resource group"')) throw new Error("统计 CSV 导出失败");
+
     const tokenCreation = await fetch(`${origin}/api/v1/auth/api-tokens`, {
       method: "POST",
       headers: {

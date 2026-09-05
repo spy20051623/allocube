@@ -116,19 +116,30 @@ Store instance secrets separately from the backup set. Before restoring, stop Al
 3. Build and start the new version.
 4. Check `/health`, login, "Calendar", feedback and private images, notification badges, write operations, email delivery, and the backup manifest.
 
-The current database schema version is 19. Startup applies supported migrations automatically. Recent changes are:
+The current database schema version is 20. Startup applies supported migrations automatically. Recent changes are:
 
 | Version | Change |
 |---|---|
 | 17 | Feedback tickets and private images |
 | 18 | Translation templates and parameters for in-app notifications |
 | 19 | Deduplication records for overdue administrator review emails |
+| 20 | Daily usage statistics, report versions, and full recalculation tasks |
 
-The Reservations redesign and production bootstrap-password fix add no schema changes. After upgrading, check atomic editing-sequence submissions, redirects from old `/reservations` links, and administrator review reminders. Existing instances do not need a bootstrap password variable, but operators must still check for legacy default passwords.
+The earlier Reservations redesign and production bootstrap-password fix did not add schema changes. After upgrading, check atomic editing-sequence submissions, redirects from old `/reservations` links, and administrator review reminders. Existing instances do not need a bootstrap password variable, but operators must still check for legacy default passwords.
 
 The internal `/api/v1/reservations/mine` endpoint now uses category queries, filters, and cursor pagination, defaulting to upcoming reservations only. Scripts calling the former internal endpoint require adaptation; prefer the official `/api/open/v1` API. This update does not change the official API contract.
 
 Older Allocube versions may not understand a newer database schema. For example, schema version 17 added feedback data and private images. To roll back, restore the pre-upgrade database, matching image backup, instance secrets, and old application image together. Replacing only the application files is not enough.
+
+## Daily statistics worker
+
+After the version 20 migration, HTTP starts before a single background Worker backfills history using its own SQLite connection. No system cron is required. It checks the 06:00 Beijing settlement boundary every minute, catches up after downtime, and retries routine failures after five minutes without blocking HTTP startup.
+
+Snapshots, day completion markers, and rebuild progress reside in SQLite and are included in existing backups. Restarts and restored databases resume unfinished dates without double counting. Full recalculation builds a separate version and switches only after completion; failures retain previous results. Obsolete versions are cleaned up day by day. Allow additional disk space for both versions during rebuilding.
+
+Logs include completed dates, durations, and errors; audits record the full recalculation requester, range, and outcome. Statistics do not change calendar revisions or send reservation notifications. Do not delete statistics tables to recover from errors. Check disk space, permissions, and logs, then request another full recalculation from Usage statistics.
+
+Internal `/api/v1/admin/report` and `.csv` now accept inclusive `fromDate` and `toDate` values (`YYYY-MM-DD`), replacing ISO timestamp parameters. Internal rebuild and status endpoints are added; the official `/api/open/v1` contract is unchanged. Back up before upgrading; rollback requires the complete version 19 backup and matching application.
 
 ## Administrator password recovery
 

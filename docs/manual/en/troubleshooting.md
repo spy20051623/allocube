@@ -79,6 +79,12 @@ See the live OpenAPI reference in [Official API](/docs/api) for each endpoint's 
 
 Check whether the log reports a missing or invalid `BOOTSTRAP_ADMIN_PASSWORD`, and confirm `NODE_ENV=production`. Direct startup reads `.env` from the working directory; Docker Compose uses `.env.production`. Correct the configuration and restart with the same database directory, keeping any empty schema and instance secrets. Existing accounts require an in-app password change or the server-side recovery command.
 
+## Missing statistics dates or failed recalculation
+
+Today is excluded. Before 06:00 Beijing time, statistics normally extend through two days ago; afterward, through yesterday. Initial backfill or recovery after downtime can leave pending dates. These are not zero-usage days. Wait for completion and refresh before exporting CSV; Refresh does not recalculate data.
+
+Only system administrators can start a full recalculation beside the title. Previous statistics remain available after failure. Check server logs, disk space, and database permissions before retrying. Closing the page does not cancel a task, and restarting the service resumes unfinished work. If submission encounters a network error, check task status before trying again.
+
 ## Health check failure
 
 `/health` returning `503` typically indicates the database is unavailable. Check the database path, file permissions, disk space, and whether the SQLite file is located on a local persistent disk. Before recovery, preserve the failure state and verify backups.

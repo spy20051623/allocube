@@ -33,11 +33,11 @@ Reservations opens from the calendar title. The Ended section includes cancelled
 
 ## Editing sequence changed or submission result uncertain
 
-An administrator adjustment, cancellation, or an original reservation ending invalidates the sequence. Draft inputs remain available, but discard the edit and select current originals after reviewing them. Explicit conflict or validation failures apply none of the batch. If the request has a network failure, inspect the latest records before deciding whether it committed; do not treat an uncertain result as a definite failure and immediately retry.
+An administrator adjustment, cancellation, or an original reservation ending invalidates the sequence. Draft inputs remain available, but discard the edit and select current originals after reviewing them. Changes to originals, permission failures, and other validation failures apply none of the batch; availability conflicts in new slots are adjusted automatically. If the request has a network failure, inspect the latest records before deciding whether it committed; do not treat an uncertain result as a definite failure and immediately retry.
 
 ## Conflict when submitting a reservation
 
-Resources can change between preview and submission. If the server reports a conflict, refresh the calendar and select new time slots from the latest data. Do not keep resubmitting an old draft.
+Resources can change between preview and submission. The calendar automatically adjusts draft availability, and submission rechecks and adjusts within the write transaction. Notifications report the remaining or saved count. If no slots remain, nothing is created and originals in the editing sequence stay unchanged; add other time slots. A network error means checks are temporarily unavailable, not that drafts should be deleted or originals have changed.
 
 ## Reservation changed due to maintenance
 
@@ -88,3 +88,7 @@ Only system administrators can start a full recalculation at the top right of th
 ## Health check failure
 
 `/health` returning `503` typically indicates the database is unavailable. Check the database path, file permissions, disk space, and whether the SQLite file is located on a local persistent disk. Before recovery, preserve the failure state and verify backups.
+
+## Data updated while editing outside the calendar
+
+Another page, device, or operation changed the data between loading and submitting the form. Untouched forms synchronize automatically; edited drafts stay intact. Confirm overwrite on submission or cancel to continue editing, without automatically reloading the draft. Refresh the browser manually to view the latest content. Overwrite does not bypass deletion, completed approvals, permissions, unique names, or resource capacity rules. An uncertain outcome may mean the server already saved the change; the page will not replay it. Refresh manually to check.

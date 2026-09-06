@@ -491,5 +491,8 @@
   "编辑序列中的占用已结束，请重新核对": "A reservation in the editing sequence has ended. Review the selection again.",
   "不能同时使用单条和批量编辑参数": "Single and multiple replacement parameters cannot be combined.",
   "统计日期无效": "Invalid statistics date",
-  "统计结束日期不能早于开始日期": "The end date must not precede the start date"
+  "统计结束日期不能早于开始日期": "The end date must not precede the start date",
+  "自动调整后没有可用时段，未创建占用": "No available time slots remain after automatic adjustment. No reservations were created.",
+  "请使用批量编辑参数提交自动调整": "Use the batch editing parameters for automatic adjustment.",
+  "数据已更新，请确认是否继续修改": "Data has changed. Confirm whether to continue with your changes."
 }

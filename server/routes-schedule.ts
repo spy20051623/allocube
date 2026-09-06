@@ -1,4 +1,4 @@
-import { replacementSelectionSchema, previewMultipleReplacement, replaceMultipleReservations } from "./scheduling.js";
+import { previewAvailableSegments, replacementSelectionSchema, previewMultipleReplacement, replaceMultipleReservations } from "./scheduling.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -516,43 +516,47 @@ export function registerScheduleRoutes(
   app.post("/api/v1/reservations/preview", async (request, reply) => {
     const auth = requireAuth(request, reply);
     if (!auth) return;
-    const { segments, replaceReservationId, replaceReservations } = z
+    const { segments, replaceReservationId, replaceReservations, autoAdjust } = z
       .object({
         segments: z.array(z.unknown()).min(1).max(100),
         replaceReservationId: z.string().uuid().optional(),
-        replaceReservations: replacementSelectionSchema.optional()
+        replaceReservations: replacementSelectionSchema.optional(),
+        autoAdjust: z.boolean().optional().default(false)
       })
       .parse(request.body);
     assertUserCanAccessSegments(auth.user.id, segments);
+    if (autoAdjust && replaceReservationId) throw new BusinessError("请使用批量编辑参数提交自动调整");
     if (replaceReservationId && replaceReservations) throw new BusinessError("不能同时使用单条和批量编辑参数");
-    const items = replaceReservations ? previewMultipleReplacement(auth.user.id, replaceReservations, segments) : replaceReservationId
+    const items = replaceReservations ? previewMultipleReplacement(auth.user.id, replaceReservations, segments, autoAdjust) : replaceReservationId
         ? previewReplacementSegments(
             auth.user.id,
             replaceReservationId,
             segments
           )
-        : previewSegments(segments);
+        : autoAdjust ? previewAvailableSegments(segments) : previewSegments(segments);
     return { items, serverNow: nowIso() };
   });
 
   app.post("/api/v1/reservations/batch", async (request, reply) => {
     const auth = requireAuth(request, reply);
     if (!auth) return;
-    const { segments, replaceReservationId, replaceReservations } = z
+    const { segments, replaceReservationId, replaceReservations, autoAdjust } = z
       .object({
         segments: z.array(z.unknown()).min(1).max(100),
         replaceReservationId: z.string().uuid().optional(),
-        replaceReservations: replacementSelectionSchema.optional()
+        replaceReservations: replacementSelectionSchema.optional(),
+        autoAdjust: z.boolean().optional().default(false)
       })
       .parse(request.body);
+    if (autoAdjust && replaceReservationId) throw new BusinessError("请使用批量编辑参数提交自动调整");
     if (replaceReservationId && replaceReservations) throw new BusinessError("不能同时使用单条和批量编辑参数");
-    const result = replaceReservations ? replaceMultipleReservations(auth.user.id, replaceReservations, segments) : replaceReservationId
+    const result = replaceReservations ? replaceMultipleReservations(auth.user.id, replaceReservations, segments, autoAdjust) : replaceReservationId
       ? replaceReservationBatch(
           auth.user.id,
           replaceReservationId,
           segments
         )
-      : commitReservationBatch(auth.user.id, segments);
+      : commitReservationBatch(auth.user.id, segments, undefined, autoAdjust);
     publishRevision(result.revision);
     return reply.code(201).send(result);
   });

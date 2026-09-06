@@ -351,6 +351,34 @@ export function assertUserCanAccessSegments(userId: string, rawSegments: unknown
   }
 }
 
+/** Internal calendar flow: elapsed slots may disappear, but malformed inputs still fail. */
+export function previewAvailableSegments(rawSegments: unknown[], exclude?: string | readonly string[], minute = currentMinuteIso()) {
+  const minimum = getSettings().minBookingMinutes;
+  return rawSegments.map(raw => {
+    const parsed = segmentSchema.parse(raw);
+    if (parsed.endAt <= parsed.startAt) throw new BusinessError("结束时间必须晚于开始时间");
+    const input = normalizeSegmentStart(parsed, minute);
+    if ((Date.parse(input.endAt) - Date.parse(input.startAt)) / 60_000 < minimum) {
+      return { input, available: false, conflicts: [{ type: "RESOURCE_UNAVAILABLE" as const,
+        startAt: parsed.startAt, endAt: parsed.endAt, label: `占用时间至少需要 ${minimum} 分钟` }], splitSegments: [] };
+    }
+    return previewSegments([input], exclude, minute)[0];
+  });
+}
+
+function availableSegments(items: ReservationPreviewItem[]) {
+  const segments = items.flatMap(item => item.available ? [item.input] : item.splitSegments);
+  if (!segments.length) throw new BusinessError("自动调整后没有可用时段，未创建占用", 409, items, "NO_AVAILABLE_SEGMENTS");
+  if (segments.length > 100) throw new BusinessError("一次最多提交 100 条占用", 400, items);
+  validateNoInternalOverlap(segments);
+  return segments;
+}
+
+function segmentsAdjusted(before: ReservationSegmentInput[], after: ReservationSegmentInput[]) {
+  return before.length !== after.length || before.some((row, index) =>
+    row.startAt !== after[index].startAt || row.endAt !== after[index].endAt || row.resourceGroupId !== after[index].resourceGroupId);
+}
+
 export function previewReservationBatch(userId: string, rawSegments: unknown[]) {
   if (!rawSegments.length || rawSegments.length > 100) {
     throw new BusinessError("一次最多提交 100 条占用");
@@ -613,7 +641,8 @@ function insertReservationBatch(
 export function commitReservationBatch(
   userId: string,
   rawSegments: unknown[],
-  auditContext?: ApiAuditContext
+  auditContext?: ApiAuditContext,
+  autoAdjust = false
 ) {
   if (!rawSegments.length || rawSegments.length > 100) {
     throw new BusinessError("一次最多提交 100 条占用");
@@ -623,16 +652,17 @@ export function commitReservationBatch(
 
   return withImmediateTransaction(() => {
     const serverMinute = currentMinuteIso();
-    const segments = parsedSegments.map((segment) =>
+    let segments = parsedSegments.map((segment) =>
       normalizeSegmentStart(segment, serverMinute)
     );
-    segments.forEach((segment) =>
+    if (!autoAdjust) segments.forEach((segment) =>
       validateSegmentTimes(segment, serverMinute)
     );
-    validateNoInternalOverlap(segments);
+    validateNoInternalOverlap(autoAdjust ? parsedSegments : segments);
     assertUserCanAccessSegments(userId, segments);
-    const preview = previewSegments(segments, undefined, serverMinute);
-    if (preview.some((item) => !item.available)) {
+    const preview = autoAdjust ? previewAvailableSegments(parsedSegments, undefined, serverMinute) : previewSegments(segments, undefined, serverMinute);
+    if (autoAdjust) segments = availableSegments(preview) as typeof segments;
+    else if (preview.some((item) => !item.available)) {
       throw new BusinessError("资源可用情况已更新，请根据最新结果重新确认", 409, preview);
     }
     const { batchId, reservations } = insertReservationBatch(
@@ -642,7 +672,7 @@ export function commitReservationBatch(
       auditContext
     );
     const revision = bumpScheduleRevision();
-    return { batchId, reservations, revision, serverNow: nowIso() };
+    return { batchId, reservations, revision, serverNow: nowIso(), ...(autoAdjust ? { adjusted: segmentsAdjusted(parsedSegments, segments) } : {}) };
   });
 }
 
@@ -755,7 +785,7 @@ export const replacementSelectionSchema = z.array(z.object({
   message: "不能重复选择同一条占用"
 });
 
-function prepareMultipleReplacement(userId: string, rawSelection: unknown, rawSegments: unknown[]) {
+function prepareMultipleReplacement(userId: string, rawSelection: unknown, rawSegments: unknown[], autoAdjust = false) {
   const selection = replacementSelectionSchema.parse(rawSelection);
   const parsed = z.array(segmentSchema).min(1).max(100).parse(rawSegments);
   const now = nowIso(), minute = currentMinuteIso(new Date(now).getTime());
@@ -766,21 +796,23 @@ function prepareMultipleReplacement(userId: string, rawSelection: unknown, rawSe
     return row;
   });
   const segments = parsed.map(segment => normalizeSegmentStart(segment, minute));
-  segments.forEach(segment => validateSegmentTimes(segment, minute));
-  validateNoInternalOverlap(segments);
+  if (!autoAdjust) segments.forEach(segment => validateSegmentTimes(segment, minute));
+  validateNoInternalOverlap(autoAdjust ? parsed : segments);
   assertUserCanAccessSegments(userId, segments);
-  const items = previewSegments(segments, selection.map(item => item.id), minute);
-  return { originals, segments, items, now, minute };
+  const items = autoAdjust ? previewAvailableSegments(parsed, selection.map(item => item.id), minute) : previewSegments(segments, selection.map(item => item.id), minute);
+  return { originals, segments, parsed, items, now, minute };
 }
 
-export function previewMultipleReplacement(userId: string, selection: unknown, segments: unknown[]) {
-  return withImmediateTransaction(() => prepareMultipleReplacement(userId, selection, segments).items);
+export function previewMultipleReplacement(userId: string, selection: unknown, segments: unknown[], autoAdjust = false) {
+  return withImmediateTransaction(() => prepareMultipleReplacement(userId, selection, segments, autoAdjust).items);
 }
 
-export function replaceMultipleReservations(userId: string, selection: unknown, rawSegments: unknown[]) {
+export function replaceMultipleReservations(userId: string, selection: unknown, rawSegments: unknown[], autoAdjust = false) {
   return withImmediateTransaction(() => {
-    const { originals, segments, items, now, minute } = prepareMultipleReplacement(userId, selection, rawSegments);
-    if (items.some(item => !item.available)) {
+    const prepared = prepareMultipleReplacement(userId, selection, rawSegments, autoAdjust);
+    const { originals, items, now, minute } = prepared;
+    const segments = autoAdjust ? availableSegments(items) : prepared.segments;
+    if (!autoAdjust && items.some(item => !item.available)) {
       throw new BusinessError("资源可用情况已更新，原占用保持不变，请重新确认", 409, items);
     }
     for (const original of originals) {
@@ -801,7 +833,7 @@ export function replaceMultipleReservations(userId: string, selection: unknown, 
         newReservationIds: created.reservations.map(row => row.id), segmentCount: segments.length
       });
     }
-    return { ...created, replacedIds, revision: bumpScheduleRevision(), serverNow: nowIso() };
+    return { ...created, replacedIds, revision: bumpScheduleRevision(), serverNow: nowIso(), ...(autoAdjust ? { adjusted: segmentsAdjusted(prepared.parsed, segments) } : {}) };
   });
 }
 

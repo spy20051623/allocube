@@ -337,3 +337,68 @@ describe("本人占用管理", () => {
     expect(wrongCursor.statusCode).toBe(400);
   });
 });
+
+
+describe("日历提交自动保留可用片段", () => {
+  const post = (segments: unknown[], replaceReservations?: unknown[], autoAdjust = true) => app.inject({ method: "POST", url: "/api/v1/reservations/batch", headers: { cookie: session }, payload: { segments, replaceReservations, autoAdjust } });
+  const segment = (start: number, end: number) => ({ resourceGroupId: groupId, startAt: iso(start), endAt: iso(end), title: "", purpose: "", note: "Keep notes" });
+  it("预览之后新增占用和维护，提交事务内自动拆分整机占用", async () => {
+    const wanted = { ...segment(9000,9120), scope: "MACHINE", machineId };
+    const preview = await app.inject({method:"POST",url:"/api/v1/reservations/preview",headers:{cookie:session},payload:{segments:[wanted],autoAdjust:true}});
+    expect(preview.json().items[0].available).toBe(true);
+    const foreign = insert(9040,9060,{user:otherId});
+    database.db.prepare(`INSERT INTO resource_unavailability(id,machine_id,resource_group_id,kind,start_at,end_at,reason,created_by,created_at)
+      VALUES(?,?,?,'PLANNED',?,?,'Maintenance',?,?)`).run(randomUUID(),machineId,groupId,iso(9080),iso(9100),userId,iso(0));
+    expect((await post([wanted],undefined,false)).statusCode).toBe(409);
+    publish.mockClear(); const done = await post([wanted]);
+    expect(done.statusCode,done.body).toBe(201); expect(done.json().adjusted).toBe(true);
+    expect(done.json().reservations.map((r:{startAt:string;endAt:string})=>[r.startAt,r.endAt])).toEqual([[iso(9000),iso(9040)],[iso(9060),iso(9080)],[iso(9100),iso(9120)]]);
+    expect(done.json().reservations.every((r:{scope:string;note:string})=>r.scope==='MACHINE'&&r.note==='Keep notes')).toBe(true);
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(database.db.prepare('SELECT status FROM reservations WHERE id=?').get(foreign)).toEqual({status:'CONFIRMED'});
+  });
+  it("全部不可用时不释放任何原占用，不写入批次、审计或版本", async () => {
+    const original=await detail(insert(10000,10060)); insert(10100,10160,{user:otherId});
+    const counts=stateCounts(); publish.mockClear();
+    const failed=await post([segment(10100,10160)],[{id:original.id,stateToken:original.stateToken}]);
+    expect(failed.statusCode).toBe(409); expect(failed.json().code).toBe('NO_AVAILABLE_SEGMENTS');
+    expect(stateCounts()).toEqual(counts);expect(publish).not.toHaveBeenCalled();expect((await detail(original.id)).stateToken).toBe(original.stateToken);
+  });
+  it("编辑时自动调整新时段，原记录与全部新片段原子替换", async () => {
+    const original=await detail(insert(10200,10260));insert(10320,10340,{user:otherId});
+    const result=await post([segment(10300,10360)],[{id:original.id,stateToken:original.stateToken}]);
+    expect(result.statusCode,result.body).toBe(201);expect(result.json().reservations).toHaveLength(2);expect((await detail(original.id)).status).toBe('CANCELLED');
+    const stale=await detail(insert(10400,10460));database.db.prepare("UPDATE reservations SET note='Remote change' WHERE id=?").run(stale.id);
+    const counts=stateCounts();expect((await post([segment(10500,10560)],[{id:stale.id,stateToken:stale.stateToken}])).statusCode).toBe(409);expect(stateCounts()).toEqual(counts);
+  });
+  it("自动拆分后的写入失败回滚旧记录与已写片段", async () => {
+    const original=await detail(insert(10600,10660));insert(10720,10740,{user:otherId});
+    const counts=stateCounts();
+    database.db.exec(`CREATE TEMP TRIGGER fail_auto_adjust BEFORE INSERT ON reservations WHEN NEW.start_at='${iso(10740)}' BEGIN SELECT RAISE(ABORT,'injected failure'); END`);
+    try {
+      const result=await post([segment(10700,10760)],[{id:original.id,stateToken:original.stateToken}]);
+      expect(result.statusCode).toBe(500);expect(stateCounts()).toEqual(counts);expect((await detail(original.id)).stateToken).toBe(original.stateToken);
+      expect(database.db.prepare('SELECT COUNT(*) AS n FROM reservations WHERE start_at=?').get(iso(10700))).toEqual({n:0});
+    } finally {database.db.exec('DROP TRIGGER fail_auto_adjust');}
+  });
+  it("提交中跨过结束时间时剔除过期片段，并保存其他可用片段", async () => {
+    const result=await post([segment(-10,-1),segment(10800,10860)]);
+    expect(result.statusCode,result.body).toBe(201);expect(result.json().adjusted).toBe(true);expect(result.json().reservations).toHaveLength(1);
+  });
+  it("自动丢弃短于最短时长的可用碎片", async () => {
+    const minimum = database.getSettings().minBookingMinutes;
+    database.db.prepare("UPDATE settings SET value='5' WHERE key='min_booking_minutes'").run();
+    try {
+      insert(14002,14008,{user:otherId});
+      const result=await post([segment(14000,14020)]);
+      expect(result.statusCode,result.body).toBe(201);
+      expect(result.json().reservations.map((row:{startAt:string;endAt:string})=>[row.startAt,row.endAt])).toEqual([[iso(14008),iso(14020)]]);
+    } finally {database.db.prepare("UPDATE settings SET value=? WHERE key='min_booking_minutes'").run(String(minimum));}
+  });
+  it("自动拆分不截断超过100条的结果", async () => {
+    const segments=[];
+    for(let i=0;i<51;i++){const start=11000+i*5;segments.push(segment(start,start+3));insert(start+1,start+2,{user:otherId});}
+    const counts=stateCounts();const result=await post(segments);
+    expect(result.statusCode,result.body).toBe(400);expect(stateCounts()).toEqual(counts);
+  });
+});

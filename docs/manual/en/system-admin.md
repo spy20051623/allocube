@@ -48,6 +48,11 @@ Modifying global rules does not automatically rewrite existing reservations. The
 
 ICP and public-security filing numbers can also be configured in System settings. Valid values appear in the footer of authentication pages with links to their lookup pages; empty values are hidden.
 
+Settings synchronize changes from other pages or devices when there is no unsaved input. Drafts are retained while editing. If settings have changed when you submit, confirmation is required to overwrite the corresponding settings; cancelling returns to the draft. Refresh the browser manually to see the latest settings; refreshing discards unsaved input. Saves with an uncertain network outcome are not replayed automatically. Refresh manually to check the result.
+
+
+Outside the calendar, machine details, resource configuration, announcements, and feedback use the same conflict handling: untouched forms synchronize, edited forms retain drafts, and stale submissions require overwrite confirmation. Confirmation applies the submitted data while preserving authorization, field, capacity, and workflow checks. Deleted objects, processed applications, and read-only feedback cannot be forced through. Approvals, enable/disable actions, and maintenance also require confirmation when their version or affected reservations have changed.
+
 ## System announcements
 
 Announcements display important messages to everyone who can log in. Under "Admin → Announcements", you can create, edit, preview, publish, and unpublish them. The default list shows published announcements; enable "Show archived" to view and republish older ones.

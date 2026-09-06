@@ -26,9 +26,6 @@
   "更改用户状态": "Change user status",
   "公告标题": "Announcement title",
   "公告内容": "Announcement content",
-  "公告已被其他管理员撤下。当前草稿已保留；核对后再次提交将重新启用公告。": "Another administrator unpublished this announcement. Your draft is still here; review it before publishing again.",
-  "公告已被其他管理员更新。当前草稿已保留；核对后再次提交将覆盖最新版本。": "The announcement has been updated by another administrator. Your current draft is saved; submitting again after review will overwrite the latest version.",
-  "公告已不存在，请关闭编辑器后刷新列表。": "The announcement no longer exists. Please close the editor and refresh the list.",
   "公告预览": "Announcement preview",
   "共 {{v0}} 位管理员，查看完整名单": "View all {{v0}} administrators",
   "管理": "Admin",
@@ -99,8 +96,12 @@
   "提交结果未确认，请核对任务状态后再操作": "Submission outcome is uncertain. Check the task status before trying again.",
   "发起全部重新统计": "Requested full statistics recalculation",
   "全部重新统计失败": "Full statistics recalculation failed",
-  "设置已更新，请重新加载后核对。未保存的内容已保留。": "Settings changed. Reload to review them. Your unsaved changes have been kept.",
-  "重新加载将丢弃未保存的设置，是否继续？": "Reloading will discard unsaved settings. Continue?",
   "设置加载失败": "Could not load settings",
-  "机器资料已变化，请重新打开编辑窗口核对。未保存的内容已保留。": "Machine details changed. Reopen the editor to review them. Your unsaved input has been kept."
+  "正在保存，请稍候": "Saving, please wait",
+  "设置读取失败，正在重试。已有内容和输入已保留。": "Could not read settings. Retrying. Existing content and input have been kept.",
+  "请刷新页面后核对设置": "Please refresh the page and check the settings.",
+  "操作结果未确认，请手动刷新页面后核对。输入已保留。": "The result is unconfirmed. Refresh the page manually to check. Your input has been kept.",
+  "设置已更新": "Settings updated",
+  "设置已在其他页面或设备更新。是否用本次提交的内容覆盖对应设置？取消将保留当前草稿。": "Settings have changed on another page or device. Overwrite the corresponding settings with this submission? Cancel to keep your draft.",
+  "确认覆盖": "Confirm overwrite"
 }

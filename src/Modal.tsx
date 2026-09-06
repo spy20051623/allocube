@@ -41,6 +41,9 @@ export function Modal({
       (preferred ?? first)?.focus();
     });
     const handleKeyboard = (event: KeyboardEvent) => {
+      // A confirmation above an editor owns Escape/Tab; do not close both dialogs.
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      if (dialogs.item(dialogs.length - 1) !== dialogRef.current) return;
       if (event.key === "Escape") {
         event.preventDefault();
         onCloseRef.current();

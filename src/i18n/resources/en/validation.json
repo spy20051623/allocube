@@ -41,7 +41,6 @@
   "公告保存失败": "Failed to save announcement",
   "公告撤下失败": "Could not unpublish announcement",
   "公告加载失败": "Failed to load announcement",
-  "公告状态已变化，但最新状态加载失败，请关闭编辑器后重试。": "Announcement status changed, but the latest status failed to load. Please close the editor and try again.",
   "候选用户加载失败": "Failed to load candidate users",
   "机器加载失败": "Failed to load machine",
   "机器列表加载失败": "Failed to load machine list",

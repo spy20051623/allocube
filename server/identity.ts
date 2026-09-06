@@ -246,7 +246,8 @@ export function deleteUnapprovedUser(
   userId: string,
   reasonCode: string,
   actorUserId: string | null,
-  expectedRevision?: number
+  expectedRevision?: number,
+  deferCheckpoint = false
 ) {
   const result = withImmediateTransaction(() => {
     const user = db
@@ -282,6 +283,6 @@ export function deleteUnapprovedUser(
     db.prepare("DELETE FROM users WHERE id = ?").run(userId);
     return { userId };
   });
-  checkpointSensitiveDeletion();
+  if (!deferCheckpoint) checkpointSensitiveDeletion();
   return result;
 }

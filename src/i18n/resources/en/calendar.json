@@ -345,5 +345,11 @@
   "编辑序列中的记录已变化，请放弃本次编辑后重新选择。": "Reservations in the editing sequence have changed. Discard this edit and select them again.",
   "定位到日历": "Locate in calendar",
   "移出编辑序列": "Remove from editing sequence",
-  "该占用无法定位到日历": "This reservation cannot be located in the calendar."
+  "该占用无法定位到日历": "This reservation cannot be located in the calendar.",
+  "已自动调整占用草稿，保留 {{v0}} 个可用时段。": "Reservation drafts were automatically adjusted. {{v0}} available time slots remain.",
+  "已自动移除不可用时段，没有剩余可用时段。": "Unavailable time slots were automatically removed. No available time slots remain.",
+  "已自动调整并提交 {{v0}} 条资源占用": "Automatically adjusted and submitted {{v0}} reservations",
+  "暂时无法检查可用时段，正在重试。草稿已保留。": "Availability cannot be checked right now. Retrying; your drafts have been kept.",
+  "暂时无法核对原占用，正在重试。草稿已保留。": "Original reservations cannot be checked right now. Retrying; your drafts have been kept.",
+  "一次最多提交 100 条占用": "Maximum of 100 reservations can be submitted at once"
 }

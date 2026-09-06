@@ -7032,7 +7032,7 @@ textarea::placeholder {
   grid-column: 1 / -1;
 }
 
-.site-profile-footer {
+.settings-card-footer.site-profile-footer {
   justify-content: flex-end;
 }
 
@@ -9006,3 +9006,5 @@ body:has(.feedback-admin-detail-frame) {
   .toolbar { overflow-x: auto; overflow-y: hidden; }
   .calendar-layout.composer-open { grid-template-columns: minmax(0, 1fr); }
 }
+
+.editor-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }

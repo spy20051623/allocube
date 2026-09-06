@@ -1,4 +1,8 @@
+import { canSyncDraft, claimEdit, hasUncertainEdit, markEditUncertain, EditCancelled } from "./edit-conflict";
+import { useEditConflict } from "./useEditConflict";
 import { useRealtimeRefresh } from "./useRealtimeRefresh";
+import { smtpConfigurationIsDirty, SettingsRequestGate, SettingsSaveCancelled, olderSettingsVersion, validateSettingsResponse } from "./settings-state";
+import { withRequestDeadline } from "./request-deadline";
 import { useUsageReport } from "./useUsageReport";
 import { latestReportDate, shiftReportDate } from "./shared/reports";
 import "./reports.css";
@@ -73,7 +77,6 @@ import {
   Settings,
   ShieldCheck,
   ShieldOff,
-  Sparkles,
   Trash2,
   UserCheck,
   UserMinus,
@@ -245,7 +248,7 @@ import {
   reservationTargetKey,
   snappedTimelineInstant,
   subtractBusyTimeRanges,
-  splitDrafts,
+  adjustDraftsToAvailability,
   timelineDragAutoScrollDelta,
   timelineNearbyHitIndexes,
   timelineWheelAction,
@@ -273,6 +276,7 @@ import type {
   Machine,
   NotificationItem,
   ReservationPreviewItem,
+  ReservationSegmentInput,
   ResourceAllocation,
   ResourceGroup,
   ResourcePool,
@@ -401,6 +405,7 @@ type ToastState = { kind: "success" | "error"; message: string } | null;
 type DialogTone = "default" | "danger";
 
 type ConfirmDialogOptions = {
+  signal?: AbortSignal;
   title: string;
   message: string;
   confirmLabel?: string;
@@ -469,6 +474,34 @@ function useAppDialog() {
   return value;
 }
 
+function useConflictApi() {
+  const dialog = useAppDialog();
+  const reasonPrompt = useRef<{ options: PromptDialogOptions; value: string } | null>(null);
+  const mutation = useEditConflict((impact, signal) => dialog.confirm({
+    signal,
+    title: tr("数据已更新"),
+    message: impact
+      ? tr("占用情况已变化。是否按最新影响范围执行本次操作？取消将保留当前输入。")
+      : tr("数据已在其他页面或设备更新。是否用本次提交的内容覆盖对应数据？取消将保留当前草稿。"),
+    confirmLabel: tr("确认覆盖"), tone: "danger"
+  }), async (options, signal) => {
+    if (typeof options.body !== "string" || !reasonPrompt.current) return null;
+    const body = JSON.parse(options.body);
+    if (typeof body.reason !== "string" || body.reason !== reasonPrompt.current.value) return null;
+    const prompt = reasonPrompt.current;
+    const value = await dialog.prompt({ ...prompt.options, initialValue: body.reason, signal });
+    if (value === null || signal.aborted) return null;
+    reasonPrompt.current = { options: prompt.options, value };
+    return { ...options, body: jsonBody({ ...body, reason: value }) };
+  });
+  const prompt = async (options: PromptDialogOptions) => {
+    const value = await dialog.prompt(options);
+    reasonPrompt.current = value === null ? null : { options, value };
+    return value;
+  };
+  return { ...mutation, dialog: { ...dialog, prompt } };
+}
+
 export function App() {
   useTranslation();
   const routeLocation = useLocation();
@@ -480,6 +513,8 @@ export function App() {
   const [bootstrap, setBootstrap] = useState<DashboardBootstrap | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<ToastState>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
   const [passwordReminderDismissed, setPasswordReminderDismissed] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [feedbackUnreadCount, setFeedbackUnreadCount] = useState(0);
@@ -493,26 +528,47 @@ export function App() {
   }, []);
 
   const notify = useCallback((kind: "success" | "error", message: string) => {
+    if (!message) return;
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ kind, message });
-    window.setTimeout(() => setToast(null), 3600);
+    toastTimer.current = setTimeout(() => setToast(null), 3600);
   }, []);
 
+  const sessionRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionRetryAttempt = useRef(0);
+  const sessionGeneration = useRef(0);
+  const [sessionReadError, setSessionReadError] = useState(false);
+  const [sessionRetryEpoch, setSessionRetryEpoch] = useState(0);
+  useEffect(() => () => { if (sessionRetry.current) clearTimeout(sessionRetry.current); }, []);
   const fetchLoadSession = useCallback(async (signal: AbortSignal) => {
+    if (sessionRetry.current) clearTimeout(sessionRetry.current);
+    sessionRetry.current = null;
+    const generation = sessionGeneration.current;
     try {
-      const value = await api<DashboardBootstrap>("/auth/me", { signal });
-      if (signal.aborted) return;
+      const value = await withRequestDeadline(readSignal => api<DashboardBootstrap>("/auth/me", { signal: readSignal, cache: "no-store" }), signal);
+      if (signal.aborted || generation !== sessionGeneration.current) return;
+      if (!value?.user || typeof value.user.id !== "string" || typeof value.csrfToken !== "string") throw new Error("Invalid session response");
       setCsrfToken(value.csrfToken);
       setBootstrap(value);
-    } catch {
-      if (signal.aborted) return;
-      setBootstrap(null);
-    } finally {
-      if (!signal.aborted) setLoading(false);
+      setLoading(false); setSessionReadError(false); sessionRetryAttempt.current = 0;
+    } catch (error) {
+      if (signal.aborted || generation !== sessionGeneration.current) return;
+      if (error instanceof ApiError && [401, 403].includes(error.status)) {
+        setBootstrap(null); setLoading(false); setSessionReadError(false);
+      } else {
+        // A transport failure says nothing about authentication. Keep valid drafts;
+        // an authority recheck keeps the protected UI hidden until it succeeds.
+        setSessionReadError(true);
+        const delay = [2000, 5000, 15000, 30000][Math.min(sessionRetryAttempt.current++, 3)];
+        sessionRetry.current = setTimeout(() => setSessionRetryEpoch(value => value + 1), delay);
+      }
     }
   }, []);
   const loadSession = useRealtimeRefresh(fetchLoadSession, ["session"], {
     enabled: !docsRoute && bootstrap?.user.status === "ACTIVE",
     onSecurity: change => {
+      sessionGeneration.current++;
+      if (sessionRetry.current) clearTimeout(sessionRetry.current);
       setCsrfToken("");
       if (change.sessionEnded) { setBootstrap(null); setLoading(false); }
       else setLoading(true);
@@ -521,6 +577,9 @@ export function App() {
 
   const acceptAuthenticatedSession = useCallback(
     async (value: DashboardBootstrap) => {
+      sessionGeneration.current++;
+      if (sessionRetry.current) clearTimeout(sessionRetry.current);
+      setSessionReadError(false); sessionRetryAttempt.current = 0;
       setCsrfToken(value.csrfToken);
       setBootstrap(value);
       setLoading(false);
@@ -546,7 +605,7 @@ export function App() {
       return;
     }
     void loadSession();
-  }, [docsRoute, loadSession]);
+  }, [docsRoute, loadSession, sessionRetryEpoch]);
 
   useEffect(() => {
     const ignoreNumberInputWheel = (event: WheelEvent) => {
@@ -661,7 +720,7 @@ export function App() {
   }
 
   if (loading || canonicalRedirect) {
-    return <LoadingScreen />;
+    return <LoadingScreen failed={sessionReadError} onRetry={() => void loadSession()} />;
   }
 
   const navigateAuth: AuthNavigate = (path, state = null, replace = false) => {
@@ -980,12 +1039,13 @@ function AnnouncementListPage() {
   );
 }
 
-function LoadingScreen() {
+function LoadingScreen({ failed = false, onRetry }: { failed?: boolean; onRetry?: () => void }) {
   return (
     <main className="boot-shell">
       <div className="boot-mark">A</div>
       <h1>Allocube</h1>
-      <p>{tr("正在载入机器资源与占用日历…")}</p>
+      <p>{failed ? tr("连接失败，正在重试") : tr("正在载入机器资源与占用日历…")}</p>
+      {failed && <button className="secondary-button" onClick={onRetry}>{tr("重试")}</button>}
     </main>
   );
 }
@@ -5548,6 +5608,9 @@ function CalendarPage({
   const addingEdit = useRef(false);
   const submittingRef = useRef(false);
   const [editingChanged, setEditingChanged] = useState(false);
+  const [editingCheckError, setEditingCheckError] = useState(false);
+  const editingRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editingRefreshRef = useRef<() => Promise<unknown>>(async () => undefined);
   const [submissionUncertain, setSubmissionUncertain] = useState(false);
   const [myReservationsOpen, setMyReservationsOpen] = useState(() => new URLSearchParams(routeLocation.searchStr).get("mine") === "1");
   const [pendingReservationLocation, setPendingReservationLocation] = useState<OwnReservation | null>(null);
@@ -5564,6 +5627,17 @@ function CalendarPage({
   const [previewByDraft, setPreviewByDraft] = useState<
     Map<string, ReservationPreviewItem>
   >(new Map());
+  const [previewReadError, setPreviewReadError] = useState(false);
+  const previewRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewRefreshRef = useRef<() => Promise<unknown>>(async () => undefined);
+  const draftSnapshot = useRef({ drafts, metadata, editingReservations, editingDraftTime });
+  draftSnapshot.current = { drafts, metadata, editingReservations, editingDraftTime };
+  const announceAdjustment = useCallback((count: number) => {
+    const message = count
+      ? tr("已自动调整占用草稿，保留 {{v0}} 个可用时段。", { v0: count })
+      : tr("已自动移除不可用时段，没有剩余可用时段。");
+    notify(count ? "success" : "error", message);
+  }, [notify]);
   const [previewing, setPreviewing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [dragPreview, setDragPreview] = useState<{
@@ -5903,9 +5977,9 @@ function CalendarPage({
         from: range.from,
         to: range.to
       });
-      const result = await api<TimelinePayload>(`/timeline?${query}`, {
-        signal: controller.signal
-      });
+      const result = await withRequestDeadline(readSignal => api<TimelinePayload>(`/timeline?${query}`, {
+        signal: readSignal
+      }), controller.signal);
       if (controller.signal.aborted || requestId !== requestIdRef.current) return;
       synchronizeServerClock(result.serverNow, requestStartedAt);
       timelineRef.current = result;
@@ -6244,6 +6318,7 @@ function CalendarPage({
     field: "startAt" | "endAt",
     localValue: string
   ) => {
+    if (submittingRef.current) return;
     const currentMinute = currentMinuteStart(currentTime);
     const currentMinuteTime = new Date(currentMinute).getTime();
     let normalizedValue = localValue ? chinaLocalToIso(localValue) : "";
@@ -6289,6 +6364,7 @@ function CalendarPage({
       endAt: edited.endAt
     });
     const adjusted =
+      normalizedValue !== (localValue ? chinaLocalToIso(localValue) : "") ||
       projection.available.length !== 1 ||
       projection.available[0]?.startAt !== edited.startAt ||
       projection.available[0]?.endAt !== edited.endAt;
@@ -6324,6 +6400,8 @@ function CalendarPage({
   };
 
   const resetReservationDetailsState = () => {
+    previewRequestIdRef.current++;
+    setPreviewReadError(false);
     setDrafts([]);
     setEditingReservations([]);
     setEditingChanged(false); setSubmissionUncertain(false);
@@ -6380,38 +6458,45 @@ function CalendarPage({
   }, [calendarEditRoute, timeline, refreshing, initialLoading]);
 
   const inspectEditingReservations = useCallback(async (signal: AbortSignal) => {
-    if (!editingReservations.length) { setEditingChanged(false); return; }
-    await api<{ reservations: OwnReservation[] }>("/reservations/mine/inspect", {
-      method: "POST", body: jsonBody({ ids: editingReservations.map(item => item.id) }), signal
-    }).then(result => {
+    if (editingRetry.current) clearTimeout(editingRetry.current);
+    if (!editingReservations.length) { setEditingChanged(false); setEditingCheckError(false); return; }
+    await withRequestDeadline(readSignal => api<{ reservations: OwnReservation[] }>("/reservations/mine/inspect", {
+      method: "POST", body: jsonBody({ ids: editingReservations.map(item => item.id) }), signal: readSignal
+    }), signal).then(result => {
       if (signal.aborted) return;
+      setEditingCheckError(false);
       const latest = new Map(result.reservations.map(item => [item.id, item]));
       setEditingChanged(editingReservations.some(item => {
         const current = latest.get(item.id);
         return !current || !current.canEdit || current.status !== "CONFIRMED" || current.stateToken !== item.stateToken;
       }));
-    }).catch(() => { if (!signal.aborted) setEditingChanged(true); });
+    }).catch(() => {
+      if (signal.aborted) return;
+      setEditingCheckError(true);
+      editingRetry.current = setTimeout(() => void editingRefreshRef.current(), 5000);
+    });
   }, [editingReservations]);
   const refreshEditingReservations = useRealtimeRefresh(inspectEditingReservations, ["ownReservations"], { enabled: editingReservations.length > 0 });
-  useEffect(() => { void refreshEditingReservations(); }, [editEpoch, refreshEditingReservations]);
+  editingRefreshRef.current = refreshEditingReservations;
+  useEffect(() => {
+    void refreshEditingReservations();
+    return () => { if (editingRetry.current) clearTimeout(editingRetry.current); };
+  }, [editEpoch, refreshEditingReservations]);
   useEffect(() => {
     if (editingReservations.some(item => Date.parse(item.endAt) <= currentTime)) setEditingChanged(true);
   }, [currentTime, editingReservations]);
 
   useEffect(() => {
-    if (editingDraftTime) return;
-    if (editingReservations.length) {
-      if (editingReservations.some(item => Date.parse(item.endAt) <= currentTime)) setEditingChanged(true);
-      return;
-    }
+    if (editingDraftTime || submittingRef.current) return;
+    if (editingReservations.some(item => Date.parse(item.endAt) <= currentTime)) setEditingChanged(true);
     const minute = currentMinuteStart(currentTime);
     const advanced = advanceCalendarDrafts(drafts, minute, settings.minBookingMinutes);
     if (advanced.changed) {
       setDrafts(mergeCalendarDrafts(advanced.drafts, [], () => createClientId(), minute));
       setPreviewByDraft(new Map());
-      if (!advanced.drafts.length) setMetadata({ title: "", purpose: "", note: "" });
+      if (drafts.length !== advanced.drafts.length || drafts.some((draft, index) => draft.startAt !== advanced.drafts[index]?.startAt || draft.endAt !== advanced.drafts[index]?.endAt)) announceAdjustment(advanced.drafts.length);
     }
-  }, [currentTime, editingReservations, editingDraftTime, drafts, settings.minBookingMinutes]);
+  }, [currentTime, editingReservations, editingDraftTime, drafts, settings.minBookingMinutes, announceAdjustment]);
 
   const clearReservationDetailsWithConfirmation = async () => {
     if (
@@ -6435,6 +6520,7 @@ function CalendarPage({
     startAt: string,
     endAt: string
   ) => {
+    if (submittingRef.current) return false;
     const requested = { startAt, endAt };
     const currentMinute = currentMinuteStart(currentTime);
     const currentMinuteTime = new Date(currentMinute).getTime();
@@ -6480,140 +6566,93 @@ function CalendarPage({
     return true;
   };
 
-  const runPreview = useCallback(async (silent = false) => {
-    if (!drafts.length || draftIssues.length) return new Map<string, ReservationPreviewItem>();
-    const previewRequestId = ++previewRequestIdRef.current;
+  // Expired/too-short slots need an authoritative adjustment too; incomplete input does not.
+  const previewBlocked = drafts.length > 100 || drafts.some(draft => {
+    const start = Date.parse(draft.startAt), end = Date.parse(draft.endAt);
+    return !Number.isFinite(start) || !Number.isFinite(end) || end <= start ||
+      end - Math.max(start, currentTime) > settings.maxBookingMinutes * 60_000 ||
+      end > currentTime + settings.advanceDays * 86_400_000;
+  });
+  const fetchDraftPreview = useCallback(async (signal: AbortSignal) => {
+    if (previewRetry.current) clearTimeout(previewRetry.current);
+    if (!drafts.length || previewBlocked || editingDraftTime || submittingRef.current || submissionUncertain || editingChanged) return;
+    const requestId = ++previewRequestIdRef.current;
     setPreviewing(true);
     try {
       const requestStartedAt = performance.now();
-      const segments = drafts.map((draft) => reservationInput(draft, metadata));
-      const result = await api<{
-        items: ReservationPreviewItem[];
-        serverNow: string;
-      }>(
-        "/reservations/preview",
-        {
-          method: "POST",
-          body: jsonBody({
-            segments,
-            ...(editingReservation
-              ? { replaceReservations: editingReservations.map(({ id, stateToken }) => ({ id, stateToken })) }
-              : {})
-          })
-        }
-      );
+      const result = await withRequestDeadline(readSignal => api<{ items: ReservationPreviewItem[]; serverNow: string }>("/reservations/preview", {
+        method: "POST", signal: readSignal,
+        body: jsonBody({ segments: drafts.map(draft => reservationInput(draft, metadata)), autoAdjust: true,
+          ...(editingReservations.length ? { replaceReservations: editingReservations.map(({ id, stateToken }) => ({ id, stateToken })) } : {}) })
+      }), signal);
+      const current = draftSnapshot.current;
+      if (signal.aborted || requestId !== previewRequestIdRef.current || submittingRef.current || current.editingDraftTime || current.drafts !== drafts || current.metadata !== metadata || current.editingReservations !== editingReservations) return;
+      const adjusted = adjustDraftsToAvailability(drafts, result.items, createClientId);
       synchronizeServerClock(result.serverNow, requestStartedAt);
-      const mapped = previewsByDraftId(drafts, result.items);
-      if (previewRequestId === previewRequestIdRef.current) {
-        setPreviewByDraft(mapped);
-      }
-      return mapped;
+      setPreviewReadError(false);
+      if (adjusted.changed) {
+        setDrafts(adjusted.drafts); setPreviewByDraft(new Map()); announceAdjustment(adjusted.drafts.length);
+      } else setPreviewByDraft(previewsByDraftId(drafts, result.items));
     } catch (error) {
-      if (!silent) {
-        notify("error", error instanceof Error ? error.message : tr("预览失败"));
+      if (signal.aborted || requestId !== previewRequestIdRef.current) return;
+      if (error instanceof ApiError && error.status === 409 && editingReservations.length) setEditingChanged(true);
+      else {
+        setPreviewReadError(true);
+        previewRetry.current = setTimeout(() => void previewRefreshRef.current(), 5000);
       }
-      return null;
     } finally {
-      if (previewRequestId === previewRequestIdRef.current) {
-        setPreviewing(false);
-      }
+      if (requestId === previewRequestIdRef.current) setPreviewing(false);
     }
-  }, [
-    draftIssues.length,
-    drafts,
-    editingReservations,
-    metadata,
-    notify,
-    synchronizeServerClock
-  ]);
-
+  }, [drafts, previewBlocked, editingDraftTime, metadata, editingReservations, submissionUncertain, editingChanged, announceAdjustment, synchronizeServerClock]);
+  const refreshDraftPreview = useRealtimeRefresh(fetchDraftPreview, ["timeline", "ownReservations"], {
+    enabled: drafts.length > 0 && !submitting && !editingDraftTime && !submissionUncertain,
+    filter: () => ({ machineIds: [...new Set(drafts.map(draft => draft.machineId).filter((id): id is string => Boolean(id)))],
+      from: drafts.reduce((value, draft) => value < draft.startAt ? value : draft.startAt, drafts[0]?.startAt ?? ""),
+      to: drafts.reduce((value, draft) => value > draft.endAt ? value : draft.endAt, drafts[0]?.endAt ?? "") })
+  });
+  previewRefreshRef.current = refreshDraftPreview;
   useEffect(() => {
-    if (
-      !drafts.length ||
-      draftIssues.length ||
-      editingDraftTime ||
-      submitting
-    ) {
-      return;
-    }
-    previewRequestIdRef.current += 1;
-    setPreviewing(false);
-    setPreviewByDraft(new Map());
-    const timer = window.setTimeout(() => {
-      void runPreview(true);
-    }, 350);
-    return () => window.clearTimeout(timer);
-  }, [
-    draftIssues.length,
-    drafts,
-    editingDraftTime,
-    runPreview,
-    submitting,
-    timeline?.revision
-  ]);
-
-  const applySplit = () => {
-    if (!previewByDraft.size) return;
-    const next = splitDrafts(
-      drafts,
-      previewByDraft,
-      () => createClientId()
-    );
-    setDrafts(next);
-    setPreviewByDraft(new Map());
-    if (next.length) {
-      notify("success", tr("已生成 {{v0}} 个可用时段，请重新确认", { v0: next.length }));
-    } else {
-      notify("error", tr("目标时间内没有符合最短时长的可用片段"));
-    }
-  };
+    void refreshDraftPreview();
+    return () => { previewRequestIdRef.current++; if (previewRetry.current) clearTimeout(previewRetry.current); };
+  }, [refreshDraftPreview, timeline?.revision, submitting]);
 
   const submitDrafts = async () => {
     if (!drafts.length || draftIssues.length || editingChanged || submissionUncertain || submittingRef.current) return;
     submittingRef.current = true; setSubmitting(true);
+    previewRequestIdRef.current++;
     try {
-      const checked = await runPreview();
-      if (checked === null) return;
-      if ([...checked.values()].some((item) => !item.available)) {
-        notify("error", tr("仍有冲突，请调整或自动拆分后再提交"));
-        return;
-      }
-      const segments = drafts.map((draft) => reservationInput(draft, metadata));
       const requestStartedAt = performance.now();
-      const result = await api<{ serverNow?: string }>("/reservations/batch", {
-        method: "POST",
-        body: jsonBody({
-          segments,
-          ...(editingReservation
-            ? { replaceReservations: editingReservations.map(({ id, stateToken }) => ({ id, stateToken })) }
-            : {})
-          })
-      });
-      if (result.serverNow) {
-        synchronizeServerClock(result.serverNow, requestStartedAt);
-      }
-      notify(
-        "success",
-        editingReservation
-          ? tr("已更新为 {{v0}} 条资源占用", { v0: drafts.length })
-          : tr("已提交 {{v0}} 条资源占用", { v0: drafts.length })
-      );
+      // Availability adjustment and the write run under one server transaction.
+      const result = await withRequestDeadline(signal => api<{ serverNow: string; adjusted: boolean; reservations: ReservationSegmentInput[] }>("/reservations/batch", {
+        method: "POST", signal,
+        body: jsonBody({ segments: drafts.map(draft => reservationInput(draft, metadata)), autoAdjust: true,
+          ...(editingReservations.length ? { replaceReservations: editingReservations.map(({ id, stateToken }) => ({ id, stateToken })) } : {}) })
+      }));
+      if (!Array.isArray(result.reservations) || !result.reservations.length || typeof result.adjusted !== "boolean" || !Number.isFinite(Date.parse(result.serverNow))) throw new Error("Invalid submission response");
+      synchronizeServerClock(result.serverNow, requestStartedAt);
+      notify("success", result.adjusted
+        ? tr("已自动调整并提交 {{v0}} 条资源占用", { v0: result.reservations.length })
+        : editingReservation ? tr("已更新为 {{v0}} 条资源占用", { v0: result.reservations.length })
+        : tr("已提交 {{v0}} 条资源占用", { v0: result.reservations.length }));
       clearReservationDetails();
+      refreshOwnReservations();
       await loadTimeline();
     } catch (error) {
-      if (!(error instanceof ApiError) || error.status >= 500) setSubmissionUncertain(true);
-      refreshOwnReservations();
-      notify("error", error instanceof Error ? error.message : tr("提交失败"));
-      if (error instanceof ApiError && Array.isArray(error.details)) {
-        setPreviewByDraft(
-          previewsByDraftId(
-            drafts,
-            error.details as ReservationPreviewItem[]
-          )
-        );
+      if (!(error instanceof ApiError) || error.status >= 500) {
+        setSubmissionUncertain(true);
+        notify("error", tr("提交结果暂不明确，请先核对占用记录，勿重复提交。"));
+      } else if (Array.isArray(error.details)) {
+        const adjusted = adjustDraftsToAvailability(drafts, error.details as ReservationPreviewItem[], createClientId);
+        setDrafts(adjusted.drafts); setPreviewByDraft(new Map());
+        if (adjusted.changed) announceAdjustment(adjusted.drafts.length);
+        if (adjusted.drafts.length) notify("error", error.message);
+      } else {
+        if (error.status === 409 && editingReservations.length) setEditingChanged(true);
+        notify("error", error.message);
       }
+      refreshOwnReservations();
     } finally {
-      submittingRef.current = false; setSubmitting(false);
+      submittingRef.current = false; setSubmitting(false); setPreviewing(false);
     }
   };
 
@@ -7314,6 +7353,7 @@ function CalendarPage({
                             : undefined
                         }
                         onPointerDown={(event) => {
+                          if (submittingRef.current) return;
                           if (longTermDisabled) return;
                           const action = calendarDragAction(event);
                           if (!action) return;
@@ -7598,7 +7638,8 @@ function CalendarPage({
           )}
         </div>
       </section>
-      <aside className="booking-drawer" ref={bookingDrawerRef}>
+      <aside className="booking-drawer" ref={bookingDrawerRef} aria-busy={submitting}>
+        <fieldset disabled={submitting} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <div className="drawer-head">
           <h2>{tr("占用详情")}</h2>
           {(drafts.length > 0 || editingReservation) && (
@@ -7620,6 +7661,8 @@ function CalendarPage({
             </div>
           )}
         </div>
+        {previewReadError && <div className="context-notice warning" role="status">{tr("暂时无法检查可用时段，正在重试。草稿已保留。")}</div>}
+        {editingCheckError && <div className="context-notice warning" role="status">{tr("暂时无法核对原占用，正在重试。草稿已保留。")}</div>}
             {editingReservations.length > 0 && <div className="calendar-edit-sequence">
               <strong>{tr("编辑序列")} · {editingReservations.length}</strong>
               {editingReservations.map(item => <div key={item.id}>
@@ -7719,6 +7762,7 @@ function CalendarPage({
                         updateDraftTime(draft.id, "endAt", value);
                       }}
                       onFocusCapture={() => {
+                        previewRequestIdRef.current++;
                         setEditingDraftTime(true);
                         setPreviewByDraft(new Map());
                       }}
@@ -7767,9 +7811,6 @@ function CalendarPage({
               }
             />
               <div className="drawer-actions">
-                {[...previewByDraft.values()].some((item) => !item.available) && (
-                  <button className="secondary-button accent" onClick={applySplit}><Sparkles size={16} />{tr("自动拆分")}</button>
-                )}
                 <button className="primary-button" disabled={submitting || previewing || !!draftIssues.length || editingChanged || submissionUncertain} onClick={() => void submitDrafts()}>
                   {submitting ? <RefreshCw size={16} className="spin" /> : <Check size={16} />}
                   {editingReservation ? tr("提交修改") : tr("提交占用")}
@@ -7777,6 +7818,7 @@ function CalendarPage({
               </div>
           </>
         )}
+        </fieldset>
       </aside>
       {myReservationsOpen && <CalendarMyReservations onClose={() => setMyReservationsOpen(false)} onLocate={async selected => {
         try {
@@ -9243,6 +9285,7 @@ function FeedbackImagePicker({
   onError,
   maxFiles = 5,
   maxTotalBytes = FEEDBACK_IMAGE_MESSAGE_MAX_BYTES,
+  disabled = false,
   compact = false
 }: {
   files: File[];
@@ -9250,12 +9293,13 @@ function FeedbackImagePicker({
   onError: (message: string) => void;
   maxFiles?: number;
   maxTotalBytes?: number;
+  disabled?: boolean;
   compact?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const selectedBytes = files.reduce((sum, file) => sum + file.size, 0);
-  const canAdd = files.length < maxFiles && selectedBytes < maxTotalBytes;
+  const canAdd = !disabled && files.length < maxFiles && selectedBytes < maxTotalBytes;
   const previews = useMemo(
     () => files.map((file) => ({ file, url: URL.createObjectURL(file) })),
     [files]
@@ -9266,6 +9310,7 @@ function FeedbackImagePicker({
   );
 
   const addFiles = (candidates: File[]) => {
+    if (disabled) return;
     let next = [...files];
     let rejectedType = false;
     let rejectedSize = false;
@@ -9316,6 +9361,7 @@ function FeedbackImagePicker({
       <input
         ref={inputRef}
         className="feedback-image-native-input"
+        disabled={disabled}
         type="file"
         accept="image/png,image/jpeg,image/webp"
         multiple
@@ -9368,7 +9414,7 @@ function FeedbackImagePicker({
                 type="button"
                 className="icon-button"
                 aria-label={tr("移除 {{v0}}", { v0: file.name })}
-                onClick={() => onChange(files.filter((_, fileIndex) => fileIndex !== index))}
+                disabled={disabled} onClick={() => onChange(files.filter((_, fileIndex) => fileIndex !== index))}
               >
                 <X size={14} />
               </button>
@@ -9575,7 +9621,9 @@ function FeedbackEditorModal({
   onClose: () => void;
   onSaved: (ticket: FeedbackTicketDetail) => void;
 }) {
+  const { request: api, busy: mutationBusy } = useConflictApi();
   const editing = Boolean(ticket);
+  const [savedTicket, setSavedTicket] = useState(ticket);
   const [type, setType] = useState<FeedbackType>(ticket?.type ?? "ISSUE");
   const [level, setLevel] = useState<FeedbackLevel>(ticket?.level ?? "NORMAL");
   const [title, setTitle] = useState(ticket?.title ?? "");
@@ -9583,6 +9631,13 @@ function FeedbackEditorModal({
   const [retainedIds, setRetainedIds] = useState(() => new Set(ticket?.attachments.map((item) => item.id) ?? []));
   const [images, setImages] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!ticket || !savedTicket || ticket.version <= savedTicket.version || mutationBusy || busy || images.length) return;
+    if (title !== savedTicket.title || bodyMarkdown !== savedTicket.bodyMarkdown || level !== savedTicket.level ||
+      retainedIds.size !== savedTicket.attachments.length || savedTicket.attachments.some(item => !retainedIds.has(item.id))) return;
+    setSavedTicket(ticket); setType(ticket.type); setLevel(ticket.level); setTitle(ticket.title); setBodyMarkdown(ticket.bodyMarkdown);
+    setRetainedIds(new Set(ticket.attachments.map(item => item.id)));
+  }, [ticket, savedTicket, title, bodyMarkdown, level, retainedIds, images, mutationBusy, busy]);
   const changeType = (next: FeedbackType) => {
     setType(next);
     setLevel("NORMAL");
@@ -9596,7 +9651,7 @@ function FeedbackEditorModal({
       setBodyMarkdown(localizedFeedbackTemplate(next));
     }
   };
-  const currentAttachments = ticket?.attachments.filter((item) => retainedIds.has(item.id)) ?? [];
+  const currentAttachments = savedTicket?.attachments.filter((item) => retainedIds.has(item.id)) ?? [];
   const totalImages = currentAttachments.length + images.length;
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -9608,7 +9663,7 @@ function FeedbackEditorModal({
     setBusy(true);
     try {
       const metadata = editing
-        ? { expectedVersion: ticket!.version, level, title, bodyMarkdown, retainedAttachmentIds: currentAttachments.map((item) => item.id) }
+        ? { expectedVersion: savedTicket!.version, level, title, bodyMarkdown, retainedAttachmentIds: currentAttachments.map((item) => item.id) }
         : { type, level, title, bodyMarkdown };
       const result = await api<{ ticket: FeedbackTicketDetail }>(
         editing ? `/feedback/${ticket!.id}` : "/feedback",
@@ -9616,6 +9671,7 @@ function FeedbackEditorModal({
       );
       onSaved(result.ticket);
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("反馈保存失败"));
     } finally {
       setBusy(false);
@@ -9625,7 +9681,7 @@ function FeedbackEditorModal({
     <Modal title={editing ? tr("编辑 {{v0}}", { v0: ticket!.displayNumber }) : tr("提交反馈")} onClose={onClose} large className="feedback-editor-modal">
       <form className="feedback-editor-form" onSubmit={(event) => void submit(event)}>
         <div className="feedback-editor-scroll">
-          <div className="feedback-editor-fields">
+          <fieldset disabled={busy || mutationBusy} className="editor-fieldset feedback-editor-fields">
             <div className="feedback-editor-row">
               <ChoiceField
                 label={tr("类型")}
@@ -9656,6 +9712,7 @@ function FeedbackEditorModal({
             <div className="field">
               <span>{tr("图片（")}{totalImages}/5）</span>
               <FeedbackImagePicker
+                disabled={busy || mutationBusy}
                 files={images}
                 onChange={setImages}
                 onError={(message) => notify("error", message)}
@@ -9679,7 +9736,7 @@ function FeedbackEditorModal({
                 ))}
               </div>
             )}
-          </div>
+          </fieldset>
           <div className="feedback-editor-preview">
             <strong>{tr("预览")}</strong>
             <AnnouncementMarkdown markdown={bodyMarkdown} />
@@ -9711,6 +9768,7 @@ function FeedbackDetailView({
   onBack: () => void;
   onRead?: () => void;
 }) {
+  const { request: api, busy: mutationBusy, writing: mutationWriting } = useConflictApi();
   const dialog = useAppDialog();
   const onReadRef = useRef(onRead);
   onReadRef.current = onRead;
@@ -9723,15 +9781,29 @@ function FeedbackDetailView({
   const [nextStatus, setNextStatus] = useState<FeedbackStatus | "">("");
   const [processingNote, setProcessingNote] = useState("");
   const [changing, setChanging] = useState(false);
+  const detailState = useRef({ nextStatus, processingNote });
+  detailState.current = { nextStatus, processingNote };
+  const statusVersion = useRef<number | null>(null);
+  const loadSequence = useRef(0);
+  const readController = useRef<AbortController | null>(null);
+  useEffect(() => () => readController.current?.abort(), []);
   const load = useCallback(async () => {
+    readController.current?.abort();
+    const controller = new AbortController(); readController.current = controller;
+    const sequence = ++loadSequence.current;
     try {
-      const result = await api<{ ticket: FeedbackTicketDetail }>(`${admin ? "/admin" : ""}/feedback/${id}`);
-      setTicket(result.ticket);
-      setNextStatus("");
+      const result = await withRequestDeadline(signal => api<{ ticket: FeedbackTicketDetail }>(`${admin ? "/admin" : ""}/feedback/${id}`, { signal }), controller.signal);
+      if (controller.signal.aborted) return;
+      if (sequence !== loadSequence.current || mutationWriting.current) return;
+      setTicket(current => current && current.version > result.ticket.version ? current : result.ticket);
+      if (!detailState.current.nextStatus && !detailState.current.processingNote) statusVersion.current = Math.max(statusVersion.current ?? 0, result.ticket.version);
       onReadRef.current?.();
     } catch (error) {
+      if (controller.signal.aborted) return;
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("反馈加载失败"));
     } finally {
+      if (controller.signal.aborted) return;
       setLoading(false);
     }
   }, [admin, id, notify]);
@@ -9749,6 +9821,7 @@ function FeedbackDetailView({
       setTicket(result.ticket);
       notify("success", tr("反馈已撤回"));
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("撤回失败"));
       if (error instanceof ApiError && error.status === 409) void load();
     }
@@ -9756,7 +9829,7 @@ function FeedbackDetailView({
 
   const submitComment = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!comment.trim()) return;
+    if (!comment.trim() || mutationWriting.current) return;
     setCommenting(true);
     try {
       const result = await api<{ ticket: FeedbackTicketDetail }>(`${admin ? "/admin" : ""}/feedback/${id}/comments`, {
@@ -9767,6 +9840,7 @@ function FeedbackDetailView({
       setCommentImages([]);
       notify("success", tr("评论已发送"));
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("评论发送失败"));
     } finally {
       setCommenting(false);
@@ -9774,18 +9848,20 @@ function FeedbackDetailView({
   };
 
   const changeStatus = async () => {
-    if (!nextStatus || !processingNote.trim()) return;
+    if (!nextStatus || !processingNote.trim() || mutationWriting.current) return;
     setChanging(true);
     try {
       const result = await api<{ ticket: FeedbackTicketDetail }>(`/admin/feedback/${id}/status`, {
         method: "PUT",
-        body: jsonBody({ expectedVersion: ticket.version, status: nextStatus, processingNote })
+        body: jsonBody({ expectedVersion: statusVersion.current ?? ticket.version, status: nextStatus, processingNote })
       });
       setTicket(result.ticket);
       setNextStatus("");
       setProcessingNote("");
+      statusVersion.current = result.ticket.version;
       notify("success", tr("反馈状态已更新"));
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("状态更新失败"));
       if (error instanceof ApiError && error.status === 409) void load();
     } finally {
@@ -9794,7 +9870,7 @@ function FeedbackDetailView({
   };
 
   const changeLevel = async (level: FeedbackLevel) => {
-    if (level === ticket.level) return;
+    if (level === ticket.level || mutationWriting.current) return;
     setChanging(true);
     try {
       const result = await api<{ ticket: FeedbackTicketDetail }>(`/admin/feedback/${id}/level`, {
@@ -9803,6 +9879,7 @@ function FeedbackDetailView({
       setTicket(result.ticket);
       notify("success", tr("反馈等级已更新"));
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("等级更新失败"));
       if (error instanceof ApiError && error.status === 409) void load();
     } finally {
@@ -9840,7 +9917,7 @@ function FeedbackDetailView({
           <div>
             <ChoiceField
               label={tr("调整等级")}
-              disabled={changing}
+              disabled={mutationBusy || changing}
               value={ticket.level}
               options={feedbackLevelsFor(ticket.type).map((value) => ({
                 value,
@@ -9852,7 +9929,7 @@ function FeedbackDetailView({
           <div className="feedback-status-change">
             <ChoiceField
               label={tr("变更状态")}
-              disabled={changing}
+              disabled={mutationBusy || changing}
               value={nextStatus}
               options={[
                 { value: "", label: tr("选择新状态") },
@@ -9863,9 +9940,9 @@ function FeedbackDetailView({
               onChange={(value) => setNextStatus(value as FeedbackStatus)}
             />
             <Field label={tr("处理说明")}>
-              <textarea maxLength={10000} value={processingNote} onChange={(event) => setProcessingNote(event.target.value)} />
+              <textarea disabled={mutationBusy || changing} maxLength={10000} value={processingNote} onChange={(event) => setProcessingNote(event.target.value)} />
             </Field>
-            <button type="button" className="primary-button" disabled={changing || !nextStatus || !processingNote.trim()} onClick={() => void changeStatus()}>
+            <button type="button" className="primary-button" disabled={mutationBusy || changing || !nextStatus || !processingNote.trim()} onClick={() => void changeStatus()}>
               <BusyButtonContent busy={changing}>{tr("更新状态")}</BusyButtonContent>
             </button>
           </div>
@@ -9897,16 +9974,17 @@ function FeedbackDetailView({
       {ticket.canComment && (
         <form className="card feedback-comment-form" onSubmit={(event) => void submitComment(event)}>
           <Field label={admin ? tr("管理员回复") : tr("追加评论")}>
-            <textarea maxLength={10000} value={comment} onChange={(event) => setComment(event.target.value)} />
+            <textarea disabled={mutationBusy || commenting} maxLength={10000} value={comment} onChange={(event) => setComment(event.target.value)} />
           </Field>
           <FeedbackImagePicker
             compact
+            disabled={mutationBusy || commenting}
             files={commentImages}
             onChange={setCommentImages}
             onError={(message) => notify("error", message)}
           />
           <div className="feedback-comment-actions">
-            <button className="primary-button" disabled={commenting || !comment.trim()}><Send size={15} /><BusyButtonContent busy={commenting}>{tr("发送评论")}</BusyButtonContent></button>
+            <button className="primary-button" disabled={mutationBusy || commenting || !comment.trim()}><Send size={15} /><BusyButtonContent busy={commenting}>{tr("发送评论")}</BusyButtonContent></button>
           </div>
         </form>
       )}
@@ -9983,6 +10061,7 @@ function FeedbackAdminPanel({
       setTickets(result.tickets);
       setNextCursor(result.nextCursor);
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("反馈队列加载失败"));
     } finally {
       setLoading(false);
@@ -10067,6 +10146,7 @@ function FeedbackAdminPanel({
               setTickets((current) => [...current, ...result.tickets]);
               setNextCursor(result.nextCursor);
             } catch (error) {
+      if (error instanceof EditCancelled) return;
               notify("error", error instanceof Error ? error.message : tr("更多反馈加载失败"));
             }
           }}>{tr("加载更多")}</button>
@@ -10106,6 +10186,7 @@ function NotificationsPage({
       onUnreadCountChange(result.unreadCount);
       onFeedbackUnreadCountChange(result.feedbackUnreadCount);
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (signal.aborted) return;
       notify("error", error instanceof Error ? error.message : tr("通知加载失败"));
     } finally {
@@ -10151,6 +10232,7 @@ function NotificationsPage({
     try {
       await markRead(item);
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("通知状态更新失败"));
     }
     navigate(destination.path);
@@ -10177,6 +10259,7 @@ function NotificationsPage({
       onFeedbackUnreadCountChange(0);
       notify("success", tr("全部通知已标为已读"));
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify(
         "error",
         error instanceof Error ? error.message : tr("通知状态更新失败")
@@ -10243,6 +10326,7 @@ function NotificationsPage({
                       try {
                         await markRead(item);
                       } catch (error) {
+      if (error instanceof EditCancelled) return;
                         notify(
                           "error",
                           error instanceof Error ? error.message : tr("通知状态更新失败")
@@ -10360,6 +10444,7 @@ function AdminPage({
       if (signal.aborted) return;
       setUsers(result.users);
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (signal.aborted) return;
       notify("error", error instanceof Error ? error.message : tr("用户加载失败"));
     }
@@ -10733,6 +10818,7 @@ function MachineInfoSection({
   notify: (kind: "success" | "error", message: string) => void;
   reloadMachines: () => Promise<any[]>;
 }) {
+  const { request: api } = useConflictApi();
   const dialog = useAppDialog();
   const { currentTime } = useServerClock();
   const [detail, setDetail] = useState<any | null>(null);
@@ -10761,6 +10847,7 @@ function MachineInfoSection({
       setUnavailabilityWindows(maintenanceResult.maintenance);
       setMaintenanceGroups(groupResult.groups);
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (signal.aborted) return;
       notify("error", error instanceof Error ? error.message : tr("机器信息加载失败"));
     }
@@ -10808,6 +10895,7 @@ function MachineInfoSection({
       notify("success", tr("机器已重新启用"));
       await Promise.all([load(), reloadMachines()]);
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("重新启用失败"));
     }
   };
@@ -10844,6 +10932,7 @@ function MachineInfoSection({
       notify("success", tr("机器已永久删除"));
       await reloadMachines();
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("删除机器失败"));
     }
   };
@@ -10968,6 +11057,7 @@ function MachineInfoSection({
                         notify("success", tr("维护安排已取消"));
                         await load();
                       } catch (error) {
+      if (error instanceof EditCancelled) return;
                         notify("error", error instanceof Error ? error.message : tr("取消维护失败"));
                       }
                     }}><X size={14} /></button>
@@ -11060,6 +11150,7 @@ function MachineInfoSection({
 }
 
 type MaintenancePreview = UnavailabilityImpactData & {
+  target: { version: number };
   startAt: string;
   endAt: string;
   revision: number;
@@ -11080,6 +11171,7 @@ function MaintenanceModal({
   onCompleted: () => Promise<void>;
   notify: (kind: "success" | "error", message: string) => void;
 }) {
+  const { request: api, writing: mutationWriting } = useConflictApi();
   const { currentTime } = useServerClock();
   const [initial] = useState(() => initialReservationTime(openingTime));
   const [targetId, setTargetId] = useState("MACHINE");
@@ -11100,7 +11192,7 @@ function MaintenanceModal({
       : "";
 
   useEffect(() => {
-    if (startFocused) return;
+    if (startFocused || mutationWriting.current) return;
     if (!timeRangeEdited) {
       const next = initialReservationTime(currentTime);
       if (form.startAt === next.start && form.endAt === next.end) return;
@@ -11162,6 +11254,7 @@ function MaintenanceModal({
       }));
       setPreview(result);
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       setPreview(null);
       notify("error", error instanceof Error ? error.message : tr("维护影响加载失败"));
     } finally {
@@ -11186,6 +11279,7 @@ function MaintenanceModal({
       notify("success", tr("维护安排已创建"));
       await onCompleted();
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (error instanceof ApiError && error.status === 409) {
         setPreview(null);
       }
@@ -11204,7 +11298,7 @@ function MaintenanceModal({
       onClose={onClose}
       wide
     >
-      <div className="stack-form machine-disable-modal">
+      <fieldset disabled={submitting || previewing} className="editor-fieldset stack-form machine-disable-modal">
         <ChoiceField
           label={tr("维护范围")}
           value={targetId}
@@ -11285,7 +11379,7 @@ function MaintenanceModal({
           >
             {tr("action.maintenance.create")}</button>
         </div>
-      </div>
+      </fieldset>
     </Modal>
   );
 }
@@ -11301,6 +11395,7 @@ function MachineStopModal({
   onCompleted: () => Promise<void>;
   notify: (kind: "success" | "error", message: string) => void;
 }) {
+  const { request: api } = useConflictApi();
   const [reason, setReason] = useState("");
   const [preview, setPreview] = useState<MaintenancePreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -11316,6 +11411,7 @@ function MachineStopModal({
         )
       );
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       setPreview(null);
       notify("error", error instanceof Error ? error.message : tr("停用影响加载失败"));
     } finally {
@@ -11330,7 +11426,7 @@ function MachineStopModal({
       await api(`/admin/machines/${machine.id}/disable`, {
         method: "POST",
         body: jsonBody({
-          expectedVersion: machine.version,
+          expectedVersion: preview.target.version,
           expectedRevision: preview.revision,
           reason
         })
@@ -11338,6 +11434,7 @@ function MachineStopModal({
       notify("success", tr("机器已停用"));
       await onCompleted();
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (error instanceof ApiError && error.status === 409) setPreview(null);
       notify("error", error instanceof Error ? error.message : tr("停用机器失败"));
     } finally {
@@ -11347,7 +11444,7 @@ function MachineStopModal({
 
   return (
     <Modal title={tr("停用机器：{{v0}}", { v0: machine.name })} onClose={onClose} wide>
-      <div className="stack-form machine-disable-modal">
+      <fieldset disabled={submitting || previewing} className="editor-fieldset stack-form machine-disable-modal">
         <div className="modal-note warning">
           <CircleAlert size={15} />
           <span>{tr("停用后将持续不可用，重新启用前不能创建新的占用。")}</span>
@@ -11387,7 +11484,7 @@ function MachineStopModal({
           >
             {tr("确认停用")}</button>
         </div>
-      </div>
+      </fieldset>
     </Modal>
   );
 }
@@ -11403,7 +11500,7 @@ function MachineResourcesSection({
   notify: (kind: "success" | "error", message: string) => void;
   reloadMachines: () => Promise<any[]>;
 }) {
-  const dialog = useAppDialog();
+  const { request: api, dialog } = useConflictApi();
   const [groups, setGroups] = useState<ResourceGroup[]>([]);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [pools, setPools] = useState<ResourcePool[]>([]);
@@ -11412,12 +11509,15 @@ function MachineResourcesSection({
 
   const fetchLoad = useCallback(async (signal: AbortSignal) => {
     try {
-      const groupResult = await api<{ groups: ResourceGroup[] }>(
-        `/admin/machines/${machine.id}/groups`, { signal }
-      );
+      const [groupResult, poolResult] = await withRequestDeadline(readSignal => Promise.all([
+        api<{ groups: ResourceGroup[] }>(`/admin/machines/${machine.id}/groups`, { signal: readSignal }),
+        api<{ pools: ResourcePool[] }>(`/admin/machines/${machine.id}/resource-pools`, { signal: readSignal })
+      ]), signal);
       if (signal.aborted) return;
       setGroups(groupResult.groups);
+      setPools(poolResult.pools);
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (signal.aborted) return;
       notify("error", error instanceof Error ? error.message : tr("资源设置加载失败"));
     } finally {
@@ -11441,6 +11541,7 @@ function MachineResourcesSection({
       setGroups(groupResult.groups);
       setResourceEditorOpen(true);
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify(
         "error",
         error instanceof Error ? error.message : tr("资源配置加载失败")
@@ -11490,6 +11591,7 @@ function MachineResourcesSection({
       notify("success", tr("资源组已停用"));
       await load();
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("停用失败"));
     }
   };
@@ -11503,6 +11605,7 @@ function MachineResourcesSection({
       notify("success", tr("资源组已重新启用"));
       await load();
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("重新启用失败"));
     }
   };
@@ -11535,6 +11638,7 @@ function MachineResourcesSection({
       notify("success", tr("资源组已永久删除"));
       await Promise.all([load(), reloadMachines()]);
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("删除资源组失败"));
     }
   };
@@ -11642,7 +11746,7 @@ function MachineUsersSection({
   notify: (kind: "success" | "error", message: string) => void;
   reloadMachines: () => Promise<any[]>;
 }) {
-  const dialog = useAppDialog();
+  const { request: api, dialog } = useConflictApi();
   const [access, setAccess] = useState<{ members: any[]; requests: any[] }>({
     members: [],
     requests: []
@@ -11657,6 +11761,7 @@ function MachineUsersSection({
       if (signal.aborted) return;
       setAccess(result);
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (signal.aborted) return;
       notify("error", error instanceof Error ? error.message : tr("用户权限加载失败"));
     }
@@ -11692,6 +11797,7 @@ function MachineUsersSection({
                       });
                       notify("success", tr("{{v0}} 已获得机器使用权", { v0: item.displayName }));
                     } catch (error) {
+      if (error instanceof EditCancelled) return;
                       notify("error", error instanceof Error ? error.message : tr("审批失败"));
                     } finally {
                       await refresh();
@@ -11715,6 +11821,7 @@ function MachineUsersSection({
                       });
                       notify("success", tr("使用权申请已拒绝"));
                     } catch (error) {
+      if (error instanceof EditCancelled) return;
                       notify("error", error instanceof Error ? error.message : tr("操作失败"));
                     } finally {
                       await refresh();
@@ -11757,6 +11864,7 @@ function MachineUsersSection({
                       notify("success", tr("{{v0}} 已设为机器管理员", { v0: member.displayName }));
                       await refresh();
                     } catch (error) {
+      if (error instanceof EditCancelled) return;
                       notify("error", error instanceof Error ? error.message : tr("设置管理员失败"));
                     }
                   }}><ShieldCheck size={15} /></button>
@@ -11773,6 +11881,7 @@ function MachineUsersSection({
                       notify("success", tr("管理员身份已取消"));
                       await refresh();
                     } catch (error) {
+      if (error instanceof EditCancelled) return;
                       notify("error", error instanceof Error ? error.message : tr("取消管理员失败"));
                     }
                   }}><ShieldOff size={15} /></button>
@@ -11795,6 +11904,7 @@ function MachineUsersSection({
                       notify("success", tr("{{v0}} 已被移出机器", { v0: member.displayName }));
                       await refresh();
                     } catch (error) {
+      if (error instanceof EditCancelled) return;
                       notify("error", error instanceof Error ? error.message : tr("移除失败"));
                     }
                   }}><UserMinus size={15} /></button>
@@ -11846,6 +11956,7 @@ function InviteMachineMemberModal({
         );
         setUsers(result.users);
       } catch (error) {
+      if (error instanceof EditCancelled) return;
         notify(
           "error",
           error instanceof Error ? error.message : tr("候选用户加载失败")
@@ -11903,6 +12014,7 @@ function InviteMachineMemberModal({
                     notify("success", tr("{{v0}} 已加入机器", { v0: user.displayName }));
                     await onInvited();
                   } catch (error) {
+      if (error instanceof EditCancelled) return;
                     if (
                       error instanceof ApiError &&
                       ["MACHINE_MEMBER_ALREADY_EXISTS", "MACHINE_ACCESS_REQUEST_PENDING"].includes(
@@ -12028,8 +12140,8 @@ function MachineFormModal({
   onSaved: (machineId?: string) => Promise<void>;
   notify: (kind: "success" | "error", message: string) => void;
 }) {
-  const [expectedVersion] = useState<number | undefined>(machine?.version);
-  const changed = machine && machine.version !== expectedVersion;
+  const { request: api, busy: mutationBusy } = useConflictApi();
+  const [expectedVersion, setExpectedVersion] = useState<number | undefined>(machine?.version);
   const [form, setForm] = useState({
     name: machine?.name ?? "",
     address: machine?.address ?? "",
@@ -12039,11 +12151,17 @@ function MachineFormModal({
     tags: [...(machine?.tags ?? [])],
     tagInput: ""
   });
+  const baseline = useRef(form);
+  useEffect(() => {
+    if (!machine || Number(machine.version) <= Number(expectedVersion) || !canSyncDraft(baseline.current, form, mutationBusy)) return;
+    const next = { name: machine.name ?? "", address: machine.address ?? "", hardwareNotes: machine.hardwareNotes ?? "",
+      connectionGuide: machine.connectionGuide ?? "", managementNotes: machine.managementNotes ?? "", tags: [...(machine.tags ?? [])], tagInput: "" };
+    baseline.current = next; setForm(next); setExpectedVersion(machine.version);
+  }, [machine, expectedVersion, form, mutationBusy]);
   const tagIssue = resourceTagDraftIssue(form.tags, form.tagInput);
   return (
     <Modal title={machine ? tr("编辑机器") : tr("新增机器")} onClose={onClose} wide>
-      <div className="stack-form machine-form">
-        {changed && <div className="context-notice warning" role="alert"><CircleAlert size={15} />{tr("机器资料已变化，请重新打开编辑窗口核对。未保存的内容已保留。")}</div>}
+      <fieldset disabled={mutationBusy} className="editor-fieldset stack-form machine-form">
         <div className="machine-form-primary">
           <Field label={tr("机器名称")}>
             <input
@@ -12110,7 +12228,7 @@ function MachineFormModal({
             {tr("取消")}</button>
           <button
             className="primary-button"
-            disabled={Boolean(tagIssue) || changed}
+            disabled={Boolean(tagIssue) || mutationBusy}
             onClick={async () => {
             try {
               const { tagInput: _tagInput, ...formValues } = form;
@@ -12128,11 +12246,12 @@ function MachineFormModal({
               );
               await onSaved(result.id ?? machine?.id);
             } catch (error) {
+      if (error instanceof EditCancelled) return;
               notify("error", error instanceof Error ? error.message : tr("保存失败"));
             }
           }}>{machine ? tr("保存修改") : tr("action.machine.create")}</button>
         </div>
-      </div>
+      </fieldset>
     </Modal>
   );
 }
@@ -12270,6 +12389,7 @@ function ResourceConfigurationModal({
   onSaved: () => Promise<void>;
   notify: (kind: "success" | "error", message: string) => void;
 }) {
+  const { request: api, busy: mutationBusy } = useConflictApi();
   const { i18n } = useTranslation();
   const dialog = useAppDialog();
   const [section, setSection] = useState<"POOLS" | "GROUPS">("POOLS");
@@ -12291,6 +12411,15 @@ function ResourceConfigurationModal({
   } | null>(null);
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
+  const baseline = useRef({ pools: draftPools, groups: draftGroups, deleted: deletedPools });
+  useEffect(() => {
+    if (!canSyncDraft(baseline.current, { pools: draftPools, groups: draftGroups, deleted: deletedPools }, mutationBusy || saving)) return;
+    const next = { pools: pools.map(resourcePoolDraft), groups: groups.map(resourceGroupDraft), deleted: [] };
+    if (JSON.stringify(next) === JSON.stringify(baseline.current)) return;
+    if (next.pools.some(pool => pool.expectedVersion < (baseline.current.pools.find(saved => saved.id === pool.id)?.expectedVersion ?? 0)) ||
+        next.groups.some(group => group.expectedVersion < (baseline.current.groups.find(saved => saved.id === group.id)?.expectedVersion ?? 0))) return;
+    baseline.current = next; setDraftPools(next.pools); setDraftGroups(next.groups); setDeletedPools([]);
+  }, [pools, groups, draftPools, draftGroups, deletedPools, mutationBusy, saving]);
   const selectedPool = draftPools.find((pool) => pool.id === selectedPoolId);
   const selectedGroup = draftGroups.find((group) => group.id === selectedGroupId);
   const validationIssues = useMemo(
@@ -12566,6 +12695,7 @@ function ResourceConfigurationModal({
       notify("success", tr("资源配置已保存"));
       await onSaved();
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       setSaveError(error instanceof Error ? error.message : tr("资源配置保存失败"));
     } finally {
       setSaving(false);
@@ -12574,7 +12704,7 @@ function ResourceConfigurationModal({
 
   return (
     <Modal title={tr("编辑资源：{{v0}}", { v0: machine.name })} onClose={onClose} large>
-      <div className="resource-config-editor">
+      <fieldset disabled={mutationBusy || saving} className="editor-fieldset resource-config-editor">
         <div className="resource-config-tabs" role="tablist" aria-label={tr("资源编辑内容")}>
           <button
             type="button"
@@ -13363,7 +13493,7 @@ function ResourceConfigurationModal({
             <BusyButtonContent busy={saving}>{tr("保存配置")}</BusyButtonContent>
           </button>
         </div>
-      </div>
+      </fieldset>
     </Modal>
   );
 }
@@ -13379,7 +13509,7 @@ function UserAdminPanel({
   notify: (kind: "success" | "error", message: string) => void;
   reload: () => Promise<void>;
 }) {
-  const dialog = useAppDialog();
+  const { request: api, dialog } = useConflictApi();
   const [passwordResetLink, setPasswordResetLink] = useState<{
     displayName: string;
     resetUrl: string;
@@ -13394,6 +13524,7 @@ function UserAdminPanel({
       notify("success", successMessage);
       await reload();
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (error instanceof ApiError && error.status === 409) {
         notify("error", tr("注册信息已被更新，用户列表已刷新。"));
         await reload();
@@ -13450,6 +13581,7 @@ function UserAdminPanel({
       notify("success", tr("账号已停用，相关占用已释放"));
       await reload();
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (error instanceof ApiError && error.status === 409) {
         await reload();
       }
@@ -13465,6 +13597,7 @@ function UserAdminPanel({
       notify("success", tr("账号已重新启用"));
       await reload();
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (error instanceof ApiError && error.status === 409) {
         await reload();
       }
@@ -13516,6 +13649,7 @@ function UserAdminPanel({
       notify("success", tr("用户已永久删除"));
       await reload();
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (error instanceof ApiError && error.status === 409) {
         await reload();
       }
@@ -13555,6 +13689,7 @@ function UserAdminPanel({
       notify("success", action === "approve" ? tr("资料修改已通过") : tr("资料修改未通过"));
       await reload();
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (
         error instanceof ApiError &&
         error.code === "PROFILE_CHANGE_ALREADY_PROCESSED"
@@ -13721,6 +13856,7 @@ function UserAdminPanel({
                                 ...result
                               });
                             } catch (error) {
+      if (error instanceof EditCancelled) return;
                               notify(
                                 "error",
                                 error instanceof Error
@@ -14085,6 +14221,7 @@ function AnnouncementAdminPanel({
 }: {
   notify: (kind: "success" | "error", message: string) => void;
 }) {
+  const { request: api } = useConflictApi();
   const dialog = useAppDialog();
   const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -14096,17 +14233,25 @@ function AnnouncementAdminPanel({
     ? announcements
     : announcements.filter((announcement) => announcement.status === "ACTIVE");
 
+  const readController = useRef<AbortController | null>(null);
+  useEffect(() => () => readController.current?.abort(), []);
   const load = useCallback(async () => {
+    readController.current?.abort();
+    const controller = new AbortController(); readController.current = controller;
     try {
-      const result = await api<{ announcements: SystemAnnouncement[] }>(
-        "/admin/announcements"
-      );
+      const result = await withRequestDeadline(signal => api<{ announcements: SystemAnnouncement[] }>(
+        "/admin/announcements", { signal }
+      ), controller.signal);
+      if (controller.signal.aborted) return;
       setAnnouncements(result.announcements);
       setLoadError(false);
     } catch (error) {
+      if (controller.signal.aborted) return;
+      if (error instanceof EditCancelled) return;
       setLoadError(true);
       notify("error", error instanceof Error ? error.message : tr("公告加载失败"));
     } finally {
+      if (controller.signal.aborted) return;
       setLoaded(true);
     }
   }, [notify]);
@@ -14131,6 +14276,7 @@ function AnnouncementAdminPanel({
       notify("success", tr("系统公告已撤下"));
       await load();
     } catch (error) {
+      if (error instanceof EditCancelled) return;
       if (error instanceof ApiError && error.status === 409) await load();
       notify("error", error instanceof Error ? error.message : tr("公告撤下失败"));
     }
@@ -14240,7 +14386,7 @@ function AnnouncementAdminPanel({
       {editorState && (
         <AnnouncementEditorModal
           key={`${editorState.mode}:${editorState.mode === "CREATE" ? "new" : editorState.announcement.id}`}
-          state={editorState}
+          state={editorState.mode === "CREATE" ? editorState : { ...editorState, announcement: announcements.find(item => item.id === editorState.announcement.id) ?? editorState.announcement }}
           notify={notify}
           onClose={() => setEditorState(null)}
           onSaved={async (message) => {
@@ -14265,6 +14411,7 @@ function AnnouncementEditorModal({
   onClose: () => void;
   onSaved: (message: string) => Promise<void>;
 }) {
+  const { request: api, busy: mutationBusy } = useConflictApi();
   const existing = state.mode === "CREATE" ? null : state.announcement;
   const [title, setTitle] = useState(existing?.title ?? "");
   const [bodyMarkdown, setBodyMarkdown] = useState(existing?.bodyMarkdown ?? "");
@@ -14276,9 +14423,15 @@ function AnnouncementEditorModal({
     title?: string;
     bodyMarkdown?: string;
   }>({});
-  const [conflictMessage, setConflictMessage] = useState("");
-  const [conflictLoadFailed, setConflictLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const baseline = useRef({ title, bodyMarkdown });
+  useEffect(() => {
+    if (!existing || existing.version <= expectedVersion || !canSyncDraft(baseline.current, { title, bodyMarkdown }, saving || mutationBusy)) return;
+    baseline.current = { title: existing.title, bodyMarkdown: existing.bodyMarkdown };
+    setTitle(existing.title); setBodyMarkdown(existing.bodyMarkdown);
+    setExpectedVersion(existing.version); setServerStatus(existing.status);
+  }, [existing, expectedVersion, title, bodyMarkdown, saving, mutationBusy]);
 
   const effectiveMode =
     state.mode === "CREATE"
@@ -14304,8 +14457,6 @@ function AnnouncementEditorModal({
     event.preventDefault();
     if (!title.trim() || !bodyMarkdown.trim()) return;
     setFieldErrors({});
-    setConflictMessage("");
-    setConflictLoadFailed(false);
     setSaving(true);
     try {
       if (effectiveMode === "CREATE") {
@@ -14329,32 +14480,7 @@ function AnnouncementEditorModal({
         );
       }
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409 && existing) {
-        try {
-          const result = await api<{ announcements: SystemAnnouncement[] }>(
-            "/admin/announcements"
-          );
-          const latest = result.announcements.find(
-            (announcement) => announcement.id === existing.id
-          );
-          if (!latest) {
-            setConflictLoadFailed(true);
-            setConflictMessage(tr("公告已不存在，请关闭编辑器后刷新列表。"));
-            return;
-          }
-          setExpectedVersion(latest.version);
-          setServerStatus(latest.status);
-          setConflictMessage(
-            latest.status === "WITHDRAWN"
-              ? tr("公告已被其他管理员撤下。当前草稿已保留；核对后再次提交将重新启用公告。")
-              : tr("公告已被其他管理员更新。当前草稿已保留；核对后再次提交将覆盖最新版本。")
-          );
-        } catch {
-          setConflictLoadFailed(true);
-          setConflictMessage(tr("公告状态已变化，但最新状态加载失败，请关闭编辑器后重试。"));
-        }
-        return;
-      }
+      if (error instanceof EditCancelled) return;
       const titleError = validationDetailFromApi(error, "title");
       const bodyMarkdownError = validationDetailFromApi(error, "bodyMarkdown");
       if (titleError || bodyMarkdownError) {
@@ -14373,7 +14499,7 @@ function AnnouncementEditorModal({
   return (
     <Modal title={modalTitle} onClose={onClose} large className="announcement-editor-modal">
       <form className="announcement-create-form" onSubmit={(event) => void submit(event)}>
-        <div className="announcement-create-fields">
+        <fieldset disabled={saving || mutationBusy} className="editor-fieldset announcement-create-fields">
           <Field label={tr("公告标题")} error={fieldErrors.title}>
             <input
               autoFocus
@@ -14401,7 +14527,7 @@ function AnnouncementEditorModal({
             <small>
               {tr("支持段落、列表、粗体、行内代码和链接；站内链接使用")}<code>{tr("[文字](allocube:/路径)")}</code>{tr("，原始 HTML 和其他协议不会渲染。")}</small>
           </Field>
-        </div>
+        </fieldset>
         <section className="announcement-preview" aria-label={tr("公告预览")}>
           <strong>{tr("预览")}</strong>
           {bodyMarkdown.trim() ? (
@@ -14410,15 +14536,6 @@ function AnnouncementEditorModal({
             <span>{tr("输入内容后在这里预览")}</span>
           )}
         </section>
-        {conflictMessage && (
-          <AuthFeedback
-            tone={conflictLoadFailed ? "error" : "warning"}
-            anchored={false}
-            className="announcement-editor-feedback"
-          >
-            {conflictMessage}
-          </AuthFeedback>
-        )}
         <div className="modal-actions">
           <button type="button" className="secondary-button" onClick={onClose}>{tr("取消")}</button>
           <button
@@ -14440,8 +14557,29 @@ function SettingsPanel({
   notify: (kind: "success" | "error", message: string) => void;
 }) {
   const dialog = useAppDialog();
-  const [settingsStale, setSettingsStale] = useState(false);
-  const reloadSettingsRequested = useRef(false);
+  const settingsVersions = useRef<Record<string, number>>({});
+  const settingsGate = useRef(new SettingsRequestGate());
+  const settingsMounted = useRef(true);
+  const settingsRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settingsRetryAttempt = useRef(0);
+  const settingsRefreshRef = useRef<() => Promise<unknown>>(async () => undefined);
+  const [settingsReadError, setSettingsReadError] = useState("");
+  const [settingsWriting, setSettingsWriting] = useState(false);
+  const settingsWriteController = useRef<AbortController | null>(null);
+  const [settingsUncertain, setSettingsUncertain] = useState(() => hasUncertainEdit([
+    "/admin/settings", "/admin/settings/site-profile", "/admin/settings/email-domains",
+    "/admin/settings/registration-email", "/admin/smtp-settings", "/admin/smtp-settings/test"
+  ]));
+  const [settingsWriteEpoch, setSettingsWriteEpoch] = useState(0);
+  useEffect(() => {
+    settingsMounted.current = true;
+    return () => {
+      settingsMounted.current = false;
+      settingsWriteController.current?.abort();
+      settingsGate.current.invalidate();
+      if (settingsRetry.current) clearTimeout(settingsRetry.current);
+    };
+  }, []);
   const [bookingForm, setBookingForm] = useState({
     minBookingMinutes: 1,
     maxBookingMinutes: 1440,
@@ -14482,6 +14620,7 @@ function SettingsPanel({
   const [testingSmtp, setTestingSmtp] = useState(false);
 
   const applySmtpSettings = useCallback((value: SmtpSettingsPayload) => {
+    settingsVersions.current["/admin/smtp-settings"] = value.version;
     setSmtp(value);
     setSmtpForm({
       enabled: value.enabled,
@@ -14497,6 +14636,9 @@ function SettingsPanel({
   }, []);
 
   const applyAdminSettings = useCallback((value: AdminSettingsPayload) => {
+    for (const path of ["/admin/settings", "/admin/settings/site-profile", "/admin/settings/email-domains", "/admin/settings/registration-email"]) {
+      settingsVersions.current[path] = value.version;
+    }
     setAdminSettings(value);
     setBookingForm({
       minBookingMinutes: value.minBookingMinutes,
@@ -14514,6 +14656,75 @@ function SettingsPanel({
     setEmailDomainError("");
   }, []);
 
+  // Each dirty section retains the version it was edited against, even if another section saves.
+  const applySavedAdminSettings = (value: AdminSettingsPayload, savedPath: string) => {
+    setAdminSettings(value);
+    const adopt = (path: string, dirty: boolean) => {
+      if (path !== savedPath && dirty) return false;
+      settingsVersions.current[path] = value.version;
+      return true;
+    };
+    if (adopt("/admin/settings", bookingDirty)) {
+      setBookingForm({ minBookingMinutes: value.minBookingMinutes, maxBookingMinutes: value.maxBookingMinutes, advanceDays: value.advanceDays });
+    }
+    if (adopt("/admin/settings/site-profile", siteProfileDirty)) {
+      setSiteOrigin(value.siteOrigin); setIcpFilingNumber(value.icpFilingNumber);
+      setPublicSecurityFilingNumber(value.publicSecurityFilingNumber);
+    }
+    if (adopt("/admin/settings/email-domains", Boolean(emailDomainInput))) setAllowedEmailDomains(value.allowedEmailDomains);
+    settingsVersions.current["/admin/settings/registration-email"] = value.version;
+  };
+
+  const settingsApi = async <T,>(path: string, options: RequestInit): Promise<T> => {
+    if (settingsUncertain || !adminSettings || !smtp) {
+      throw new Error(tr("请刷新页面后核对设置"));
+    }
+    if (!settingsGate.current.beginWrite()) throw new Error(tr("正在保存，请稍候"));
+    setSettingsWriting(true);
+    const controller = new AbortController(); settingsWriteController.current = controller;
+    let release: (() => unknown) | undefined;
+    try {
+      release = claimEdit(path);
+      const body = JSON.parse(String(options.body));
+      if (options.method === "PATCH") body.expectedVersion = settingsVersions.current[path] ?? body.expectedVersion;
+      const send = (overwrite = false) => withRequestDeadline(signal => api<T>(path, {
+        ...options, body: jsonBody({ ...body, ...(overwrite ? { overwrite: true } : {}) }), signal
+      }), controller.signal);
+      let result: T;
+      try {
+        result = await send();
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 409 || options.method !== "PATCH") throw error;
+        if (!settingsMounted.current || controller.signal.aborted) throw new SettingsSaveCancelled();
+        const confirmed = await dialog.confirm({
+          signal: controller.signal,
+          title: tr("设置已更新"),
+          message: tr("设置已在其他页面或设备更新。是否用本次提交的内容覆盖对应设置？取消将保留当前草稿。"),
+          confirmLabel: tr("确认覆盖"),
+          tone: "danger"
+        });
+        if (!confirmed || !settingsMounted.current) throw new SettingsSaveCancelled();
+        // The payload stays fixed while confirmation is open; never replay an ambiguous write.
+        result = await send(true);
+      }
+      if (path !== "/admin/smtp-settings/test") validateSettingsResponse((result as { settings: unknown })?.settings, path === "/admin/smtp-settings");
+      return result;
+    } catch (error) {
+      if (error instanceof SettingsSaveCancelled || error instanceof EditCancelled) throw new SettingsSaveCancelled();
+      if (!(error instanceof ApiError) || error.status >= 500) {
+        markEditUncertain(path);
+        if (settingsMounted.current) setSettingsUncertain(true);
+        throw new Error(tr("操作结果未确认，请手动刷新页面后核对。输入已保留。"));
+      }
+      throw error;
+    } finally {
+      release?.();
+      settingsGate.current.endWrite();
+      setSettingsWriting(false);
+      setSettingsWriteEpoch(value => value + 1);
+    }
+  };
+
   const updateEmailDomains = async (
     nextDomains: string[],
     successMessage: string,
@@ -14522,7 +14733,7 @@ function SettingsPanel({
     if (!adminSettings || savingEmailDomains) return false;
     setSavingEmailDomains(true);
     try {
-      const result = await api<{ settings: AdminSettingsPayload }>(
+      const result = await settingsApi<{ settings: AdminSettingsPayload }>(
         "/admin/settings/email-domains",
         {
           method: "PATCH",
@@ -14532,15 +14743,13 @@ function SettingsPanel({
           })
         }
       );
-      setAdminSettings(result.settings);
+      applySavedAdminSettings(result.settings, "/admin/settings/email-domains");
       setAllowedEmailDomains(result.settings.allowedEmailDomains);
       setEmailDomainError("");
       notify("success", successMessage);
       return true;
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409) {
-        setSettingsStale(true);
-      }
+      if (error instanceof SettingsSaveCancelled) return false;
       const message = error instanceof Error ? error.message : tr("更新白名单失败");
       if (showFieldError) setEmailDomainError(message);
       notify("error", message);
@@ -14583,7 +14792,7 @@ function SettingsPanel({
     if (!adminSettings || savingBooking) return;
     setSavingBooking(true);
     try {
-      const result = await api<{ settings: AdminSettingsPayload }>(
+      const result = await settingsApi<{ settings: AdminSettingsPayload }>(
         "/admin/settings",
         {
           method: "PATCH",
@@ -14593,7 +14802,7 @@ function SettingsPanel({
           })
         }
       );
-      setAdminSettings(result.settings);
+      applySavedAdminSettings(result.settings, "/admin/settings");
       setBookingForm({
         minBookingMinutes: result.settings.minBookingMinutes,
         maxBookingMinutes: result.settings.maxBookingMinutes,
@@ -14601,9 +14810,7 @@ function SettingsPanel({
       });
       notify("success", tr("全局占用规则已更新"));
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409) {
-        setSettingsStale(true);
-      }
+      if (error instanceof SettingsSaveCancelled) return;
       notify("error", error instanceof Error ? error.message : tr("保存失败"));
     } finally {
       setSavingBooking(false);
@@ -14633,7 +14840,7 @@ function SettingsPanel({
 
     setSavingSiteProfile(true);
     try {
-      const result = await api<{ settings: AdminSettingsPayload }>(
+      const result = await settingsApi<{ settings: AdminSettingsPayload }>(
         "/admin/settings/site-profile",
         {
           method: "PATCH",
@@ -14646,7 +14853,7 @@ function SettingsPanel({
           })
         }
       );
-      setAdminSettings(result.settings);
+      applySavedAdminSettings(result.settings, "/admin/settings/site-profile");
       setSiteOrigin(result.settings.siteOrigin);
       setIcpFilingNumber(result.settings.icpFilingNumber);
       setPublicSecurityFilingNumber(
@@ -14657,9 +14864,7 @@ function SettingsPanel({
       setPublicSecurityFilingError("");
       notify("success", tr("站点信息已更新"));
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409) {
-        setSettingsStale(true);
-      }
+      if (error instanceof SettingsSaveCancelled) return;
       notify(
         "error",
         error instanceof Error ? error.message : tr("保存站点信息失败")
@@ -14674,7 +14879,7 @@ function SettingsPanel({
     if (allowed === adminSettings.allowRegistrationWithoutEmail) return;
     setTogglingEmptyEmail(true);
     try {
-      const result = await api<{ settings: AdminSettingsPayload }>(
+      const result = await settingsApi<{ settings: AdminSettingsPayload }>(
         "/admin/settings/registration-email",
         {
           method: "PATCH",
@@ -14684,15 +14889,13 @@ function SettingsPanel({
           })
         }
       );
-      setAdminSettings(result.settings);
+      applySavedAdminSettings(result.settings, "/admin/settings/registration-email");
       notify(
         "success",
         allowed ? tr("已允许注册时不填写邮箱") : tr("注册时必须填写邮箱")
       );
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409) {
-        setSettingsStale(true);
-      }
+      if (error instanceof SettingsSaveCancelled) return;
       notify(
         "error",
         error instanceof Error ? error.message : tr("注册邮箱规则更新失败")
@@ -14702,16 +14905,9 @@ function SettingsPanel({
     }
   };
 
-  const smtpConfigurationDirty =
-    !smtp ||
-    smtp.host !== smtpForm.host ||
-    smtp.port !== smtpForm.port ||
-    smtp.security !== smtpForm.security ||
-    smtp.username !== smtpForm.username ||
-    smtp.fromName !== smtpForm.fromName ||
-    smtp.fromAddress !== smtpForm.fromAddress ||
-    Boolean(smtpPassword) ||
-    clearPassword;
+  const smtpConfigurationDirty = smtpConfigurationIsDirty(
+    smtp, smtpForm, smtpPassword, clearPassword
+  );
   const smtpDirty =
     smtpConfigurationDirty ||
     Boolean(smtp && smtp.enabled !== smtpForm.enabled);
@@ -14729,24 +14925,39 @@ function SettingsPanel({
           adminSettings.publicSecurityFilingNumber)
   );
 
-  const settingsSnapshot = useRef({ adminSettings, smtp, dirty: false });
-  settingsSnapshot.current = { adminSettings, smtp, dirty: bookingDirty || siteProfileDirty || smtpDirty || Boolean(emailDomainInput) };
+  const settingsSnapshot = useRef({ adminSettings, smtp, dirty: false, uncertain: false });
+  settingsSnapshot.current = { adminSettings, smtp, dirty: bookingDirty || siteProfileDirty || smtpDirty || Boolean(emailDomainInput), uncertain: settingsUncertain };
   const fetchSettingsChanges = useCallback(async (signal: AbortSignal) => {
+    if (settingsRetry.current) clearTimeout(settingsRetry.current);
+    settingsRetry.current = null;
+    const request = settingsGate.current.beginRead(signal);
+    if (!request) return;
     try {
-      const [nextSettings, nextSmtp] = await Promise.all([
-        api<AdminSettingsPayload>("/admin/settings", { signal }),
-        api<SmtpSettingsPayload>("/admin/smtp-settings", { signal })
-      ]);
-      if (signal.aborted) return;
+      const [nextSettings, nextSmtp] = await withRequestDeadline(readSignal => Promise.all([
+        api<AdminSettingsPayload>("/admin/settings", { signal: readSignal, cache: "no-store" }),
+        api<SmtpSettingsPayload>("/admin/smtp-settings", { signal: readSignal, cache: "no-store" })
+      ]), request.signal);
+      if (!request.current()) return;
+      validateSettingsResponse(nextSettings); validateSettingsResponse(nextSmtp, true);
       const previous = settingsSnapshot.current;
-      if (!reloadSettingsRequested.current && previous.adminSettings?.version === nextSettings.version && previous.smtp?.version === nextSmtp.version) return;
-      if (!reloadSettingsRequested.current && previous.dirty) { setSettingsStale(true); return; }
-      applyAdminSettings(nextSettings); applySmtpSettings(nextSmtp); setSettingsStale(false);
-    } catch (error) { if (!signal.aborted) notify("error", error instanceof Error ? error.message : tr("设置加载失败")); }
-    finally { reloadSettingsRequested.current = false; }
-  }, [applyAdminSettings, applySmtpSettings, notify]);
+      if (olderSettingsVersion(previous, nextSettings, nextSmtp)) throw new Error("Stale settings response");
+      setSettingsReadError(""); settingsRetryAttempt.current = 0;
+      if (previous.dirty || previous.uncertain && previous.adminSettings && previous.smtp) return;
+      applyAdminSettings(nextSettings); applySmtpSettings(nextSmtp);
+      // A remounted page may display a fresh snapshot, but only a browser refresh clears an ambiguous write.
+      if (!previous.uncertain) setSettingsUncertain(false);
+    } catch {
+      if (!request.current()) return;
+      setSettingsReadError(tr("设置读取失败，正在重试。已有内容和输入已保留。"));
+      const delay = [2000, 5000, 15000, 30000][Math.min(settingsRetryAttempt.current++, 3)];
+      settingsRetry.current = setTimeout(() => { void settingsRefreshRef.current(); }, delay);
+    } finally {
+      request.dispose();
+    }
+  }, [applyAdminSettings, applySmtpSettings]);
   const refreshSettings = useRealtimeRefresh(fetchSettingsChanges, ["settings"]);
-  useEffect(() => { void refreshSettings(); }, [refreshSettings]);
+  settingsRefreshRef.current = refreshSettings;
+  useEffect(() => { void refreshSettings(); }, [refreshSettings, settingsWriteEpoch]);
 
   const toggleSmtp = async (enabled: boolean) => {
     if (!smtp || enabled === smtp.enabled || togglingSmtp) return;
@@ -14764,7 +14975,7 @@ function SettingsPanel({
     setSmtpForm((current) => ({ ...current, enabled }));
     setTogglingSmtp(true);
     try {
-      const result = await api<{ settings: SmtpSettingsPayload }>(
+      const result = await settingsApi<{ settings: SmtpSettingsPayload }>(
         "/admin/smtp-settings",
         {
           method: "PATCH",
@@ -14782,6 +14993,7 @@ function SettingsPanel({
         }
       );
       setSmtp(result.settings);
+      if (!smtpConfigurationDirty) settingsVersions.current["/admin/smtp-settings"] = result.settings.version;
       setSmtpForm((current) => ({
         ...current,
         enabled: result.settings.enabled
@@ -14789,9 +15001,7 @@ function SettingsPanel({
       notify("success", enabled ? tr("邮件服务已启用") : tr("邮件服务已停用"));
     } catch (error) {
       setSmtpForm((current) => ({ ...current, enabled: smtp.enabled }));
-      if (error instanceof ApiError && error.status === 409) {
-        setSettingsStale(true);
-      }
+      if (error instanceof SettingsSaveCancelled) return;
       notify(
         "error",
         error instanceof Error ? error.message : tr("邮件服务状态更新失败")
@@ -14804,15 +15014,15 @@ function SettingsPanel({
   return (
     <div className="settings-management-page">
       <PageHeader title={tr("系统设置")} />
-      {settingsStale && <div className="context-notice warning" role="alert">
-        <span>{tr("设置已更新，请重新加载后核对。未保存的内容已保留。")}</span>
-        <button className="secondary-button" onClick={async () => {
-          if (!(await dialog.confirm({ title: tr("重新加载"), message: tr("重新加载将丢弃未保存的设置，是否继续？") }))) return;
-          reloadSettingsRequested.current = true;
-          await refreshSettings();
-        }}>{tr("重新加载")}</button>
+      {settingsReadError && <div className="context-notice warning" role="alert">
+        <span>{settingsReadError}</span>
+        <button className="secondary-button" onClick={() => void refreshSettings()}>{tr("重试")}</button>
       </div>}
-      <div className="settings-page">
+      {settingsUncertain && <div className="context-notice warning" role="alert">
+        <span>{tr("操作结果未确认，请手动刷新页面后核对。输入已保留。")}</span>
+      </div>}
+      {(!adminSettings || !smtp) ? <div className="content-loading" role="status"><RefreshCw className="spin" />{tr("正在载入")}</div> :
+      <fieldset className="settings-page" disabled={settingsWriting} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <section className="settings-card card" aria-labelledby="booking-settings-title">
         <SectionHeader
           id="booking-settings-title"
@@ -14830,7 +15040,7 @@ function SettingsPanel({
             {tr("保存后仅影响新的占用，不会改变已经确认的占用。")}</ContextNotice>
           <button
             className="primary-button"
-            disabled={settingsStale || !adminSettings || savingBooking || !bookingDirty}
+            disabled={settingsUncertain || !adminSettings || savingBooking || !bookingDirty}
             onClick={() => void saveBookingSettings()}
           >
             {tr("保存规则")}</button>
@@ -14944,7 +15154,7 @@ function SettingsPanel({
           <button
             type="button"
             className="primary-button"
-            disabled={settingsStale ||
+            disabled={settingsUncertain ||
               !adminSettings || savingSiteProfile || !siteProfileDirty
             }
             onClick={() => void saveSiteProfile()}
@@ -14990,7 +15200,7 @@ function SettingsPanel({
                 <input
                   type="checkbox"
                   checked={smtpForm.enabled}
-                  disabled={settingsStale || togglingSmtp}
+                  disabled={settingsUncertain || togglingSmtp}
                   aria-busy={togglingSmtp}
                   onChange={(event) => void toggleSmtp(event.target.checked)}
                 />
@@ -15030,7 +15240,7 @@ function SettingsPanel({
                         checked={Boolean(
                           adminSettings?.allowRegistrationWithoutEmail
                         )}
-                        disabled={settingsStale || !adminSettings || togglingEmptyEmail}
+                        disabled={settingsUncertain || !adminSettings || togglingEmptyEmail}
                         aria-busy={togglingEmptyEmail}
                         onChange={(event) =>
                           void toggleEmptyRegistrationEmail(event.target.checked)
@@ -15076,7 +15286,7 @@ function SettingsPanel({
                     <button
                       type="button"
                       className="secondary-button"
-                      disabled={settingsStale || !emailDomainInput.trim() || savingEmailDomains}
+                      disabled={settingsUncertain || !emailDomainInput.trim() || savingEmailDomains}
                       onClick={() => void appendEmailDomain()}
                     >
                       {savingEmailDomains ? tr("处理中") : tr("添加")}
@@ -15098,7 +15308,7 @@ function SettingsPanel({
                           <span>{domain}</span>
                           <button
                             type="button"
-                            disabled={settingsStale || savingEmailDomains}
+                            disabled={settingsUncertain || savingEmailDomains}
                             aria-label={tr("移除邮箱域名 {{v0}}", { v0: domain })}
                             onClick={() => void removeEmailDomain(domain)}
                           >
@@ -15173,7 +15383,7 @@ function SettingsPanel({
                   name="smtp-password"
                   autoComplete="new-password"
                   value={smtpPassword}
-                  disabled={settingsStale || clearPassword}
+                  disabled={clearPassword}
                   onChange={(event) => setSmtpPassword(event.target.value)}
                   placeholder={
                     smtp.passwordStatus === "UNREADABLE"
@@ -15222,13 +15432,13 @@ function SettingsPanel({
                 />
                 <button
                   className="secondary-button async-button smtp-test-button"
-                  disabled={settingsStale || smtpDirty || !smtp.testable || !testRecipient || testingSmtp}
+                  disabled={settingsUncertain || smtpDirty || !smtp.testable || !testRecipient || testingSmtp}
                   aria-busy={testingSmtp}
                   aria-label={smtpDirty ? tr("发送测试，请先保存当前修改") : tr("发送测试")}
                   onClick={async () => {
                     try {
                       setTestingSmtp(true);
-                      await api("/admin/smtp-settings/test", {
+                      await settingsApi("/admin/smtp-settings/test", {
                         method: "POST",
                         body: jsonBody({ recipient: testRecipient })
                       });
@@ -15257,7 +15467,7 @@ function SettingsPanel({
                 {smtp.hasPassword && (
                   <button
                     className="text-action danger smtp-password-action"
-                    disabled={settingsStale || smtpForm.enabled}
+                    disabled={smtpForm.enabled}
                     onClick={() => {
                       setClearPassword((current) => !current);
                       setSmtpPassword("");
@@ -15272,12 +15482,12 @@ function SettingsPanel({
               </div>
               <button
                 className="primary-button async-button smtp-save-button"
-                disabled={settingsStale || savingSmtp}
+                disabled={settingsUncertain || savingSmtp}
                 aria-busy={savingSmtp}
                 onClick={async () => {
                   try {
                     setSavingSmtp(true);
-                    const result = await api<{ settings: SmtpSettingsPayload }>(
+                    const result = await settingsApi<{ settings: SmtpSettingsPayload }>(
                       "/admin/smtp-settings",
                       {
                         method: "PATCH",
@@ -15298,9 +15508,7 @@ function SettingsPanel({
                         : tr("邮件配置已保存")
                     );
                   } catch (error) {
-                    if (error instanceof ApiError && error.status === 409) {
-                      setSettingsStale(true);
-                    }
+                    if (error instanceof SettingsSaveCancelled) return;
                     notify("error", error instanceof Error ? error.message : tr("邮件配置保存失败"));
                   } finally {
                     setSavingSmtp(false);
@@ -15322,7 +15530,7 @@ function SettingsPanel({
           <div className="mini-empty">{tr("正在加载邮件配置…")}</div>
         )}
       </section>
-      </div>
+      </fieldset>}
     </div>
   );
 }
@@ -15373,16 +15581,32 @@ function DialogProvider({ children }: { children: React.ReactNode }) {
   const confirm = useCallback(
     (options: ConfirmDialogOptions) =>
       new Promise<boolean>((resolve) => {
-        requestId.current += 1;
-        setRequest({ id: requestId.current, kind: "confirm", options, resolve });
+        if (options.signal?.aborted) { resolve(false); return; }
+        const id = ++requestId.current;
+        const finish = (value: boolean) => { options.signal?.removeEventListener("abort", abort); resolve(value); };
+        const abort = () => { finish(false); setRequest(current => current?.id === id ? null : current); };
+        options.signal?.addEventListener("abort", abort, { once: true });
+        setRequest(current => {
+          if (current?.kind === "confirm") current.resolve(false);
+          else if (current) current.resolve(null);
+          return { id, kind: "confirm", options, resolve: finish };
+        });
       }),
     []
   );
   const prompt = useCallback(
     (options: PromptDialogOptions) =>
       new Promise<string | null>((resolve) => {
-        requestId.current += 1;
-        setRequest({ id: requestId.current, kind: "prompt", options, resolve });
+        if (options.signal?.aborted) { resolve(null); return; }
+        const id = ++requestId.current;
+        const finish = (value: string | null) => { options.signal?.removeEventListener("abort", abort); resolve(value); };
+        const abort = () => { finish(null); setRequest(current => current?.id === id ? null : current); };
+        options.signal?.addEventListener("abort", abort, { once: true });
+        setRequest(current => {
+          if (current?.kind === "confirm") current.resolve(false);
+          else if (current) current.resolve(null);
+          return { id, kind: "prompt", options, resolve: finish };
+        });
       }),
     []
   );

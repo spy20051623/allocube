@@ -33,17 +33,17 @@ Times display and accept input in the browser's local timezone by default. The L
 
 The calendar refreshes for changes affecting the machines and dates covered by its query. Reservations on other machines or dates do not refresh the current calendar. While "Reservations" is open, changes to your own records update its lists and counts. Resource configuration, maintenance, and permission changes refresh the relevant views.
 
-Switching to another browser tab keeps the connection open but pauses ordinary data refreshes. Returning synchronizes the page once. While disconnected, a visible page retries every 30 seconds and synchronizes again after reconnection. Background updates preserve reservation drafts; changed records must be checked again before submission. Revoked access or an invalid account immediately clears restricted content and revalidates the session.
+Switching to another browser tab keeps the connection open but pauses ordinary data refreshes. Returning synchronizes the page once. While disconnected, a visible page retries every 30 seconds and synchronizes again after reconnection. Background updates retain draft notes and automatically trim or split time slots to their latest availability, removing unavailable fragments and those shorter than the minimum duration. Each adjustment reports how many slots remain; no approval is required. Adjustment pauses while a time field is being edited and resumes after leaving it. Changed original reservations must still be checked again before submission. Revoked access or an invalid account immediately clears restricted content and revalidates the session.
 
 ## Creating a reservation
 
 1. In "Calendar", select "Group" or "Machine".
 2. Drag across one or more future time slots on the timeline.
 3. Optionally fill in the title, purpose, and notes; all may be left blank.
-4. Review the preview results and handle any conflicts or split time slots.
+4. Review the automatically adjusted available slots and the notification of changes already made.
 5. Submit.
 
-Every slot in one submission must use the same scope: one or more resource groups, or the entire machine. The server checks permissions, time rules, and conflicts together. If any slot fails, none of them are saved.
+Every slot in one submission must use the same scope: one or more resource groups, or the entire machine. In one transaction, the server rechecks permissions, time rules, and conflicts, automatically keeps available fragments that meet the minimum duration, and saves them together. Further adjustments are reported with the actual saved count. No remaining slots means nothing is created. Results exceeding 100 slots are rejected rather than truncated; reduce the selected slots. Permission, validation, or write failures roll back the transaction.
 
 Each reservation must follow the minimum duration, maximum duration, and booking window set by administrators.
 
@@ -55,7 +55,7 @@ Click your active or upcoming reservation in the calendar and choose Edit to add
 - Adjust or remove new drafts and add new time segments. Removing an original from the editing sequence keeps that original reservation; new drafts remain available for further adjustment.
 - An editing sequence accepts up to 100 originals and a submission up to 100 new segments. Batch editing can combine whole-machine and resource-group reservations; ordinary creation still requires one scope.
 - Originals remain unchanged until submission. One transaction ends active originals, cancels upcoming originals, and creates all new time segments. Originals that started less than 1 minute ago are cancelled instead of leaving a zero-length interval.
-- If an original has ended, changed, been cancelled, or lost access, or a new segment conflicts, is unavailable, or fails to save, the entire submission rolls back. Changed sequences must be discarded and selected again.
+- If an original has ended, changed, been cancelled, or lost access, or permission checks or writes fail, the entire submission rolls back. New time slots are automatically trimmed or split around conflicts; if none remain, originals stay unchanged. Changed sequences must be discarded and selected again.
 - Discarding an edit does not release originals. If a network failure makes the result uncertain, check your latest records before submitting again.
 
 ## Ending and cancelling
@@ -79,6 +79,8 @@ The finder shows machine, resource group or whole-machine scope, time, and statu
 Open Feedback from the user menu to submit an issue or feature request with a title, Markdown body, severity or urgency, and optional images. PNG, JPEG, and WebP are supported, with up to 5 images per body or comment, 5 MB per image, and 20 MB combined.
 
 Regular users can view only their own tickets and images; system administrators handle them. Nonterminal tickets can be edited or withdrawn. Fixed, implemented, or rejected tickets cannot be edited or withdrawn by their owner, but still accept comments. Withdrawn tickets are entirely read-only and administrators cannot restore them. Replies and status changes appear as in-app notifications and unread feedback indicators.
+
+Feedback editors synchronize updates while untouched and retain drafts once edited. A stale submission asks whether to overwrite the corresponding content; cancelling keeps the draft editable. Withdrawn or otherwise read-only feedback cannot be overwritten. If a network failure leaves the outcome uncertain, refresh manually to check the result.
 
 ## Email preferences
 

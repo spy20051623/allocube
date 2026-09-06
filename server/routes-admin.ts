@@ -1,3 +1,4 @@
+import { checkEditVersion, overwriteRequested } from "./edit-conflict.js";
 import { registerReportRoutes } from "./report-routes.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -108,7 +109,8 @@ const smtpSettingsSchema = z
     clearPassword: z.boolean().optional().default(false),
     fromName: z.string().trim().max(100),
     fromAddress: z.union([z.literal(""), z.string().trim().email().max(254)]),
-    expectedVersion: z.number().int().min(1)
+    expectedVersion: z.number().int().min(1),
+    overwrite: z.boolean().optional().default(false)
   })
   .superRefine((value, context) => {
     if (value.clearPassword && value.password) {
@@ -359,11 +361,11 @@ export function registerAdminRoutes(
         | undefined;
       if (
         !user ||
-        user.status !== "PENDING_APPROVAL" ||
-        user.application_revision !== expectedRevision
+        user.status !== "PENDING_APPROVAL"
       ) {
         throw new IdentityError("注册信息已被更新，请刷新后重试", 409);
       }
+      checkEditVersion(user.application_revision, expectedRevision, overwriteRequested(request));
       ensureUsernameAvailable(user.username_normalized, id);
       if (user.email) ensureEmailAvailable(user.email, id);
       const employeeRequest = db
@@ -449,7 +451,6 @@ export function registerAdminRoutes(
           if (
             !row ||
             row.status !== "PENDING" ||
-            row.version !== expectedVersion ||
             row.user_status !== "ACTIVE"
           ) {
             throw new IdentityError(
@@ -457,6 +458,7 @@ export function registerAdminRoutes(
               409
             );
           }
+          checkEditVersion(row.version, expectedVersion, overwriteRequested(request));
           const now = nowIso();
           if (row.requested_employee_number !== row.current_employee_number) {
             ensureEmployeeNumberAvailable(
@@ -560,14 +562,14 @@ export function registerAdminRoutes(
             | undefined;
           if (
             !row ||
-            row.status !== "PENDING" ||
-            row.version !== body.expectedVersion
+            row.status !== "PENDING"
           ) {
             throw new IdentityError(
               "该资料修改已被处理，请刷新后重试",
               409
             );
           }
+          checkEditVersion(row.version, body.expectedVersion, overwriteRequested(request));
           const now = nowIso();
           db.prepare(
             `UPDATE profile_change_requests
@@ -618,13 +620,18 @@ export function registerAdminRoutes(
         reason: z.string().trim().max(500).optional().default("")
       })
       .parse(request.body);
-    const result = db
+    const result = withImmediateTransaction(() => {
+      const current = db.prepare("SELECT status, application_revision FROM users WHERE id = ?").get(id) as { status: string; application_revision: number } | undefined;
+      if (!current || current.status !== "PENDING_APPROVAL") throw new BusinessError("注册信息已被更新，请刷新后重试", 409);
+      checkEditVersion(current.application_revision, body.expectedRevision, overwriteRequested(request));
+      return db
       .prepare(
         `UPDATE users SET status = 'CHANGES_REQUESTED',
          version = version + 1, updated_at = ?
          WHERE id = ? AND status = 'PENDING_APPROVAL' AND application_revision = ?`
       )
-      .run(nowIso(), id, body.expectedRevision);
+      .run(nowIso(), id, current.application_revision);
+    });
     if (!result.changes) {
       return reply.code(409).send({ error: "注册信息已被更新，请刷新后重试" });
     }
@@ -653,20 +660,14 @@ export function registerAdminRoutes(
         reason: z.string().trim().max(500).optional().default("")
       })
       .parse(request.body);
-    const user = db
-      .prepare(
-        `SELECT email FROM users
-         WHERE id = ? AND status IN ('PENDING_APPROVAL', 'CHANGES_REQUESTED')
-           AND application_revision = ?`
-      )
-      .get(id, body.expectedRevision) as { email: string | null } | undefined;
-    if (!user) return reply.code(409).send({ error: "注册信息已被更新，请刷新后重试" });
-    deleteUnapprovedUser(
-      id,
-      "ADMIN_REJECTED",
-      auth.user.id,
-      body.expectedRevision
-    );
+    const user = withImmediateTransaction(() => {
+      const current = db.prepare("SELECT email, status, application_revision FROM users WHERE id = ?").get(id) as { email: string | null; status: string; application_revision: number } | undefined;
+      if (!current || !["PENDING_APPROVAL", "CHANGES_REQUESTED"].includes(current.status)) throw new BusinessError("注册信息已被更新，请刷新后重试", 409);
+      checkEditVersion(current.application_revision, body.expectedRevision, overwriteRequested(request));
+      deleteUnapprovedUser(id, "ADMIN_REJECTED", auth.user.id, current.application_revision, true);
+      return current;
+    });
+    checkpointSensitiveDeletion();
     if (user.email) {
       queueEmail(
         user.email,
@@ -716,7 +717,7 @@ export function registerAdminRoutes(
         }
       | undefined;
     result = withImmediateTransaction(() => {
-      if (getScheduleRevision() !== body.expectedRevision) {
+      if (!overwriteRequested(request) && getScheduleRevision() !== body.expectedRevision) {
         throw new BusinessError(
           "占用情况已变化，请重新查看影响",
           409,
@@ -729,7 +730,8 @@ export function registerAdminRoutes(
       if (user.role === "SYSTEM_ADMIN") {
         throw new BusinessError("系统管理员账号不能停用", 400);
       }
-      if (user.status !== "ACTIVE" || user.version !== body.expectedVersion) {
+      checkEditVersion(user.version, body.expectedVersion, overwriteRequested(request));
+      if (user.status !== "ACTIVE") {
         throw new BusinessError("用户信息已更新，请刷新后重试", 409);
       }
       const now = nowIso();
@@ -750,7 +752,7 @@ export function registerAdminRoutes(
           body.reason,
           now,
           id,
-          body.expectedVersion
+          user.version
         );
       if (!changed.changes) {
         throw new BusinessError("用户信息已更新，请刷新后重试", 409);
@@ -823,7 +825,7 @@ export function registerAdminRoutes(
       });
       bumpMachineAccessRevision();
       return {
-        version: body.expectedVersion + 1,
+        version: user.version + 1,
         revision: bumpScheduleRevision(),
         counts
       };
@@ -852,7 +854,8 @@ export function registerAdminRoutes(
       if (user.role === "SYSTEM_ADMIN") {
         throw new BusinessError("系统管理员账号不能重新启用", 400);
       }
-      if (user.status !== "DISABLED" || user.version !== expectedVersion) {
+      checkEditVersion(user.version, expectedVersion, overwriteRequested(request));
+      if (user.status !== "DISABLED") {
         throw new BusinessError("用户信息已更新，请刷新后重试", 409);
       }
       const now = nowIso();
@@ -867,7 +870,7 @@ export function registerAdminRoutes(
                SELECT 1 FROM deleted_user_tombstones dut WHERE dut.user_id = users.id
              )`
         )
-        .run(now, id, expectedVersion);
+        .run(now, id, user.version);
       if (!changed.changes) {
         throw new BusinessError("用户信息已更新，请刷新后重试", 409);
       }
@@ -879,7 +882,7 @@ export function registerAdminRoutes(
       });
       bumpMachineAccessRevision();
       return {
-        version: expectedVersion + 1,
+        version: user.version + 1,
         revision: bumpScheduleRevision()
       };
     });
@@ -930,9 +933,7 @@ export function registerAdminRoutes(
       if (user.status !== "DISABLED") {
         throw new BusinessError("请先停用账号，再进行删除", 409);
       }
-      if (user.version !== expectedVersion) {
-        throw new BusinessError("用户信息已更新，请刷新后重试", 409);
-      }
+      checkEditVersion(user.version, expectedVersion, overwriteRequested(request));
       const counts = userDeleteImpact(id);
       deleteUserRecords(id, auth.user.id, counts);
       addAudit(auth.user.id, "USER_DELETE", "user", id, undefined, {
@@ -1178,52 +1179,51 @@ export function registerAdminRoutes(
     const auth = requireMachineManager(request, reply);
     if (!auth) return;
     const body = machineUpdateSchema.parse(request.body);
-    const before = db.prepare("SELECT * FROM machines WHERE id = ?").get(auth.machineId) as
-      | Record<string, unknown>
-      | undefined;
-    if (!before) return reply.code(404).send({ error: "机器不存在" });
-    let updateResult;
-    try {
-      updateResult = db.prepare(
-        `UPDATE machines SET
-          name = ?, address = ?, hardware_notes = ?,
-          connection_guide = ?, management_notes = ?,
-          tags_json = ?, version = version + 1, updated_at = ?
-         WHERE id = ? AND version = ?`
-      ).run(
-        body.name,
-        body.address,
-        body.hardwareNotes,
-        body.connectionGuide,
-        body.managementNotes,
-        JSON.stringify(body.tags),
-        nowIso(),
-        auth.machineId,
-        body.expectedVersion
-      );
-    } catch (error) {
-      if (String(error).includes("UNIQUE")) {
-        return reply.code(409).send({ error: "机器名称已经存在" });
+    const result = withImmediateTransaction(() => {
+      const before = db.prepare("SELECT * FROM machines WHERE id = ?").get(auth.machineId) as
+        | Record<string, unknown>
+        | undefined;
+      if (!before) throw new BusinessError("机器不存在", 404);
+      checkEditVersion(Number(before.version), body.expectedVersion, overwriteRequested(request), "MACHINE_SETTINGS_STALE");
+      let updateResult;
+      try {
+        updateResult = db.prepare(
+          `UPDATE machines SET
+            name = ?, address = ?, hardware_notes = ?,
+            connection_guide = ?, management_notes = ?,
+            tags_json = ?, version = version + 1, updated_at = ?
+           WHERE id = ? AND version = ?`
+        ).run(
+          body.name,
+          body.address,
+          body.hardwareNotes,
+          body.connectionGuide,
+          body.managementNotes,
+          JSON.stringify(body.tags),
+          nowIso(),
+          auth.machineId,
+          Number(before.version)
+        );
+      } catch (error) {
+        if (String(error).includes("UNIQUE")) {
+          throw new BusinessError("机器名称已经存在", 409);
+        }
+        throw error;
       }
-      throw error;
-    }
-    if (!updateResult.changes) {
-      return reply.code(409).send({
-        error: "机器信息已由其他管理员更新，请刷新后重试",
-        code: "MACHINE_SETTINGS_STALE"
-      });
-    }
-    const notesChanged = String(before.management_notes ?? "") !== body.managementNotes;
-    addAudit(
-      auth.user.id,
-      "MACHINE_UPDATE",
-      "machine",
-      auth.machineId,
-      machineAuditPayloadFromRow(before, notesChanged),
-      machineAuditPayload(body, notesChanged)
-    );
-    publishRevision(bumpScheduleRevision());
-    return { message: "机器资料已更新" };
+      if (!updateResult.changes) throw new BusinessError("机器信息已由其他管理员更新，请刷新后重试", 409, undefined, "MACHINE_SETTINGS_STALE");
+      const notesChanged = String(before.management_notes ?? "") !== body.managementNotes;
+      addAudit(
+        auth.user.id,
+        "MACHINE_UPDATE",
+        "machine",
+        auth.machineId,
+        machineAuditPayloadFromRow(before, notesChanged),
+        machineAuditPayload(body, notesChanged)
+      );
+      return { message: "机器资料已更新", revision: bumpScheduleRevision() };
+    });
+    publishRevision(result.revision);
+    return result;
   });
 
   app.post(
@@ -1242,6 +1242,7 @@ export function registerAdminRoutes(
     if (!auth) return;
     const body = longDisableSchema.parse(request.body);
     const result = disableLongTerm({
+      overwrite: overwriteRequested(request),
       type: "MACHINE",
       id,
       expectedVersion: body.expectedVersion,
@@ -1259,6 +1260,7 @@ export function registerAdminRoutes(
     if (!auth) return;
     const { expectedVersion } = versionSchema.parse(request.body);
     const result = enableTarget({
+      overwrite: overwriteRequested(request),
       type: "MACHINE",
       id,
       expectedVersion,
@@ -1293,9 +1295,7 @@ export function registerAdminRoutes(
       if (machine.status !== "DISABLED") {
         throw new BusinessError("请先停用机器，再进行删除", 409);
       }
-      if (machine.version !== expectedVersion) {
-        throw new BusinessError("机器信息已更新，请刷新后重试", 409);
-      }
+      checkEditVersion(machine.version, expectedVersion, overwriteRequested(request));
       const counts = machineDeleteImpact(id);
       notifyDeletedMachineUsers(id, machine.name);
       deleteMachineRecords(id, auth.user.id, counts);
@@ -1570,7 +1570,7 @@ export function registerAdminRoutes(
       if (!row || !canManageMachine(auth.user.id, auth.user.role, row.machine_id)) {
         throw new BusinessError("无权处理这条申请", 403);
       }
-      if (row.status !== "PENDING" || row.version !== expectedVersion) {
+      if (row.status !== "PENDING") {
         throw new BusinessError(
           "该申请已由其他管理员处理，审批列表已刷新",
           409,
@@ -1578,6 +1578,7 @@ export function registerAdminRoutes(
           "MACHINE_ACCESS_REQUEST_ALREADY_PROCESSED"
         );
       }
+      checkEditVersion(row.version, expectedVersion, overwriteRequested(request));
       if (row.user_status !== "ACTIVE") {
         throw new BusinessError("申请人的账号当前不可用", 409);
       }
@@ -1603,7 +1604,7 @@ export function registerAdminRoutes(
              reviewed_by = ?, reviewed_at = ?, updated_at = ?
            WHERE id = ? AND status = 'PENDING' AND version = ?`
         )
-        .run(auth.user.id, now, now, id, expectedVersion);
+        .run(auth.user.id, now, now, id, row.version);
       if (!changed.changes) {
         throw new BusinessError(
           "该申请已由其他管理员处理，审批列表已刷新",
@@ -1660,6 +1661,8 @@ export function registerAdminRoutes(
       if (!row || !canManageMachine(auth.user.id, auth.user.role, row.machine_id)) {
         throw new BusinessError("无权处理这条申请", 403);
       }
+      if (row.status !== "PENDING") throw new BusinessError("该申请已由其他管理员处理，审批列表已刷新", 409, undefined, "MACHINE_ACCESS_REQUEST_ALREADY_PROCESSED");
+      checkEditVersion(row.version, body.expectedVersion, overwriteRequested(request));
       const now = nowIso();
       const changed = db
         .prepare(
@@ -1668,7 +1671,7 @@ export function registerAdminRoutes(
              reviewed_by = ?, reviewed_at = ?, updated_at = ?
            WHERE id = ? AND status = 'PENDING' AND version = ?`
         )
-        .run(body.reason, auth.user.id, now, now, id, body.expectedVersion);
+        .run(body.reason, auth.user.id, now, now, id, row.version);
       if (!changed.changes) {
         throw new BusinessError(
           "该申请已由其他管理员处理，审批列表已刷新",
@@ -1781,6 +1784,22 @@ export function registerAdminRoutes(
             )
             .all(machineId) as Array<Record<string, unknown>>;
           const currentGroups = currentGroupRows.map(mapResourceGroup);
+          if (overwriteRequested(request)) {
+            const poolIds = new Set([...body.pools, ...body.deletedPools].map(pool => pool.id));
+            const groupIds = new Set(body.groups.map(group => group.id));
+            const additions = resourceConfigurationSchema.parse({
+              pools: currentPools.filter(pool => !poolIds.has(pool.id)).map(pool => ({
+                ...resourcePoolConfiguration(pool), id: pool.id, expectedVersion: pool.version
+              })),
+              groups: currentGroups.filter(group => !groupIds.has(group.id)).map(group => ({
+                ...group, expectedVersion: group.version,
+                allocations: group.allocations.map(allocation => allocation.kind === "ITEM_LIST"
+                  ? { ...allocation, itemIds: allocation.items.map(item => item.id) } : allocation)
+              }))
+            });
+            body.pools.push(...additions.pools);
+            body.groups.push(...additions.groups);
+          }
           const submittedPoolIds = new Set(body.pools.map((pool) => pool.id));
           const submittedGroupIds = new Set(body.groups.map((group) => group.id));
           const deletedPoolVersions = new Map(
@@ -1801,7 +1820,7 @@ export function registerAdminRoutes(
               "资源配置已由其他管理员更新，请刷新后重试",
               409,
               undefined,
-              "RESOURCE_CONFIGURATION_STALE"
+              overwriteRequested(request) ? "RESOURCE_CONFIGURATION_INVALID" : "RESOURCE_CONFIGURATION_STALE"
             );
           }
 
@@ -1809,15 +1828,15 @@ export function registerAdminRoutes(
           for (const pool of body.pools) {
             const current = currentPoolMap.get(pool.id);
             if (current) {
+              checkEditVersion(current.version, pool.expectedVersion, overwriteRequested(request), "RESOURCE_CONFIGURATION_STALE");
               if (
-                pool.expectedVersion !== current.version ||
                 pool.kind !== current.kind
               ) {
                 throw new BusinessError(
                   "资源配置已由其他管理员更新，请刷新后重试",
                   409,
                   undefined,
-                  "RESOURCE_CONFIGURATION_STALE"
+                  "RESOURCE_CONFIGURATION_INVALID"
                 );
               }
             } else {
@@ -1829,7 +1848,7 @@ export function registerAdminRoutes(
                   "资源配置已由其他管理员更新，请刷新后重试",
                   409,
                   undefined,
-                  "RESOURCE_CONFIGURATION_STALE"
+                  "RESOURCE_CONFIGURATION_INVALID"
                 );
               }
             }
@@ -1837,15 +1856,15 @@ export function registerAdminRoutes(
 
           for (const deletedPool of body.deletedPools) {
             const current = currentPoolMap.get(deletedPool.id);
+            if (current) checkEditVersion(current.version, deletedPool.expectedVersion, overwriteRequested(request), "RESOURCE_CONFIGURATION_STALE");
             if (
-              !current ||
-              current.version !== deletedPool.expectedVersion
+              !current
             ) {
               throw new BusinessError(
                 "资源配置已由其他管理员更新，请刷新后重试",
                 409,
                 undefined,
-                "RESOURCE_CONFIGURATION_STALE"
+                "RESOURCE_CONFIGURATION_INVALID"
               );
             }
           }
@@ -1856,14 +1875,7 @@ export function registerAdminRoutes(
           for (const group of body.groups) {
             const current = currentGroupMap.get(group.id);
             if (current) {
-              if (group.expectedVersion !== current.version) {
-                throw new BusinessError(
-                  "资源配置已由其他管理员更新，请刷新后重试",
-                  409,
-                  undefined,
-                  "RESOURCE_CONFIGURATION_STALE"
-                );
-              }
+              checkEditVersion(current.version, group.expectedVersion, overwriteRequested(request), "RESOURCE_CONFIGURATION_STALE");
             } else {
               const collision = db
                 .prepare("SELECT 1 FROM resource_groups WHERE id = ?")
@@ -1873,7 +1885,7 @@ export function registerAdminRoutes(
                   "资源配置已由其他管理员更新，请刷新后重试",
                   409,
                   undefined,
-                  "RESOURCE_CONFIGURATION_STALE"
+                  "RESOURCE_CONFIGURATION_INVALID"
                 );
               }
             }
@@ -2276,9 +2288,8 @@ export function registerAdminRoutes(
     try {
       withImmediateTransaction(() => {
         const fresh = getResourcePool(id);
-        if (!fresh || fresh.version !== expectedVersion) {
-          throw new BusinessError("资源项已由其他管理员更新，请刷新后重试", 409);
-        }
+        if (!fresh) throw new BusinessError("资源项不存在", 404);
+        checkEditVersion(fresh.version, expectedVersion, overwriteRequested(request));
         if (body.kind === "INDEX_RANGE" && current.kind === "INDEX_RANGE") {
           const claim = db
             .prepare(
@@ -2461,9 +2472,8 @@ export function registerAdminRoutes(
         );
       }
       const fresh = getResourcePool(id);
-      if (!fresh || fresh.version !== expectedVersion) {
-        throw new BusinessError("资源项已更新，请刷新后重试", 409);
-      }
+      if (!fresh) throw new BusinessError("资源项不存在", 404);
+        checkEditVersion(fresh.version, expectedVersion, overwriteRequested(request));
       tombstoneResourcePool(id, pool.machineId, auth.user.id);
       addAudit(
         auth.user.id,
@@ -2647,9 +2657,8 @@ export function registerAdminRoutes(
     const beforeGroup = mapResourceGroup(current);
     withImmediateTransaction(() => {
       const fresh = getCurrentResourceGroupRow(id);
-      if (!fresh || Number(fresh.version) !== body.expectedVersion) {
-        throw new BusinessError("资源组已由其他管理员更新，请刷新后重试", 409);
-      }
+      if (!fresh) throw new BusinessError("资源组不存在", 404);
+        checkEditVersion(Number(fresh.version), body.expectedVersion!, overwriteRequested(request));
       const duplicate = db
         .prepare(
           `SELECT 1 FROM resource_groups
@@ -2664,7 +2673,7 @@ export function registerAdminRoutes(
         body.allocations,
         id
       );
-      const version = Number(current.version) + 1;
+      const version = Number(fresh.version) + 1;
       db.prepare(
         `UPDATE resource_groups SET
           name = ?, description = ?, tags_json = ?, sort_order = ?,
@@ -2768,6 +2777,7 @@ export function registerAdminRoutes(
       if (!auth) return;
       const body = plannedUnavailabilitySchema.parse(request.body);
       const result = createPlannedUnavailability({
+      overwrite: overwriteRequested(request),
         type: "RESOURCE_GROUP",
         id,
         startAt: body.startAt,
@@ -2800,6 +2810,7 @@ export function registerAdminRoutes(
     if (!auth) return;
     const body = longDisableSchema.parse(request.body);
     const result = disableLongTerm({
+      overwrite: overwriteRequested(request),
       type: "RESOURCE_GROUP",
       id,
       expectedVersion: body.expectedVersion,
@@ -2821,6 +2832,7 @@ export function registerAdminRoutes(
       .object({ expectedVersion: z.number().int().min(1) })
       .parse(request.body);
     const result = enableTarget({
+      overwrite: overwriteRequested(request),
       type: "RESOURCE_GROUP",
       id,
       expectedVersion,
@@ -2856,11 +2868,11 @@ export function registerAdminRoutes(
         | undefined;
       if (
         !fresh ||
-        fresh.status !== "DISABLED" ||
-        fresh.version !== expectedVersion
+        fresh.status !== "DISABLED"
       ) {
         throw new BusinessError("资源组已更新，请刷新后重试", 409);
       }
+      checkEditVersion(fresh.version, expectedVersion, overwriteRequested(request));
       const counts = resourceGroupDeleteImpact(id);
       notifyDeletedResourceGroupUsers(id, String(group.name));
       deleteResourceGroupRecords(id, auth.user.id, counts);
@@ -2902,6 +2914,7 @@ export function registerAdminRoutes(
     const auth = requireMachineManagerForId(request, reply, id);
     if (!auth) return;
     const result = createPlannedUnavailability({
+      overwrite: overwriteRequested(request),
       type: "MACHINE",
       id,
       startAt: body.startAt,
@@ -2969,6 +2982,7 @@ export function registerAdminRoutes(
       targetId = body.resourceGroupId;
     }
     const result = createPlannedUnavailability({
+      overwrite: overwriteRequested(request),
       type,
       id: targetId,
       startAt: body.startAt,
@@ -3020,7 +3034,7 @@ export function registerAdminRoutes(
     if (!auth) return;
     const body = smtpSettingsSchema.parse(request.body);
     const current = getSmtpSettingsRow();
-    if (current.version !== body.expectedVersion) {
+    if (!body.overwrite && current.version !== body.expectedVersion) {
       return reply.code(409).send({
         error: "邮件配置已被其他管理员更新，请刷新后重试",
         code: "SMTP_SETTINGS_STALE"
@@ -3049,7 +3063,7 @@ export function registerAdminRoutes(
     const now = nowIso();
     withImmediateTransaction(() => {
       const latest = getSmtpSettingsRow();
-      if (latest.version !== body.expectedVersion) {
+      if (!body.overwrite && latest.version !== body.expectedVersion) {
         throw new BusinessError(
           "邮件配置已被其他管理员更新，请刷新后重试",
           409
@@ -3193,7 +3207,8 @@ export function registerAdminRoutes(
         minBookingMinutes: z.number().int().min(1).max(1440),
         maxBookingMinutes: z.number().int().min(1).max(10080),
         advanceDays: z.number().int().min(1).max(365),
-        expectedVersion: z.number().int().min(1)
+        expectedVersion: z.number().int().min(1),
+        overwrite: z.boolean().optional().default(false)
       })
       .refine((value) => value.maxBookingMinutes >= value.minBookingMinutes, {
         message: "最长时长不能小于最短时长"
@@ -3201,7 +3216,7 @@ export function registerAdminRoutes(
       .parse(request.body);
     const settings = withImmediateTransaction(() => {
       const before = getAdminSettings();
-      if (before.version !== body.expectedVersion) {
+      if (!body.overwrite && before.version !== body.expectedVersion) {
         throw new BusinessError(
           "系统设置已由其他管理员更新，请刷新后重试",
           409,
@@ -3259,7 +3274,8 @@ export function registerAdminRoutes(
           allowedEmailDomains: z
             .array(z.string().trim().min(1).max(253))
             .max(100),
-          expectedVersion: z.number().int().min(1)
+          expectedVersion: z.number().int().min(1),
+          overwrite: z.boolean().optional().default(false)
         })
         .parse(request.body);
       let allowedEmailDomains: string[];
@@ -3278,7 +3294,7 @@ export function registerAdminRoutes(
       }
       const settings = withImmediateTransaction(() => {
         const before = getAdminSettings();
-        if (before.version !== body.expectedVersion) {
+        if (!body.overwrite && before.version !== body.expectedVersion) {
           throw new BusinessError(
             "系统设置已由其他管理员更新，请刷新后重试",
             409,
@@ -3324,12 +3340,13 @@ export function registerAdminRoutes(
       const body = z
         .object({
           allowRegistrationWithoutEmail: z.boolean(),
-          expectedVersion: z.number().int().min(1)
+          expectedVersion: z.number().int().min(1),
+          overwrite: z.boolean().optional().default(false)
         })
         .parse(request.body);
       const settings = withImmediateTransaction(() => {
         const before = getAdminSettings();
-        if (before.version !== body.expectedVersion) {
+        if (!body.overwrite && before.version !== body.expectedVersion) {
           throw new BusinessError(
             "系统设置已由其他管理员更新，请刷新后重试",
             409,
@@ -3388,7 +3405,8 @@ export function registerAdminRoutes(
           siteOrigin: z.string().trim().min(1).max(2048),
           icpFilingNumber: z.string().trim().max(100),
           publicSecurityFilingNumber: z.string().trim().max(100),
-          expectedVersion: z.number().int().min(1)
+          expectedVersion: z.number().int().min(1),
+          overwrite: z.boolean().optional().default(false)
         })
         .parse(request.body);
       let siteOrigin: string;
@@ -3422,7 +3440,7 @@ export function registerAdminRoutes(
       }
       const settings = withImmediateTransaction(() => {
         const before = getAdminSettings();
-        if (before.version !== body.expectedVersion) {
+        if (!body.overwrite && before.version !== body.expectedVersion) {
           throw new BusinessError(
             "系统设置已由其他管理员更新，请刷新后重试",
             409,
@@ -3486,7 +3504,8 @@ export function registerAdminRoutes(
       const body = z
         .object({
           siteOrigin: z.string().trim().min(1).max(2048),
-          expectedVersion: z.number().int().min(1)
+          expectedVersion: z.number().int().min(1),
+          overwrite: z.boolean().optional().default(false)
         })
         .parse(request.body);
       let siteOrigin: string;
@@ -3503,7 +3522,7 @@ export function registerAdminRoutes(
       }
       const settings = withImmediateTransaction(() => {
         const before = getAdminSettings();
-        if (before.version !== body.expectedVersion) {
+        if (!body.overwrite && before.version !== body.expectedVersion) {
           throw new BusinessError(
             "系统设置已由其他管理员更新，请刷新后重试",
             409,
@@ -3550,7 +3569,8 @@ export function registerAdminRoutes(
             .string()
             .trim()
             .max(100),
-          expectedVersion: z.number().int().min(1)
+          expectedVersion: z.number().int().min(1),
+          overwrite: z.boolean().optional().default(false)
         })
         .parse(request.body);
       const validationError = icpFilingValidationError(
@@ -3564,7 +3584,7 @@ export function registerAdminRoutes(
       }
       const settings = withImmediateTransaction(() => {
         const before = getAdminSettings();
-        if (before.version !== body.expectedVersion) {
+        if (!body.overwrite && before.version !== body.expectedVersion) {
           throw new BusinessError(
             "系统设置已由其他管理员更新，请刷新后重试",
             409,
@@ -3611,7 +3631,8 @@ export function registerAdminRoutes(
       const body = z
         .object({
           publicSecurityFilingNumber: z.string().trim().max(100),
-          expectedVersion: z.number().int().min(1)
+          expectedVersion: z.number().int().min(1),
+          overwrite: z.boolean().optional().default(false)
         })
         .parse(request.body);
       const validationError = publicSecurityFilingValidationError(
@@ -3625,7 +3646,7 @@ export function registerAdminRoutes(
       }
       const settings = withImmediateTransaction(() => {
         const before = getAdminSettings();
-        if (before.version !== body.expectedVersion) {
+        if (!body.overwrite && before.version !== body.expectedVersion) {
           throw new BusinessError(
             "系统设置已由其他管理员更新，请刷新后重试",
             409,

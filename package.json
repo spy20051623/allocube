@@ -10,10 +10,13 @@
     "test": "vitest run",
     "test:production-http": "node scripts/test-production-http.mjs",
     "test:realtime-http": "node scripts/test-realtime-http.mjs",
+    "test:settings-network": "node scripts/test-settings-network.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "backup": "node scripts/backup.mjs",
     "db:reset": "node scripts/reset-db.mjs",
-    "admin:reset-password": "node scripts/reset-admin-password.mjs"
+    "admin:reset-password": "node scripts/reset-admin-password.mjs",
+    "test:calendar-adjustment": "node scripts/test-calendar-adjustment.mjs",
+    "test:edit-conflicts": "node scripts/test-edit-conflicts.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

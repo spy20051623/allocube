@@ -1,3 +1,4 @@
+import { overwriteRequested } from "./edit-conflict.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -155,7 +156,7 @@ export function registerAnnouncementRoutes(
         .prepare(`${announcementSelect} WHERE a.id = ?`)
         .get(id) as AnnouncementRow | undefined;
       if (!current) return { kind: "NOT_FOUND" as const };
-      if (current.version !== input.expectedVersion) {
+      if (!overwriteRequested(request) && current.version !== input.expectedVersion) {
         return { kind: "STALE" as const };
       }
       if (current.status === "WITHDRAWN" && !input.reactivate) {
@@ -178,7 +179,7 @@ export function registerAnnouncementRoutes(
         publishedAt,
         publishedAt,
         id,
-        input.expectedVersion
+        current.version
       );
       addAudit(
         auth.user.id,
@@ -208,7 +209,7 @@ export function registerAnnouncementRoutes(
       return reply.code(404).send({ error: "公告不存在" });
     }
     if (result.kind === "STALE") {
-      return reply.code(409).send({ error: "公告状态已变化，请刷新后重试" });
+      return reply.code(409).send({ error: "公告状态已变化，请刷新后重试", code: "ANNOUNCEMENT_STALE" });
     }
     if (result.kind === "WITHDRAWN") {
       return reply.code(409).send({ error: "公告已经撤下，请使用重新启用" });
@@ -236,7 +237,7 @@ export function registerAnnouncementRoutes(
       if (current.status === "WITHDRAWN") {
         return { kind: "WITHDRAWN" as const };
       }
-      if (current.version !== expectedVersion) {
+      if (!overwriteRequested(request) && current.version !== expectedVersion) {
         return { kind: "STALE" as const };
       }
       const withdrawnAt = nowIso();
@@ -245,7 +246,7 @@ export function registerAnnouncementRoutes(
          SET status = 'WITHDRAWN', version = version + 1,
              withdrawn_at = ?, withdrawn_by = ?, updated_at = ?
          WHERE id = ? AND status = 'ACTIVE' AND version = ?`
-      ).run(withdrawnAt, auth.user.id, withdrawnAt, id, expectedVersion);
+      ).run(withdrawnAt, auth.user.id, withdrawnAt, id, current.version);
       addAudit(
         auth.user.id,
         "ANNOUNCEMENT_WITHDRAW",
@@ -266,7 +267,7 @@ export function registerAnnouncementRoutes(
       return reply.code(409).send({ error: "公告已经撤下" });
     }
     if (result.kind === "STALE") {
-      return reply.code(409).send({ error: "公告状态已变化，请刷新后重试" });
+      return reply.code(409).send({ error: "公告状态已变化，请刷新后重试", code: "ANNOUNCEMENT_STALE" });
     }
     publishAnnouncementChange();
     return { announcement: mapAnnouncement(result.announcement) };

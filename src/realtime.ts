@@ -66,10 +66,15 @@ function ensureSource() {
         publishEvent("revision");
       };
       document.addEventListener("visibilitychange", onVisible);
+      if (typeof window !== "undefined") window.addEventListener("online", onVisible);
       const fallback = setInterval(() => {
         if (connectionState !== "CONNECTED" && document.visibilityState !== "hidden") publishEvent("revision");
       }, 30_000);
-      removeLifecycle = () => { document.removeEventListener("visibilitychange", onVisible); clearInterval(fallback); };
+      removeLifecycle = () => {
+        document.removeEventListener("visibilitychange", onVisible);
+        if (typeof window !== "undefined") window.removeEventListener("online", onVisible);
+        clearInterval(fallback);
+      };
     }
   } catch {
     source = null;

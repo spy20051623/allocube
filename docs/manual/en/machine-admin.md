@@ -27,6 +27,8 @@ Resource groups can combine several allocations. On save, Allocube checks ranges
 
 Review the impact shown on the page before making a destructive change. Renaming a resource is not a substitute for disabling it or scheduling maintenance.
 
+Untouched machine and resource editors synchronize other administrators' changes. Edited forms retain drafts and ask for overwrite confirmation only when a stale version is submitted; cancelling keeps the input. Resource configuration overwrites retain remotely added pools and groups absent from the draft and recheck the complete allocation, capacity, and naming constraints. If a maintenance or disable preview is stale, confirmation applies the operation to the latest affected reservations. When the network outcome is uncertain, refresh manually to check rather than submitting again.
+
 ## Users and permissions
 
 Machine administrators can:

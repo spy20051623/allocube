@@ -1,3 +1,4 @@
+import { checkEditVersion, overwriteRequested } from "./edit-conflict.js";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -554,12 +555,13 @@ export function registerFeedbackRoutes(app: FastifyInstance, publishFeedbackChan
     if (!auth) return;
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const multipart = await readMultipart(request);
+    if (!requireAuth(request, reply)) return;
     const input = updateInput.parse(multipart.metadata);
     const staged = stageUploads(multipart.uploads);
     try {
       const updated = withImmediateTransaction(() => {
         const current = requireOwnedTicket(id, auth.user.id);
-        if (current.version !== input.expectedVersion) stale();
+        checkEditVersion(current.version, input.expectedVersion, overwriteRequested(request), "FEEDBACK_STALE");
         if (isFeedbackTerminal(current.status)) throw new BusinessError("当前状态不能修改反馈", 409);
         validateTypeLevel(current.type, input.level);
         const currentAttachments = db.prepare(
@@ -568,7 +570,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, publishFeedbackChan
         ).all(id) as AttachmentRow[];
         const currentIds = new Set(currentAttachments.map((item) => item.id));
         if (input.retainedAttachmentIds.some((attachmentId) => !currentIds.has(attachmentId))) {
-          throw new BusinessError("保留的图片已变化，请刷新后重试", 409, undefined, "FEEDBACK_STALE");
+          throw new BusinessError("保留的图片已变化，请刷新后重试", 409, undefined, "FEEDBACK_ATTACHMENT_MISSING");
         }
         const retained = currentAttachments.filter((item) => input.retainedAttachmentIds.includes(item.id));
         if (retained.length + staged.length > MAX_FILES_PER_MESSAGE) throw new BusinessError("正文最多保留 5 张图片");
@@ -587,7 +589,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, publishFeedbackChan
         const result = db.prepare(
           `UPDATE feedback_tickets SET title = ?, body_markdown = ?, level = ?,
              version = version + 1, updated_at = ? WHERE id = ? AND version = ?`
-        ).run(input.title, input.bodyMarkdown, input.level, updatedAt, id, input.expectedVersion);
+        ).run(input.title, input.bodyMarkdown, input.level, updatedAt, id, current.version);
         if (!result.changes) stale();
         if (currentAttachments.length) {
           const removedAt = nowIso();
@@ -627,13 +629,13 @@ export function registerFeedbackRoutes(app: FastifyInstance, publishFeedbackChan
     const { expectedVersion } = z.object({ expectedVersion: expectedVersionSchema }).strict().parse(request.body);
     const updated = withImmediateTransaction(() => {
       const current = requireOwnedTicket(id, auth.user.id);
-      if (current.version !== expectedVersion) stale();
+      checkEditVersion(current.version, expectedVersion, overwriteRequested(request), "FEEDBACK_STALE");
       if (isFeedbackTerminal(current.status)) throw new BusinessError("当前状态不能撤回", 409);
       const changedAt = nowIso();
       const result = db.prepare(
         `UPDATE feedback_tickets SET status = 'WITHDRAWN', version = version + 1,
          withdrawn_at = ?, updated_at = ? WHERE id = ? AND version = ?`
-      ).run(changedAt, changedAt, id, expectedVersion);
+      ).run(changedAt, changedAt, id, current.version);
       if (!result.changes) stale();
       db.prepare(
         `INSERT INTO feedback_activities(
@@ -773,7 +775,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, publishFeedbackChan
     const ticket = withImmediateTransaction(() => {
       const current = findTicket(id);
       if (!current) throw new BusinessError("反馈不存在", 404);
-      if (current.version !== input.expectedVersion) stale();
+      checkEditVersion(current.version, input.expectedVersion, overwriteRequested(request), "FEEDBACK_STALE");
       if (current.status === "WITHDRAWN") throw new BusinessError("已撤回反馈完全只读", 409);
       if (!isFeedbackStatusValid(current.type, input.status)) throw new BusinessError("反馈类型与状态不匹配");
       if (current.status === input.status) throw new BusinessError("请选择不同的状态");
@@ -782,7 +784,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, publishFeedbackChan
         `UPDATE feedback_tickets SET status = ?, version = version + 1,
            withdrawn_at = CASE WHEN ? = 'WITHDRAWN' THEN ? ELSE NULL END,
            updated_at = ? WHERE id = ? AND version = ?`
-      ).run(input.status, input.status, changedAt, changedAt, id, input.expectedVersion);
+      ).run(input.status, input.status, changedAt, changedAt, id, current.version);
       if (!result.changes) stale();
       db.prepare(
         `INSERT INTO feedback_activities(
@@ -809,14 +811,14 @@ export function registerFeedbackRoutes(app: FastifyInstance, publishFeedbackChan
     const ticket = withImmediateTransaction(() => {
       const current = findTicket(id);
       if (!current) throw new BusinessError("反馈不存在", 404);
-      if (current.version !== input.expectedVersion) stale();
+      checkEditVersion(current.version, input.expectedVersion, overwriteRequested(request), "FEEDBACK_STALE");
       if (current.status === "WITHDRAWN") throw new BusinessError("已撤回反馈完全只读", 409);
       validateTypeLevel(current.type, input.level);
       if (current.level === input.level) throw new BusinessError("请选择不同的等级");
       const changedAt = nowIso();
       const result = db.prepare(
         "UPDATE feedback_tickets SET level = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?"
-      ).run(input.level, changedAt, id, input.expectedVersion);
+      ).run(input.level, changedAt, id, current.version);
       if (!result.changes) stale();
       db.prepare(
         `INSERT INTO feedback_activities(

@@ -707,6 +707,23 @@ export function splitDrafts(
   });
 }
 
+/** Apply an authoritative preview without regenerating unchanged draft IDs. */
+export function adjustDraftsToAvailability(drafts: CalendarDraft[], items: ReservationPreviewItem[], createId: () => string) {
+  if (items.length !== drafts.length) throw new Error("Incomplete availability preview");
+  let changed = false;
+  const next = drafts.flatMap((draft, index) => {
+    const item = items[index];
+    if (item.input.resourceGroupId !== draft.resourceGroupId || item.input.endAt !== draft.endAt) {
+      throw new Error("Mismatched availability preview");
+    }
+    const ranges = item.available ? [item.input] : item.splitSegments;
+    if (ranges.length === 1 && ranges[0].startAt === draft.startAt && ranges[0].endAt === draft.endAt) return [draft];
+    changed = true;
+    return ranges.map((segment, part) => ({ ...draft, ...segment, id: part === 0 ? draft.id : createId() }));
+  });
+  return { drafts: changed ? next : drafts, changed };
+}
+
 export function calendarDraftIssues(
   drafts: CalendarDraft[],
   rules: CalendarBookingRules,
@@ -714,6 +731,7 @@ export function calendarDraftIssues(
   allowMixedScopes = false
 ) {
   const issues: string[] = [];
+  if (drafts.length > 100) issues.push(tr("一次最多提交 100 条占用"));
   if (!allowMixedScopes && new Set(drafts.map((draft) => draft.scope ?? "RESOURCE_GROUP")).size > 1) {
     issues.push(tr("整机占用和资源组占用不能同时提交"));
   }

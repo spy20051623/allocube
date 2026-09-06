@@ -24,6 +24,7 @@ import {
   serverTimeFromAnchor,
   subtractBusyTimeRanges,
   splitDrafts,
+  adjustDraftsToAvailability,
   timelineDragAutoScrollDelta,
   timelineNearbyHitIndexes,
   timelineWheelAction,
@@ -839,5 +840,30 @@ describe("资源日历状态", () => {
         new Date("2026-07-26T00:00:00.000Z").getTime()
       )
     ).toContain("整机占用和资源组占用不能同时提交");
+  });
+});
+
+
+describe("草稿自动调整", () => {
+  const draft: CalendarDraft = { id: "draft", scope: "MACHINE", machineId: "machine", resourceGroupId: "group", startAt: "2026-09-06T01:00:00.000Z", endAt: "2026-09-06T04:00:00.000Z", note: "keep" };
+  it("未变化的草稿保持引用和标识，避免反复调整", () => {
+    const drafts = [draft];
+    expect(adjustDraftsToAvailability(drafts, [{ input: draft, available: true, conflicts: [], splitSegments: [draft] }], () => "new")).toEqual({ drafts, changed: false });
+    expect(adjustDraftsToAvailability(drafts, [{ input: draft, available: true, conflicts: [], splitSegments: [draft] }], () => "new").drafts).toBe(drafts);
+  });
+  it("拆分后保留目标、说明及首段标识，完全不可用时移除", () => {
+    const result = adjustDraftsToAvailability([draft], [{ input: draft, available: false, conflicts: [], splitSegments: [
+      { ...draft, endAt: "2026-09-06T02:00:00.000Z" }, { ...draft, startAt: "2026-09-06T03:00:00.000Z" }
+    ] }], () => "new");
+    expect(result.changed).toBe(true); expect(result.drafts.map(row => row.id)).toEqual(["draft", "new"]);
+    expect(result.drafts.every(row => row.machineId === "machine" && row.note === "keep" && row.scope === "MACHINE")).toBe(true);
+    expect(adjustDraftsToAvailability([draft], [{ input: draft, available: false, conflicts: [], splitSegments: [] }], () => "new")).toEqual({ drafts: [], changed: true });
+  });
+  it("采用服务器推进后的开始时间，拒绝缺失或不匹配的预览", () => {
+    const input = { ...draft, startAt: "2026-09-06T01:10:00.000Z" };
+    const result = adjustDraftsToAvailability([draft], [{ input, available: true, conflicts: [], splitSegments: [input] }], () => "new");
+    expect(result.changed).toBe(true); expect(result.drafts[0].startAt).toBe(input.startAt);
+    expect(() => adjustDraftsToAvailability([draft], [], () => "new")).toThrow();
+    expect(() => adjustDraftsToAvailability([draft], [{ input: { ...draft, resourceGroupId: "other" }, available: true, conflicts: [], splitSegments: [] }], () => "new")).toThrow();
   });
 });

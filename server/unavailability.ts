@@ -1,3 +1,4 @@
+import { checkEditVersion } from "./edit-conflict.js";
 import { randomUUID } from "node:crypto";
 import {
   addAudit,
@@ -434,12 +435,13 @@ export function createPlannedUnavailability(input: {
   endAt: string;
   reason?: string;
   expectedRevision: number;
+  overwrite?: boolean;
   actorUserId: string;
 }) {
   const recordId = randomUUID();
   const result = withImmediateTransaction(() => {
     const normalized = normalizePlannedTimes(input.startAt, input.endAt);
-    if (getScheduleRevision() !== input.expectedRevision) {
+    if (!input.overwrite && getScheduleRevision() !== input.expectedRevision) {
       throw new BusinessError(
         "占用情况已变化，请重新查看影响",
         409,
@@ -741,13 +743,14 @@ export function disableLongTerm(input: {
   id: string;
   expectedVersion: number;
   expectedRevision: number;
+  overwrite?: boolean;
   actorUserId: string;
   reason?: string;
 }) {
   const startAt = currentMinuteIso();
   const sourceId = randomUUID();
   return withImmediateTransaction(() => {
-    if (getScheduleRevision() !== input.expectedRevision) {
+    if (!input.overwrite && getScheduleRevision() !== input.expectedRevision) {
       throw new BusinessError(
         "占用情况已变化，请重新查看影响",
         409,
@@ -756,7 +759,8 @@ export function disableLongTerm(input: {
       );
     }
     const target = resolveUnavailabilityTarget(input.type, input.id);
-    if (target.status !== "ACTIVE" || target.version !== input.expectedVersion) {
+    checkEditVersion(target.version, input.expectedVersion, input.overwrite);
+    if (target.status !== "ACTIVE") {
       throw new BusinessError("资源状态已经更新，请刷新后重试", 409);
     }
     const table =
@@ -774,7 +778,7 @@ export function disableLongTerm(input: {
         input.reason?.trim() ?? "",
         startAt,
         input.id,
-        input.expectedVersion
+        target.version
       );
     if (!changed.changes) {
       throw new BusinessError("资源状态已经更新，请刷新后重试", 409);
@@ -851,11 +855,13 @@ export function enableTarget(input: {
   type: UnavailabilityTargetType;
   id: string;
   expectedVersion: number;
+  overwrite?: boolean;
   actorUserId: string;
 }) {
   return withImmediateTransaction(() => {
     const target = resolveUnavailabilityTarget(input.type, input.id);
-    if (target.status !== "DISABLED" || target.version !== input.expectedVersion) {
+    checkEditVersion(target.version, input.expectedVersion, input.overwrite);
+    if (target.status !== "DISABLED") {
       throw new BusinessError("资源状态已经更新，请刷新后重试", 409);
     }
     const table =
@@ -867,7 +873,7 @@ export function enableTarget(input: {
              disable_reason = '', version = version + 1, updated_at = ?
          WHERE id = ? AND status = 'DISABLED' AND version = ?`
       )
-      .run(nowIso(), input.id, input.expectedVersion);
+      .run(nowIso(), input.id, target.version);
     if (!changed.changes) {
       throw new BusinessError("资源状态已经更新，请刷新后重试", 409);
     }

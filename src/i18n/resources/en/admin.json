@@ -98,5 +98,9 @@
   "全部重新统计完成": "Recalculation complete",
   "提交结果未确认，请核对任务状态后再操作": "Submission outcome is uncertain. Check the task status before trying again.",
   "发起全部重新统计": "Requested full statistics recalculation",
-  "全部重新统计失败": "Full statistics recalculation failed"
+  "全部重新统计失败": "Full statistics recalculation failed",
+  "设置已更新，请重新加载后核对。未保存的内容已保留。": "Settings changed. Reload to review them. Your unsaved changes have been kept.",
+  "重新加载将丢弃未保存的设置，是否继续？": "Reloading will discard unsaved settings. Continue?",
+  "设置加载失败": "Could not load settings",
+  "机器资料已变化，请重新打开编辑窗口核对。未保存的内容已保留。": "Machine details changed. Reopen the editor to review them. Your unsaved input has been kept."
 }

@@ -29,6 +29,12 @@ Click a machine row to collapse or expand its resource groups. Collapse preferen
 
 Times display and accept input in the browser's local timezone by default. The Local/Beijing control beside the server clock switches to Beijing time (UTC+8). Outside UTC+8, the clock also shows a Beijing-time reference. Switching changes display and input conventions without moving stored reservations. Reloading restores local time.
 
+## Live updates
+
+The calendar refreshes for changes affecting the machines and dates covered by its query. Reservations on other machines or dates do not refresh the current calendar. While "Reservations" is open, changes to your own records update its lists and counts. Resource configuration, maintenance, and permission changes refresh the relevant views.
+
+Switching to another browser tab keeps the connection open but pauses ordinary data refreshes. Returning synchronizes the page once. While disconnected, a visible page retries every 30 seconds and synchronizes again after reconnection. Background updates preserve reservation drafts; changed records must be checked again before submission. Revoked access or an invalid account immediately clears restricted content and revalidates the session.
+
 ## Creating a reservation
 
 1. In "Calendar", select "Group" or "Machine".

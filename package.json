@@ -9,6 +9,7 @@
     "start": "node dist-server/server/index.js",
     "test": "vitest run",
     "test:production-http": "node scripts/test-production-http.mjs",
+    "test:realtime-http": "node scripts/test-realtime-http.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "backup": "node scripts/backup.mjs",
     "db:reset": "node scripts/reset-db.mjs",

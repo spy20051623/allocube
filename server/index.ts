@@ -45,6 +45,7 @@ import {
 } from "./source-rate-limit.js";
 import serverEnglish from "../src/i18n/server-en.json" with { type: "json" };
 import { createSystemMessageCatalog } from "../src/shared/system-message.js";
+import { RealtimeChanges } from "./realtime-changes.js";
 
 const systemMessages = createSystemMessageCatalog(serverEnglish);
 
@@ -290,16 +291,30 @@ function eventSessionIsActive(sessionId: string) {
   return Boolean(row && row.status === "ACTIVE" && row.expires_at > nowIso());
 }
 
-function publishRevision(revision: number) {
-  const payload = `event: revision\ndata: ${JSON.stringify({ revision })}\n\n`;
-  for (const client of eventClients.keys()) {
-    try {
-      client.write(payload);
-    } catch {
-      removeEventClient(client);
+const realtimeChanges = new RealtimeChanges(db);
+let revisionFlush: ReturnType<typeof setImmediate> | null = null;
+function flushRevisionChanges() {
+  try {
+    const changes = realtimeChanges.drain([...eventClients.values()], getScheduleRevision);
+    for (const [client, sessionId] of eventClients) {
+      const change = changes.get(sessionId);
+      if (!change) continue;
+      try {
+        client.write(`event: revision\ndata: ${JSON.stringify(change)}\n\n`);
+        if (change.sessionEnded) { removeEventClient(client); client.end(); }
+      } catch { removeEventClient(client); }
     }
-  }
+  } catch (error) { app.log.error(error); }
 }
+function publishRevision(_revision: number) {
+  if (revisionFlush) return;
+  revisionFlush = setImmediate(() => { revisionFlush = null; flushRevisionChanges(); });
+}
+app.addHook("onResponse", async () => { publishRevision(0); });
+// Covers notifications and security changes made by background jobs on this connection.
+const revisionTimer = setInterval(flushRevisionChanges, 1000);
+revisionTimer.unref();
+app.addHook("onClose", async () => { clearInterval(revisionTimer); if (revisionFlush) clearImmediate(revisionFlush); });
 
 function publishAnnouncementChange() {
   const payload = `event: announcement\ndata: ${JSON.stringify({
@@ -353,13 +368,14 @@ app.get("/api/v1/events", async (request, reply) => {
     "x-accel-buffering": "no"
   });
   reply.raw.write(
-    `event: revision\ndata: ${JSON.stringify({ revision: getScheduleRevision() })}\n\n`
+    `event: revision\ndata: ${JSON.stringify(realtimeChanges.full(getScheduleRevision()))}\n\n`
   );
   eventClients.set(reply.raw, auth.sessionId);
   eventClientCountsBySession.set(auth.sessionId, sessionClientCount + 1);
   const heartbeat = setInterval(() => {
     try {
       if (!eventSessionIsActive(auth.sessionId)) {
+        reply.raw.write(`event: revision\ndata: ${JSON.stringify({ ...realtimeChanges.full(getScheduleRevision()), sessionEnded: true, accessChanged: true })}\n\n`);
         clearInterval(heartbeat);
         removeEventClient(reply.raw);
         reply.raw.end();
@@ -406,13 +422,13 @@ function effectiveUnavailabilityKey() {
   return (
     db
       .prepare(
-        `SELECT id FROM resource_unavailability
+        `SELECT id,machine_id FROM resource_unavailability
          WHERE status = 'ACTIVE' AND start_at <= ? AND end_at > ?
          ORDER BY id`
       )
-      .all(now, now) as Array<{ id: string }>
+      .all(now, now) as Array<{ id: string; machine_id: string }>
   )
-    .map((row) => row.id)
+    .map((row) => `${row.id}:${row.machine_id}`)
     .join(",");
 }
 
@@ -421,6 +437,9 @@ const unavailabilityBoundaryTimer = setInterval(() => {
   try {
     const nextKey = effectiveUnavailabilityKey();
     if (nextKey === currentUnavailabilityKey) return;
+    const before = new Set(currentUnavailabilityKey.split(",").filter(Boolean));
+    const after = new Set(nextKey.split(",").filter(Boolean));
+    realtimeChanges.boundary([...before, ...after].filter(key => before.has(key) !== after.has(key)).map(key => key.split(":")[1]));
     currentUnavailabilityKey = nextKey;
     publishRevision(bumpScheduleRevision());
   } catch (error) {

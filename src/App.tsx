@@ -1,3 +1,4 @@
+import { useRealtimeRefresh } from "./useRealtimeRefresh";
 import { useUsageReport } from "./useUsageReport";
 import { latestReportDate, shiftReportDate } from "./shared/reports";
 import "./reports.css";
@@ -496,17 +497,27 @@ export function App() {
     window.setTimeout(() => setToast(null), 3600);
   }, []);
 
-  const loadSession = useCallback(async () => {
+  const fetchLoadSession = useCallback(async (signal: AbortSignal) => {
     try {
-      const value = await api<DashboardBootstrap>("/auth/me");
+      const value = await api<DashboardBootstrap>("/auth/me", { signal });
+      if (signal.aborted) return;
       setCsrfToken(value.csrfToken);
       setBootstrap(value);
     } catch {
+      if (signal.aborted) return;
       setBootstrap(null);
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, []);
+  const loadSession = useRealtimeRefresh(fetchLoadSession, ["session"], {
+    enabled: !docsRoute && bootstrap?.user.status === "ACTIVE",
+    onSecurity: change => {
+      setCsrfToken("");
+      if (change.sessionEnded) { setBootstrap(null); setLoading(false); }
+      else setLoading(true);
+    }
+  });
 
   const acceptAuthenticatedSession = useCallback(
     async (value: DashboardBootstrap) => {
@@ -517,15 +528,17 @@ export function App() {
     []
   );
 
-  const loadUnreadNotificationCount = useCallback(async () => {
+  const fetchLoadUnreadNotificationCount = useCallback(async (signal: AbortSignal) => {
     try {
-      const result = await api<{ unreadCount: number; feedbackUnreadCount: number }>("/notifications/unread-count");
+      const result = await api<{ unreadCount: number; feedbackUnreadCount: number }>("/notifications/unread-count", { signal });
+      if (signal.aborted) return;
       setUnreadNotificationCount(Math.max(0, result.unreadCount));
       setFeedbackUnreadCount(Math.max(0, result.feedbackUnreadCount));
     } catch {
       // 通知数量属于辅助状态，短暂加载失败不应干扰当前页面。
     }
   }, []);
+  const loadUnreadNotificationCount = useRealtimeRefresh(fetchLoadUnreadNotificationCount, ["notifications"], { enabled: !docsRoute && bootstrap?.user.status === "ACTIVE" });
 
   useEffect(() => {
     if (docsRoute) {
@@ -557,10 +570,6 @@ export function App() {
 
   useEffect(() => {
     if (docsRoute || !bootstrap || bootstrap.user.status !== "ACTIVE") return;
-    const unsubscribeRevision = subscribeRealtimeEvent("revision", () => {
-      void loadSession();
-      void loadUnreadNotificationCount();
-    });
     const unsubscribeAnnouncement = subscribeRealtimeEvent("announcement", () => {
       setAnnouncementRefreshToken((current) => current + 1);
     });
@@ -569,7 +578,6 @@ export function App() {
       void loadUnreadNotificationCount();
     });
     return () => {
-      unsubscribeRevision();
       unsubscribeAnnouncement();
       unsubscribeFeedback();
     };
@@ -588,14 +596,9 @@ export function App() {
       return;
     }
     void loadUnreadNotificationCount();
-    const refresh = window.setInterval(
-      () => void loadUnreadNotificationCount(),
-      30_000
-    );
     const refreshOnFocus = () => void loadUnreadNotificationCount();
     window.addEventListener("focus", refreshOnFocus);
     return () => {
-      window.clearInterval(refresh);
       window.removeEventListener("focus", refreshOnFocus);
     };
   }, [bootstrap?.user.id, docsRoute, loadUnreadNotificationCount]);
@@ -608,7 +611,7 @@ export function App() {
     ) {
       return;
     }
-    const refresh = window.setInterval(() => void loadSession(), 30_000);
+    const refresh = window.setInterval(() => { if (document.visibilityState !== "hidden") void loadSession(); }, 30_000);
     return () => window.clearInterval(refresh);
   }, [bootstrap?.user.id, bootstrap?.user.status, docsRoute, loadSession]);
 
@@ -5258,20 +5261,22 @@ function ResourceCatalogPage({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  const fetchLoad = useCallback(async (signal: AbortSignal) => {
     try {
-      const result = await api<{ machines: CatalogMachine[] }>("/machines/catalog");
+      const result = await api<{ machines: CatalogMachine[] }>("/machines/catalog", { signal });
+      if (signal.aborted) return;
       setMachines(result.machines);
     } catch (error) {
+      if (signal.aborted) return;
       notify("error", error instanceof Error ? error.message : tr("机器目录加载失败"));
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, [notify]);
+  const load = useRealtimeRefresh(fetchLoad, ["catalog"]);
 
   useEffect(() => {
     void load();
-    return subscribeRealtimeEvent("revision", () => void load());
   }, [load]);
 
   return (
@@ -5604,7 +5609,6 @@ function CalendarPage({
   const timelineStartMinutesRef = useRef(
     defaultDayWindowStartMinutes(currentTime)
   );
-  const loadTimelineRef = useRef<(background?: boolean) => void>(() => undefined);
 
   const range = useMemo(() => {
     const startDate = view === "week" ? mondayOf(date) : date;
@@ -5885,11 +5889,12 @@ function CalendarPage({
     writeCalendarRoute
   ]);
 
-  const loadTimeline = useCallback(async (_background = false) => {
+  const fetchTimeline = useCallback(async (signal: AbortSignal) => {
     const requestId = ++requestIdRef.current;
     requestControllerRef.current?.abort();
     const controller = new AbortController();
     requestControllerRef.current = controller;
+    signal.addEventListener("abort", () => controller.abort(), { once: true });
     if (timelineRef.current) setRefreshing(true);
     else if (!timelineRef.current) setInitialLoading(true);
     try {
@@ -5901,7 +5906,7 @@ function CalendarPage({
       const result = await api<TimelinePayload>(`/timeline?${query}`, {
         signal: controller.signal
       });
-      if (requestId !== requestIdRef.current) return;
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
       synchronizeServerClock(result.serverNow, requestStartedAt);
       timelineRef.current = result;
       setTimeline(result);
@@ -5921,15 +5926,15 @@ function CalendarPage({
     synchronizeServerClock
   ]);
 
-  useEffect(() => {
-    void loadTimeline(false);
-    return () => requestControllerRef.current?.abort();
-  }, [loadTimeline]);
+  const loadTimeline = useRealtimeRefresh(fetchTimeline, ["timeline"], {
+    // The query covers all accessible machines, including ones created since its last response.
+    // Server-side audience filtering already excludes machines this user cannot access.
+    filter: () => ({ from: range.from, to: range.to })
+  });
 
   useEffect(() => {
-    loadTimelineRef.current = (background = true) => {
-      void loadTimeline(background);
-    };
+    void loadTimeline();
+    return () => requestControllerRef.current?.abort();
   }, [loadTimeline]);
 
   useEffect(() => {
@@ -5949,24 +5954,8 @@ function CalendarPage({
   }, [reservationDetail, timeline]);
 
   useEffect(() => {
-    const reload = () => {
-      loadTimelineRef.current(true);
-    };
-    const unsubscribeConnection = subscribeRealtimeConnection(setConnectionState);
-    const unsubscribeRevision = subscribeRealtimeEvent("revision", reload);
-    return () => {
-      unsubscribeConnection();
-      unsubscribeRevision();
-    };
+    return subscribeRealtimeConnection(setConnectionState);
   }, []);
-
-  useEffect(() => {
-    if (connectionState !== "DISCONNECTED") return;
-    const timer = window.setInterval(() => {
-      loadTimelineRef.current(true);
-    }, 30_000);
-    return () => window.clearInterval(timer);
-  }, [connectionState]);
 
   const reservationsByGroup = useMemo(() => {
     const map = new Map<string, TimelineReservation[]>();
@@ -6390,21 +6379,24 @@ function CalendarPage({
     void calendarRouteNavigate({ href: calendarUrlWithoutEditRequest(routeLocation.searchStr), replace: true });
   }, [calendarEditRoute, timeline, refreshing, initialLoading]);
 
-  useEffect(() => {
+  const inspectEditingReservations = useCallback(async (signal: AbortSignal) => {
     if (!editingReservations.length) { setEditingChanged(false); return; }
-    const controller = new AbortController();
-    void api<{ reservations: OwnReservation[] }>("/reservations/mine/inspect", {
-      method: "POST", body: jsonBody({ ids: editingReservations.map(item => item.id) }), signal: controller.signal
+    await api<{ reservations: OwnReservation[] }>("/reservations/mine/inspect", {
+      method: "POST", body: jsonBody({ ids: editingReservations.map(item => item.id) }), signal
     }).then(result => {
-      if (controller.signal.aborted) return;
+      if (signal.aborted) return;
       const latest = new Map(result.reservations.map(item => [item.id, item]));
       setEditingChanged(editingReservations.some(item => {
         const current = latest.get(item.id);
         return !current || !current.canEdit || current.status !== "CONFIRMED" || current.stateToken !== item.stateToken;
       }));
-    }).catch(() => { if (!controller.signal.aborted) setEditingChanged(true); });
-    return () => controller.abort();
-  }, [editEpoch, editingReservations]);
+    }).catch(() => { if (!signal.aborted) setEditingChanged(true); });
+  }, [editingReservations]);
+  const refreshEditingReservations = useRealtimeRefresh(inspectEditingReservations, ["ownReservations"], { enabled: editingReservations.length > 0 });
+  useEffect(() => { void refreshEditingReservations(); }, [editEpoch, refreshEditingReservations]);
+  useEffect(() => {
+    if (editingReservations.some(item => Date.parse(item.endAt) <= currentTime)) setEditingChanged(true);
+  }, [currentTime, editingReservations]);
 
   useEffect(() => {
     if (editingDraftTime) return;
@@ -6607,7 +6599,7 @@ function CalendarPage({
           : tr("已提交 {{v0}} 条资源占用", { v0: drafts.length })
       );
       clearReservationDetails();
-      await loadTimeline(true);
+      await loadTimeline();
     } catch (error) {
       if (!(error instanceof ApiError) || error.status >= 500) setSubmissionUncertain(true);
       refreshOwnReservations();
@@ -7045,7 +7037,7 @@ function CalendarPage({
             onChange={setSearch}
             onSelect={locateCalendarResource}
           />
-          <button className="secondary-button" disabled={refreshing} onClick={() => void loadTimeline(true)}>
+          <button className="secondary-button" disabled={refreshing} onClick={() => void loadTimeline()}>
             {refreshing ? <RefreshCw size={16} className="spin" /> : <RefreshCw size={16} />}
             {tr("刷新")}</button>
         </div>
@@ -7809,7 +7801,7 @@ function CalendarPage({
             )}
             notify={notify}
             onClose={() => setReservationDetail(null)}
-            onChanged={() => loadTimeline(true)}
+            onChanged={() => loadTimeline()}
             onEdit={() =>
               void requestEditingReservation(reservationDetail.item)
             }
@@ -10101,23 +10093,26 @@ function NotificationsPage({
   const [loading, setLoading] = useState(true);
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const markingReadIds = useRef(new Set<string>());
-  const load = useCallback(async () => {
+  const fetchLoad = useCallback(async (signal: AbortSignal) => {
     try {
       const result = await api<{
         unreadCount: number;
         feedbackUnreadCount: number;
         notifications: NotificationItem[];
-      }>("/notifications");
+      }>("/notifications", { signal });
+      if (signal.aborted) return;
       setItems(result.notifications);
       setUnreadCount(result.unreadCount);
       onUnreadCountChange(result.unreadCount);
       onFeedbackUnreadCountChange(result.feedbackUnreadCount);
     } catch (error) {
+      if (signal.aborted) return;
       notify("error", error instanceof Error ? error.message : tr("通知加载失败"));
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, [notify, onFeedbackUnreadCountChange, onUnreadCountChange]);
+  const load = useRealtimeRefresh(fetchLoad, ["notifications"], {});
   useEffect(() => { void load(); }, [load]);
 
   const markRead = async (item: NotificationItem) => {
@@ -10342,33 +10337,39 @@ function AdminPage({
   const [machinesLoaded, setMachinesLoaded] = useState(false);
   const [feedbackOpenCount, setFeedbackOpenCount] = useState(0);
 
-  const loadMachines = useCallback(async () => {
+  const fetchLoadMachines = useCallback(async (signal: AbortSignal) => {
     try {
-      const result = await api<{ machines: any[] }>("/admin/machines");
+      const result = await api<{ machines: any[] }>("/admin/machines", { signal });
+      if (signal.aborted) return [];
       setMachines(result.machines);
       return result.machines;
     } catch (error) {
+      if (signal.aborted) return [];
       notify("error", error instanceof Error ? error.message : tr("机器加载失败"));
       return [];
     } finally {
-      setMachinesLoaded(true);
+      if (!signal.aborted) setMachinesLoaded(true);
     }
   }, [notify]);
-  const loadUsers = useCallback(async () => {
+  const loadMachines = useRealtimeRefresh(fetchLoadMachines, ["machines"], { enabled: visibleTab === "machines" });
+  const fetchLoadUsers = useCallback(async (signal: AbortSignal) => {
     try {
       const result = await api<{ users: any[] }>(
-        isSystemAdmin ? "/admin/users" : "/users/directory"
+        isSystemAdmin ? "/admin/users" : "/users/directory", { signal }
       );
+      if (signal.aborted) return;
       setUsers(result.users);
     } catch (error) {
+      if (signal.aborted) return;
       notify("error", error instanceof Error ? error.message : tr("用户加载失败"));
     }
   }, [isSystemAdmin, notify]);
+  const loadUsers = useRealtimeRefresh(fetchLoadUsers, ["users"], { enabled: visibleTab === "users" || visibleTab === "machines" });
 
   useEffect(() => {
-    void loadMachines();
-    void loadUsers();
-  }, [loadMachines, loadUsers]);
+    if (visibleTab === "machines" || visibleTab === "report") void loadMachines();
+    if (visibleTab === "machines" || visibleTab === "users") void loadUsers();
+  }, [loadMachines, loadUsers, visibleTab]);
 
   useEffect(() => {
     if (!isSystemAdmin) return;
@@ -10377,10 +10378,7 @@ function AdminPage({
       .catch(() => undefined);
   }, [feedbackRefreshToken, isSystemAdmin]);
 
-  useEffect(() => {
-    if (visibleTab !== "machines") return;
-    return subscribeRealtimeEvent("revision", () => void loadMachines());
-  }, [loadMachines, visibleTab]);
+
 
   useEffect(() => {
     if (visibleTab !== "machines" || !machinesLoaded || !machines.length) return;
@@ -10747,29 +10745,29 @@ function MachineInfoSection({
   >(null);
   const [stopOpen, setStopOpen] = useState(false);
 
-  const load = useCallback(async () => {
+  const fetchLoad = useCallback(async (signal: AbortSignal) => {
     try {
       const [machineResult, maintenanceResult, groupResult] = await Promise.all([
-        api<{ machine: any }>(`/admin/machines/${machine.id}`),
+        api<{ machine: any }>(`/admin/machines/${machine.id}`, { signal }),
         api<{ maintenance: any[] }>(
-          `/admin/machines/${machine.id}/maintenance`
+          `/admin/machines/${machine.id}/maintenance`, { signal }
         ),
         api<{ groups: ResourceGroup[] }>(
-          `/admin/machines/${machine.id}/groups`
+          `/admin/machines/${machine.id}/groups`, { signal }
         )
       ]);
+      if (signal.aborted) return;
       setDetail(machineResult.machine);
       setUnavailabilityWindows(maintenanceResult.maintenance);
       setMaintenanceGroups(groupResult.groups);
     } catch (error) {
+      if (signal.aborted) return;
       notify("error", error instanceof Error ? error.message : tr("机器信息加载失败"));
     }
   }, [machine.id, notify]);
+  const load = useRealtimeRefresh(fetchLoad, ["machine"], { filter: () => ({ machineId: machine.id }) });
 
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => {
-    return subscribeRealtimeEvent("revision", () => void load());
-  }, [load]);
 
   const openMaintenance = () => {
     setMaintenanceInitialTime(currentTime);
@@ -11412,18 +11410,21 @@ function MachineResourcesSection({
   const [resourceEditorOpen, setResourceEditorOpen] = useState(false);
   const [openingResourceEditor, setOpeningResourceEditor] = useState(false);
 
-  const load = useCallback(async () => {
+  const fetchLoad = useCallback(async (signal: AbortSignal) => {
     try {
       const groupResult = await api<{ groups: ResourceGroup[] }>(
-        `/admin/machines/${machine.id}/groups`
+        `/admin/machines/${machine.id}/groups`, { signal }
       );
+      if (signal.aborted) return;
       setGroups(groupResult.groups);
     } catch (error) {
+      if (signal.aborted) return;
       notify("error", error instanceof Error ? error.message : tr("资源设置加载失败"));
     } finally {
-      setGroupsLoaded(true);
+      if (!signal.aborted) setGroupsLoaded(true);
     }
   }, [machine.id, notify]);
+  const load = useRealtimeRefresh(fetchLoad, ["groups"], { filter: () => ({ machineId: machine.id }) });
 
   const openResourceEditor = async () => {
     setOpeningResourceEditor(true);
@@ -11453,9 +11454,6 @@ function MachineResourcesSection({
     setGroups([]);
     setGroupsLoaded(false);
     void load();
-  }, [load]);
-  useEffect(() => {
-    return subscribeRealtimeEvent("revision", () => void load());
   }, [load]);
 
   const disableGroup = async (group: ResourceGroup) => {
@@ -11651,21 +11649,21 @@ function MachineUsersSection({
   });
   const [inviteOpen, setInviteOpen] = useState(false);
 
-  const load = useCallback(async () => {
+  const fetchLoad = useCallback(async (signal: AbortSignal) => {
     try {
       const result = await api<{ members: any[]; requests: any[] }>(
-        `/admin/machines/${machine.id}/access`
+        `/admin/machines/${machine.id}/access`, { signal }
       );
+      if (signal.aborted) return;
       setAccess(result);
     } catch (error) {
+      if (signal.aborted) return;
       notify("error", error instanceof Error ? error.message : tr("用户权限加载失败"));
     }
   }, [machine.id, notify]);
+  const load = useRealtimeRefresh(fetchLoad, ["access"], { filter: () => ({ machineId: machine.id }) });
 
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => {
-    return subscribeRealtimeEvent("revision", () => void load());
-  }, [load]);
 
   const refresh = async () => {
     await Promise.all([load(), reloadMachines()]);
@@ -12030,6 +12028,8 @@ function MachineFormModal({
   onSaved: (machineId?: string) => Promise<void>;
   notify: (kind: "success" | "error", message: string) => void;
 }) {
+  const [expectedVersion] = useState<number | undefined>(machine?.version);
+  const changed = machine && machine.version !== expectedVersion;
   const [form, setForm] = useState({
     name: machine?.name ?? "",
     address: machine?.address ?? "",
@@ -12043,6 +12043,7 @@ function MachineFormModal({
   return (
     <Modal title={machine ? tr("编辑机器") : tr("新增机器")} onClose={onClose} wide>
       <div className="stack-form machine-form">
+        {changed && <div className="context-notice warning" role="alert"><CircleAlert size={15} />{tr("机器资料已变化，请重新打开编辑窗口核对。未保存的内容已保留。")}</div>}
         <div className="machine-form-primary">
           <Field label={tr("机器名称")}>
             <input
@@ -12109,13 +12110,13 @@ function MachineFormModal({
             {tr("取消")}</button>
           <button
             className="primary-button"
-            disabled={Boolean(tagIssue)}
+            disabled={Boolean(tagIssue) || changed}
             onClick={async () => {
             try {
               const { tagInput: _tagInput, ...formValues } = form;
               const body = {
                 ...formValues,
-                ...(machine ? { expectedVersion: machine.version } : {}),
+                ...(machine ? { expectedVersion } : {}),
                 tags: form.tags
               };
               const result = await api<{ id?: string }>(
@@ -14439,6 +14440,8 @@ function SettingsPanel({
   notify: (kind: "success" | "error", message: string) => void;
 }) {
   const dialog = useAppDialog();
+  const [settingsStale, setSettingsStale] = useState(false);
+  const reloadSettingsRequested = useRef(false);
   const [bookingForm, setBookingForm] = useState({
     minBookingMinutes: 1,
     maxBookingMinutes: 1440,
@@ -14493,13 +14496,7 @@ function SettingsPanel({
     setClearPassword(false);
   }, []);
 
-  const loadSmtp = useCallback(async () => {
-    const value = await api<SmtpSettingsPayload>("/admin/smtp-settings");
-    applySmtpSettings(value);
-  }, [applySmtpSettings]);
-
-  const loadAdminSettings = useCallback(async () => {
-    const value = await api<AdminSettingsPayload>("/admin/settings");
+  const applyAdminSettings = useCallback((value: AdminSettingsPayload) => {
     setAdminSettings(value);
     setBookingForm({
       minBookingMinutes: value.minBookingMinutes,
@@ -14516,11 +14513,6 @@ function SettingsPanel({
     setEmailDomainInput("");
     setEmailDomainError("");
   }, []);
-
-  useEffect(() => {
-    loadAdminSettings().catch((error) => notify("error", error.message));
-    loadSmtp().catch((error) => notify("error", error.message));
-  }, [loadAdminSettings, loadSmtp, notify]);
 
   const updateEmailDomains = async (
     nextDomains: string[],
@@ -14547,7 +14539,7 @@ function SettingsPanel({
       return true;
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        await loadAdminSettings();
+        setSettingsStale(true);
       }
       const message = error instanceof Error ? error.message : tr("更新白名单失败");
       if (showFieldError) setEmailDomainError(message);
@@ -14610,7 +14602,7 @@ function SettingsPanel({
       notify("success", tr("全局占用规则已更新"));
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        await loadAdminSettings();
+        setSettingsStale(true);
       }
       notify("error", error instanceof Error ? error.message : tr("保存失败"));
     } finally {
@@ -14666,7 +14658,7 @@ function SettingsPanel({
       notify("success", tr("站点信息已更新"));
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        await loadAdminSettings();
+        setSettingsStale(true);
       }
       notify(
         "error",
@@ -14699,7 +14691,7 @@ function SettingsPanel({
       );
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        await loadAdminSettings();
+        setSettingsStale(true);
       }
       notify(
         "error",
@@ -14736,6 +14728,25 @@ function SettingsPanel({
         publicSecurityFilingNumber.trim() !==
           adminSettings.publicSecurityFilingNumber)
   );
+
+  const settingsSnapshot = useRef({ adminSettings, smtp, dirty: false });
+  settingsSnapshot.current = { adminSettings, smtp, dirty: bookingDirty || siteProfileDirty || smtpDirty || Boolean(emailDomainInput) };
+  const fetchSettingsChanges = useCallback(async (signal: AbortSignal) => {
+    try {
+      const [nextSettings, nextSmtp] = await Promise.all([
+        api<AdminSettingsPayload>("/admin/settings", { signal }),
+        api<SmtpSettingsPayload>("/admin/smtp-settings", { signal })
+      ]);
+      if (signal.aborted) return;
+      const previous = settingsSnapshot.current;
+      if (!reloadSettingsRequested.current && previous.adminSettings?.version === nextSettings.version && previous.smtp?.version === nextSmtp.version) return;
+      if (!reloadSettingsRequested.current && previous.dirty) { setSettingsStale(true); return; }
+      applyAdminSettings(nextSettings); applySmtpSettings(nextSmtp); setSettingsStale(false);
+    } catch (error) { if (!signal.aborted) notify("error", error instanceof Error ? error.message : tr("设置加载失败")); }
+    finally { reloadSettingsRequested.current = false; }
+  }, [applyAdminSettings, applySmtpSettings, notify]);
+  const refreshSettings = useRealtimeRefresh(fetchSettingsChanges, ["settings"]);
+  useEffect(() => { void refreshSettings(); }, [refreshSettings]);
 
   const toggleSmtp = async (enabled: boolean) => {
     if (!smtp || enabled === smtp.enabled || togglingSmtp) return;
@@ -14779,12 +14790,7 @@ function SettingsPanel({
     } catch (error) {
       setSmtpForm((current) => ({ ...current, enabled: smtp.enabled }));
       if (error instanceof ApiError && error.status === 409) {
-        const latest = await api<SmtpSettingsPayload>("/admin/smtp-settings");
-        setSmtp(latest);
-        setSmtpForm((current) => ({
-          ...current,
-          enabled: latest.enabled
-        }));
+        setSettingsStale(true);
       }
       notify(
         "error",
@@ -14798,6 +14804,14 @@ function SettingsPanel({
   return (
     <div className="settings-management-page">
       <PageHeader title={tr("系统设置")} />
+      {settingsStale && <div className="context-notice warning" role="alert">
+        <span>{tr("设置已更新，请重新加载后核对。未保存的内容已保留。")}</span>
+        <button className="secondary-button" onClick={async () => {
+          if (!(await dialog.confirm({ title: tr("重新加载"), message: tr("重新加载将丢弃未保存的设置，是否继续？") }))) return;
+          reloadSettingsRequested.current = true;
+          await refreshSettings();
+        }}>{tr("重新加载")}</button>
+      </div>}
       <div className="settings-page">
       <section className="settings-card card" aria-labelledby="booking-settings-title">
         <SectionHeader
@@ -14816,7 +14830,7 @@ function SettingsPanel({
             {tr("保存后仅影响新的占用，不会改变已经确认的占用。")}</ContextNotice>
           <button
             className="primary-button"
-            disabled={!adminSettings || savingBooking || !bookingDirty}
+            disabled={settingsStale || !adminSettings || savingBooking || !bookingDirty}
             onClick={() => void saveBookingSettings()}
           >
             {tr("保存规则")}</button>
@@ -14930,7 +14944,7 @@ function SettingsPanel({
           <button
             type="button"
             className="primary-button"
-            disabled={
+            disabled={settingsStale ||
               !adminSettings || savingSiteProfile || !siteProfileDirty
             }
             onClick={() => void saveSiteProfile()}
@@ -14976,7 +14990,7 @@ function SettingsPanel({
                 <input
                   type="checkbox"
                   checked={smtpForm.enabled}
-                  disabled={togglingSmtp}
+                  disabled={settingsStale || togglingSmtp}
                   aria-busy={togglingSmtp}
                   onChange={(event) => void toggleSmtp(event.target.checked)}
                 />
@@ -15016,7 +15030,7 @@ function SettingsPanel({
                         checked={Boolean(
                           adminSettings?.allowRegistrationWithoutEmail
                         )}
-                        disabled={!adminSettings || togglingEmptyEmail}
+                        disabled={settingsStale || !adminSettings || togglingEmptyEmail}
                         aria-busy={togglingEmptyEmail}
                         onChange={(event) =>
                           void toggleEmptyRegistrationEmail(event.target.checked)
@@ -15062,7 +15076,7 @@ function SettingsPanel({
                     <button
                       type="button"
                       className="secondary-button"
-                      disabled={!emailDomainInput.trim() || savingEmailDomains}
+                      disabled={settingsStale || !emailDomainInput.trim() || savingEmailDomains}
                       onClick={() => void appendEmailDomain()}
                     >
                       {savingEmailDomains ? tr("处理中") : tr("添加")}
@@ -15084,7 +15098,7 @@ function SettingsPanel({
                           <span>{domain}</span>
                           <button
                             type="button"
-                            disabled={savingEmailDomains}
+                            disabled={settingsStale || savingEmailDomains}
                             aria-label={tr("移除邮箱域名 {{v0}}", { v0: domain })}
                             onClick={() => void removeEmailDomain(domain)}
                           >
@@ -15159,7 +15173,7 @@ function SettingsPanel({
                   name="smtp-password"
                   autoComplete="new-password"
                   value={smtpPassword}
-                  disabled={clearPassword}
+                  disabled={settingsStale || clearPassword}
                   onChange={(event) => setSmtpPassword(event.target.value)}
                   placeholder={
                     smtp.passwordStatus === "UNREADABLE"
@@ -15208,7 +15222,7 @@ function SettingsPanel({
                 />
                 <button
                   className="secondary-button async-button smtp-test-button"
-                  disabled={smtpDirty || !smtp.testable || !testRecipient || testingSmtp}
+                  disabled={settingsStale || smtpDirty || !smtp.testable || !testRecipient || testingSmtp}
                   aria-busy={testingSmtp}
                   aria-label={smtpDirty ? tr("发送测试，请先保存当前修改") : tr("发送测试")}
                   onClick={async () => {
@@ -15218,10 +15232,10 @@ function SettingsPanel({
                         method: "POST",
                         body: jsonBody({ recipient: testRecipient })
                       });
-                      await loadSmtp();
+                      await refreshSettings();
                       notify("success", tr("测试邮件已发送，请检查收件箱"));
                     } catch (error) {
-                      await loadSmtp().catch(() => undefined);
+                      await refreshSettings();
                       notify("error", error instanceof Error ? error.message : tr("测试邮件发送失败"));
                     } finally {
                       setTestingSmtp(false);
@@ -15243,7 +15257,7 @@ function SettingsPanel({
                 {smtp.hasPassword && (
                   <button
                     className="text-action danger smtp-password-action"
-                    disabled={smtpForm.enabled}
+                    disabled={settingsStale || smtpForm.enabled}
                     onClick={() => {
                       setClearPassword((current) => !current);
                       setSmtpPassword("");
@@ -15258,7 +15272,7 @@ function SettingsPanel({
               </div>
               <button
                 className="primary-button async-button smtp-save-button"
-                disabled={savingSmtp}
+                disabled={settingsStale || savingSmtp}
                 aria-busy={savingSmtp}
                 onClick={async () => {
                   try {
@@ -15285,7 +15299,7 @@ function SettingsPanel({
                     );
                   } catch (error) {
                     if (error instanceof ApiError && error.status === 409) {
-                      await loadSmtp();
+                      setSettingsStale(true);
                     }
                     notify("error", error instanceof Error ? error.message : tr("邮件配置保存失败"));
                   } finally {

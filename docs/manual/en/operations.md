@@ -141,6 +141,16 @@ Logs include completed dates, durations, and errors; audits record the full reca
 
 Internal `/api/v1/admin/report` now accepts inclusive `fromDate` and `toDate` values (`YYYY-MM-DD`), replacing ISO timestamp parameters. CSV export and the internal `/api/v1/admin/report.csv` endpoint have been removed. Internal rebuild and status endpoints are added; the official `/api/open/v1` contract is unchanged. Back up before upgrading; rollback requires the complete version 19 backup and matching application.
 
+## Live updates and acceptance checks
+
+The web client continues to use SSE at `/api/v1/events`. Internal `revision` events retain the schedule revision and add a protocol version, independent event ID, data categories, and machine/time scopes. Permission changes need not increment the schedule revision. Delivery uses current permissions and still reaches users whose access was revoked. Events contain refresh identifiers, not reservation descriptions or user profiles. Announcement and feedback delivery, statistics settlement and task polling, and the official `/api/open/v1` contract are unchanged.
+
+Temporary triggers on the main SQLite connection capture before/after changes within transactions and publish only after commit. Rollbacks and official API idempotent replays do not publish duplicate changes. The temporary journal is not part of the persistent schema or backups; no migration is required. After a restart, clients reconnect and query again without relying on event history. Continue using a single application writer process: direct business-table writes through other connections do not enter this connection's temporary journal.
+
+Clients coalesce events and post-operation refreshes within 200 milliseconds, keeping one request in flight and at most one trailing refresh per query. Hidden pages pause ordinary reads and disconnected fallback polling, then synchronize when visible; revoked access is handled immediately. Legacy or unknown events fall back to a coalesced sync of open modules, and old clients still recognize `revision` events. If system settings change while a form has unsaved input, the page requests a reload and review instead of overwriting that input.
+
+Reverse proxies should support long-lived SSE connections without buffering events. After building, run `npm run test:realtime-http` to check multi-user delivery, atomic cross-machine changes, silent rollbacks, and revocation against a separate temporary database. `npm run test:production-http` checks production HTTP and the official API. Browser acceptance should cover unrelated machines and dates making no extra queries, hidden/visible transitions, reconnection, and draft preservation.
+
 ## Administrator password recovery
 
 ```text

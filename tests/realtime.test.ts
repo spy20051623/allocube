@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-type FakeListener = () => void;
+type FakeListener = (event?: { data: string }) => void;
 
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
@@ -22,8 +22,8 @@ class FakeEventSource {
     this.listeners.set(eventName, listeners);
   }
 
-  emit(eventName: string) {
-    for (const listener of this.listeners.get(eventName) ?? []) listener();
+  emit(eventName: string, payload?: unknown) {
+    for (const listener of this.listeners.get(eventName) ?? []) listener(payload === undefined ? undefined : { data: JSON.stringify(payload) });
   }
 
   close() {
@@ -44,6 +44,40 @@ afterEach(() => {
 });
 
 describe("页面内实时连接复用", () => {
+  it("按独立事件标识去重，同排期版本的新事件及旧格式均可投递", async () => {
+    const { subscribeRealtimeEvent } = await import("../src/realtime");
+    const listener = vi.fn(), stop = subscribeRealtimeEvent("revision", listener);
+    const source = FakeEventSource.instances[0];
+    const event = { version: 2, eventId: "first", revision: 4, scopes: [{ topic: "notifications" }] };
+    source.emit("revision", event); source.emit("revision", event);
+    source.emit("revision", { ...event, eventId: "second" });
+    source.emit("revision", { revision: 4 });
+    source.emit("revision", { ...event, version: 99 });
+    expect(listener.mock.calls.map(([value]) => value?.eventId ?? null)).toEqual(["first", "second", null, null]);
+    stop(); vi.runAllTimers();
+  });
+
+  it("隐藏时保留连接但暂停同步与断线轮询，失权立即送达，前台统一追赶", async () => {
+    const document = Object.assign(new EventTarget(), { visibilityState: "visible" });
+    vi.stubGlobal("document", document);
+    const { subscribeRealtimeEvent } = await import("../src/realtime");
+    const listener = vi.fn(), stop = subscribeRealtimeEvent("revision", listener);
+    const source = FakeEventSource.instances[0]; source.onopen?.();
+    document.visibilityState = "hidden"; document.dispatchEvent(new Event("visibilitychange"));
+    source.emit("revision", { revision: 1 }); source.onerror?.();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(listener).not.toHaveBeenCalled(); expect(source.closed).toBe(false);
+    source.emit("revision", { version: 2, eventId: "revoked", revision: 1, accessChanged: true, scopes: [{ topic: "session" }] });
+    expect(listener).toHaveBeenCalledOnce();
+    document.visibilityState = "visible"; document.dispatchEvent(new Event("visibilitychange"));
+    expect(listener).toHaveBeenLastCalledWith(null);
+    await vi.advanceTimersByTimeAsync(30_000); expect(listener).toHaveBeenCalledTimes(3);
+    source.onopen?.(); source.emit("revision", { revision: 2 });
+    await vi.advanceTimersByTimeAsync(30_000); expect(listener).toHaveBeenCalledTimes(4);
+    stop(); await vi.advanceTimersByTimeAsync(0);
+    expect(source.closed).toBe(true); expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("多个页面订阅共用一条 EventSource", async () => {
     const { subscribeRealtimeEvent } = await import("../src/realtime");
     const onRevision = vi.fn();

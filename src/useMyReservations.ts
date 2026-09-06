@@ -1,39 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "./api";
 import { useServerClock } from "./ServerClock";
-import { subscribeRealtimeConnection, subscribeRealtimeEvent } from "./realtime";
+import { useRealtimeRefresh } from "./useRealtimeRefresh";
 import { ReservationRequestGate } from "./my-reservations-state";
 import type { OwnReservationPage } from "./shared/my-reservations";
 
 export function useReservationRefresh(nextBoundary?: string | null) {
   const [epoch, setEpoch] = useState(0);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { currentTime } = useServerClock();
   const clock = useRef(currentTime);
   clock.current = currentTime;
   const refresh = useCallback(() => {
-    if (timer.current !== null) return;
-    timer.current = setTimeout(() => { timer.current = null; setEpoch((v) => v + 1); }, 200);
+    if (document.visibilityState !== "hidden") setEpoch((v) => v + 1);
   }, []);
-  useEffect(() => {
-    let disconnected = false;
-    const unsubscribe = subscribeRealtimeEvent("revision", refresh);
-    const connection = subscribeRealtimeConnection((state) => {
-      disconnected = state !== "CONNECTED";
-      if (state === "CONNECTED") refresh();
-    });
-    const interval = setInterval(() => { if (disconnected) refresh(); }, 30_000);
-    const onVisibility = () => { if (document.visibilityState === "visible") refresh(); };
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      unsubscribe(); connection(); clearInterval(interval);
-      if (timer.current !== null) clearTimeout(timer.current);
-      timer.current = null;
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [refresh]);
   useEffect(() => {
     if (!nextBoundary) return;
     const wait = Math.min(86_400_000, Math.max(0, Date.parse(nextBoundary) - clock.current + 100));
@@ -57,14 +36,15 @@ export function useReservationPage(query: string | null, epoch: number, enabled 
   useEffect(() => {
     setPagination((previous) => previous.key === key ? previous : { key, cursors: [null] });
   }, [key]);
-  useEffect(() => {
+  const fetchPage = useCallback(async (signal: AbortSignal) => {
     if (!enabled || query === null) return;
     const request = gate.current.start();
+    signal.addEventListener("abort", () => gate.current.cancel(), { once: true });
     const started = performance.now();
     setLoading(true); setError(null);
     const params = new URLSearchParams(query);
     if (cursor) params.set("cursor", cursor);
-    void api<OwnReservationPage>(`/reservations/mine?${params}`, { signal: request.signal })
+    await api<OwnReservationPage>(`/reservations/mine?${params}`, { signal: request.signal })
       .then((data) => {
         if (!request.current()) return;
         synchronize(data.serverNow, started);
@@ -75,8 +55,9 @@ export function useReservationPage(query: string | null, epoch: number, enabled 
           setPagination({ key, cursors: [null] });
         } else setError(err instanceof Error ? err : new Error(String(err)));
       }).finally(() => { if (request.current()) setLoading(false); });
-    return () => gate.current.cancel();
-  }, [query, key, cursor, enabled, epoch, retry, synchronize]);
+  }, [query, key, cursor, enabled, synchronize]);
+  const load = useRealtimeRefresh(fetchPage, ["ownReservations"], { enabled: enabled && query !== null });
+  useEffect(() => { void load(); }, [load, epoch, retry]);
   const data = result?.query === query ? result.data : null;
   return {
     data, loading, error, page: cursors.length,
@@ -118,10 +99,11 @@ export function useAllReservations(query: string, epoch: number) {
   const [retry, setRetry] = useState(0);
   const { synchronize } = useServerClock();
   const gate = useRef(new ReservationRequestGate());
-  useEffect(() => {
+  const fetchPages = useCallback(async (signal: AbortSignal) => {
     const request = gate.current.start();
+    signal.addEventListener("abort", () => gate.current.cancel(), { once: true });
     setLoading(true); setError(null);
-    void loadAllReservationPages(async (cursor) => {
+    await loadAllReservationPages(async (cursor) => {
       const params = new URLSearchParams(query);
       params.set("limit", "100");
       if (cursor) params.set("cursor", cursor);
@@ -134,7 +116,8 @@ export function useAllReservations(query: string, epoch: number) {
     }).catch((err: unknown) => {
       if (request.current()) setError(err instanceof Error ? err : new Error(String(err)));
     }).finally(() => { if (request.current()) setLoading(false); });
-    return () => gate.current.cancel();
-  }, [epoch, query, retry, synchronize]);
+  }, [query, synchronize]);
+  const load = useRealtimeRefresh(fetchPages, ["ownReservations"]);
+  useEffect(() => { void load(); }, [load, epoch, retry]);
   return { data: result?.query === query ? result.data : null, loading, error, retry: () => setRetry((v) => v + 1) };
 }

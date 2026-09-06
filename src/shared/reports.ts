@@ -32,6 +32,5 @@ export interface UsageReport {
   summary: { reservationCount: number; reservedMinutes: number; availableMinutes: number; utilization: number };
   coverage: {
     version: string | null; generatedAt: string | null; latestCompletedDate: string | null;
-    earliestDate: string; latestDueDate: string; completedDays: number; pendingDates: string[];
   };
 }

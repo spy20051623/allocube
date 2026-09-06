@@ -186,8 +186,8 @@ async function main() {
     if (statistics.status !== 200 || !statisticsBody.coverage?.version || statisticsBody.summary?.reservationCount !== 0) {
       throw new Error("每日统计查询契约不正确");
     }
-    const statisticsCsv = await fetch(`${origin}/api/v1/admin/report.csv?${statisticsQuery}&locale=en`, { headers: { cookie } });
-    if (statisticsCsv.status !== 200 || !(await statisticsCsv.text()).includes('"Machine","Resource group"')) throw new Error("统计 CSV 导出失败");
+    const removedExport = await fetch(`${origin}/api/v1/admin/report.csv?${statisticsQuery}`, { headers: { cookie } });
+    if (removedExport.status !== 404) throw new Error("已移除的统计导出接口仍可访问");
 
     const tokenCreation = await fetch(`${origin}/api/v1/auth/api-tokens`, {
       method: "POST",

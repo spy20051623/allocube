@@ -150,7 +150,6 @@ describe("国际化资源与语言解析", () => {
       expect(tr("{{v0}}{{v1}}的资源组", { v0: tr("收起"), v1: "Node" })).toBe("Collapse Node's group");
       expect(tr("安排维护")).toBe("Schedule");
       expect(tr("维护管理")).toBe("Maintenance");
-      expect(tr("导出 CSV")).toBe("Export");
       expect(tr("账号登录")).toBe("Login");
       expect(tr("用户注册")).toBe("Register");
       expect(tr("找回密码")).toBe("Reset password");

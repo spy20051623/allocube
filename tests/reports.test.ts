@@ -53,7 +53,7 @@ beforeAll(async () => {
     SELECT ?,'reader','reader','Reader',password_hash,'USER','ACTIVE',?,? FROM users WHERE id=?`).run(user, iso(created), iso(created), admin);
   app = Fastify(); await app.register(cookie);
   (await import("../server/routes-auth")).registerAuthRoutes(app);
-  routes.registerReportRoutes(app, (s) => `"${s.replaceAll('"', '""')}"`);
+  routes.registerReportRoutes(app);
   adminCookie = await login("Administrator"); userCookie = await login("reader");
 });
 beforeEach(() => {
@@ -80,7 +80,7 @@ describe("每日统计与全量重算", () => {
     finish();
     expect(database.db.prepare("SELECT COUNT(*) AS n FROM report_days").get()).toEqual({ n: 5 });
     expect(store.step(now)).toBe(false);
-    expect(report("2026-09-01", "2026-09-05").coverage.pendingDates).toEqual([]);
+    expect(report("2026-09-01", "2026-09-05").coverage.latestCompletedDate).toBe("2026-09-05");
   });
   it("跨日预约按日分摊，多日去重且整机不重复增加用户时长", () => {
     reservation("2026-09-01T23:00+08:00", "2026-09-02T01:00+08:00", "MACHINE");
@@ -141,15 +141,33 @@ describe("每日统计与全量重算", () => {
     } finally { connection.close(); }
     finish(); expect(store.job()?.completedDays).toBe(5);
   });
-  it("未结算日期有明确覆盖信息，CSV 拒绝不完整范围", async () => {
+  it("未结算日期按零忽略，补算后纳入已有结果", async () => {
+    reservation("2026-09-01T10:00+08:00", "2026-09-01T11:00+08:00");
+    reservation("2026-09-02T10:00+08:00", "2026-09-02T12:00+08:00");
     settle("2026-09-01");
     const response = await app.inject({ url: "/api/v1/admin/report?fromDate=2026-09-01&toDate=2026-09-02", headers: { cookie: adminCookie } });
     expect(response.statusCode, response.body).toBe(200);
-    expect(response.json().coverage.pendingDates).toEqual(["2026-09-02"]);
-    expect((await app.inject({ url: "/api/v1/admin/report.csv?fromDate=2026-09-01&toDate=2026-09-02", headers: { cookie: adminCookie } })).statusCode).toBe(409);
+    expect(response.json()).toEqual(report());
+    expect(response.json().summary).toMatchObject({ reservationCount: 1, reservedMinutes: 60 });
+    expect(response.json().coverage).not.toHaveProperty("pendingDates");
+    expect(response.json().coverage).not.toHaveProperty("completedDays");
     settle("2026-09-02");
-    const csv = await app.inject({ url: "/api/v1/admin/report.csv?fromDate=2026-09-01&toDate=2026-09-02&locale=en", headers: { cookie: adminCookie } });
-    expect(csv.statusCode).toBe(200); expect(csv.body).toContain('"Machine","Resource group"');
+    const completed = await app.inject({ url: "/api/v1/admin/report?fromDate=2026-09-01&toDate=2026-09-02", headers: { cookie: adminCookie } });
+    expect(completed.statusCode).toBe(200);
+    expect(completed.json().summary).toMatchObject({ reservationCount: 2, reservedMinutes: 180 });
+  });
+  it("大范围查询忽略无数据日期，完全没有统计结果时返回零", async () => {
+    reservation("2026-09-01T10:00+08:00", "2026-09-01T11:00+08:00");
+    const request = (from: string, to: string) => app.inject({ url: `/api/v1/admin/report?fromDate=${from}&toDate=${to}`, headers: { cookie: adminCookie } });
+    const empty = await request("1900-01-01", "9999-12-31");
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json().summary).toEqual({ reservationCount: 0, reservedMinutes: 0, availableMinutes: 0, utilization: 0 });
+    expect(empty.json().groups).toEqual([]); expect(empty.json().users).toEqual([]);
+    settle("2026-09-01");
+    const wide = await request("1900-01-01", "9999-12-31");
+    expect(wide.statusCode).toBe(200); expect(wide.json()).toEqual(report());
+    const outside = await request("1900-01-01", "2025-12-31");
+    expect(outside.statusCode).toBe(200); expect(outside.json().summary).toEqual(empty.json().summary);
   });
   it("重算只允许系统管理员，普通用户和机器管理员均不能操作", async () => {
     database.db.prepare("INSERT INTO machine_admins(machine_id,user_id,assigned_by,created_at) VALUES(?,?,?,?)").run(machine, user, admin, iso(created));
@@ -219,12 +237,12 @@ describe("每日统计与全量重算", () => {
     database.db.exec("CREATE TEMP TRIGGER fail_day BEFORE INSERT ON report_group_days BEGIN SELECT RAISE(ABORT,'day failure'); END");
     try { expect(() => store.settleDay(version, "2026-09-01")).toThrow("day failure"); }
     finally { database.db.exec("DROP TRIGGER fail_day"); }
-    expect(report().coverage.pendingDates).toEqual(["2026-09-01"]);
+    expect(database.db.prepare("SELECT COUNT(*) AS n FROM report_days").get()).toEqual({ n: 0 });
     settle("2026-09-01"); settle("2026-09-01");
     expect(database.db.prepare("SELECT COUNT(*) AS n FROM report_group_days").get()).toEqual({ n: 2 });
   });
-  it("拒绝旧时间参数、非法日期和超过 366 天的范围", async () => {
-    for (const query of ["from=2026-09-01T00:00:00Z&to=2026-09-02T00:00:00Z", "fromDate=2026-02-30&toDate=2026-03-01", "fromDate=2024-01-01&toDate=2026-01-01"]) {
+  it("拒绝旧时间参数、非法日期和倒置范围", async () => {
+    for (const query of ["from=2026-09-01T00:00:00Z&to=2026-09-02T00:00:00Z", "fromDate=2026-02-30&toDate=2026-03-01", "fromDate=2026-09-02&toDate=2026-09-01"]) {
       const response = await app.inject({ url: `/api/v1/admin/report?${query}`, headers: { cookie: adminCookie } });
       // Minimal Fastify harness does not install the production Zod error handler.
       expect(response.statusCode).toBeGreaterThanOrEqual(400);

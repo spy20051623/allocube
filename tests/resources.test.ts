@@ -768,7 +768,7 @@ describe("通用资源配置", () => {
     expect(timeline.json().groups[0]).toHaveProperty("allocations");
   });
 
-  it("报表和 CSV 使用资源组分钟与通用资源摘要", async () => {
+  it("报表使用资源组分钟与通用资源摘要", async () => {
     const admin = dbModule.db
       .prepare("SELECT id FROM users WHERE role = 'SYSTEM_ADMIN'")
       .get() as { id: string };
@@ -794,16 +794,6 @@ describe("通用资源配置", () => {
     expect(report.json().summary.reservedMinutes).toBe(60);
     expect(report.json().groups.find((row: { resourceGroupId: string }) => row.resourceGroupId === reusedGroupId).resourceSummary).toContain("逻辑核 · 0–1");
     expect(report.json().users[0]).not.toHaveProperty("coreMinutes");
-
-    const csv = await app.inject({
-      method: "GET",
-      url: `/api/v1/admin/report.csv?${query}`,
-      headers: { cookie: cookieHeader }
-    });
-    expect(csv.statusCode).toBe(200);
-    expect(csv.body).toContain("资源组成");
-    expect(csv.body).not.toContain("核时");
-    expect(csv.body).not.toContain("核段");
   });
 
   it("未引用的资源项可以永久删除，被引用时返回资源组名单", async () => {

@@ -50,7 +50,6 @@ import {
   Clock3,
   Copy,
   Cpu,
-  Download,
   Eye,
   EyeOff,
   Gauge,
@@ -13980,10 +13979,16 @@ function ReportPanel({ machines, notify, isSystemAdmin }: {
   const [fromDate, setFromDate] = useState(() => shiftReportDate(latestReportDate(), -6));
   const [toDate, setToDate] = useState(() => latestReportDate());
   const [machineId, setMachineId] = useState("");
-  const { report, job, loading, submitting, statusKnown, load, rebuild, query } = useUsageReport(fromDate, toDate, machineId, isSystemAdmin, notify);
+  const [appliedFilters, setAppliedFilters] = useState({ fromDate, toDate, machineId });
+  const { report, job, loading, submitting, statusKnown, load, rebuild } = useUsageReport(appliedFilters.fromDate, appliedFilters.toDate, appliedFilters.machineId, isSystemAdmin, notify);
+  const refreshStatistics = () => {
+    if (fromDate === appliedFilters.fromDate && toDate === appliedFilters.toDate && machineId === appliedFilters.machineId) {
+      void load();
+    } else {
+      setAppliedFilters({ fromDate, toDate, machineId });
+    }
+  };
   const running = job?.status === "QUEUED" || job?.status === "RUNNING";
-  const exportUrl = `/api/v1/admin/report.csv?${query}&locale=${currentLocale()}`;
-  const canExport = report && !loading && report.coverage.pendingDates.length === 0;
   const confirmRebuild = async () => {
     if (await dialog.confirm({ title: tr("全部重新统计"),
       message: tr("将按现存记录重新统计全部机器和历史日期，不受当前筛选影响。期间旧统计仍可使用，完成后统一替换。"),
@@ -13993,13 +13998,15 @@ function ReportPanel({ machines, notify, isSystemAdmin }: {
     <div className="report-page">
       <PageHeader
         title={tr("使用统计")}
-        titleExtras={isSystemAdmin && <div className="report-rebuild-controls">
+        titleExtras={<span className="report-status" role="status">
+          {loading ? tr("正在加载统计") : report?.coverage.latestCompletedDate ? tr("统计截至 {{date}}", { date: report.coverage.latestCompletedDate }) : ""}
+        </span>}
+        actions={isSystemAdmin && <div className="report-rebuild-controls">
           <button className="secondary-button report-rebuild-button" disabled={submitting || running || !statusKnown} onClick={() => void confirmRebuild()}>
             <RefreshCw size={14} />{running || submitting ? tr("重新统计中") : tr("全部重新统计")}
           </button>
           <span className="report-status" role="status">{running ? `${job.completedDays} / ${job.totalDays}` : !statusKnown ? tr("正在核对任务状态") : job?.status === "FAILED" ? tr("重新统计失败，原统计结果仍可使用") : ""}</span>
         </div>}
-        actions={canExport ? <a className="secondary-button" href={exportUrl}><Download size={16} />{tr("导出 CSV")}</a> : <button className="secondary-button" disabled><Download size={16} />{tr("导出 CSV")}</button>}
       />
       <div className="report-filters card">
         <Field label={tr("开始日期")}><input type="date" max={latestReportDate()} value={fromDate} onChange={(e) => setFromDate(e.target.value)} /></Field>
@@ -14013,14 +14020,9 @@ function ReportPanel({ machines, notify, isSystemAdmin }: {
           ]}
           onChange={setMachineId}
         />
-        <button className="primary-button" disabled={loading} onClick={() => void load()}><RefreshCw size={15} />{tr("刷新统计")}</button>
+        <button className="primary-button" disabled={loading} onClick={refreshStatistics}><RefreshCw size={15} />{tr("刷新统计")}</button>
       </div>
-      <div className="report-status" role="status">
-        {loading ? tr("正在加载统计") : report?.coverage.latestCompletedDate ? tr("统计截至 {{date}}", { date: report.coverage.latestCompletedDate }) : tr("统计准备中")}
-        {report && report.coverage.pendingDates.length > 0 && <span className="report-pending">{tr("所选范围有 {{count}} 天待统计", { count: report.coverage.pendingDates.length })}</span>}
-      </div>
-      {report && report.coverage.pendingDates.length > 0 && <details className="report-pending-dates"><summary>{tr("查看待统计日期")}</summary>{report.coverage.pendingDates.join("、")}</details>}
-      {report && (report.coverage.completedDays > 0 || report.coverage.pendingDates.length === 0) && (
+      {report && (
         <div className="report-results">
           <div className="metric-grid">
             <MetricCard icon={Gauge} label={tr("资源占用率")} value={`${report.summary.utilization}%`} />

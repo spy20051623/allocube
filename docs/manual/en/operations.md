@@ -139,7 +139,7 @@ Snapshots, day completion markers, and rebuild progress reside in SQLite and are
 
 Logs include completed dates, durations, and errors; audits record the full recalculation requester, range, and outcome. Statistics do not change calendar revisions or send reservation notifications. Do not delete statistics tables to recover from errors. Check disk space, permissions, and logs, then request another full recalculation from Usage statistics.
 
-Internal `/api/v1/admin/report` and `.csv` now accept inclusive `fromDate` and `toDate` values (`YYYY-MM-DD`), replacing ISO timestamp parameters. Internal rebuild and status endpoints are added; the official `/api/open/v1` contract is unchanged. Back up before upgrading; rollback requires the complete version 19 backup and matching application.
+Internal `/api/v1/admin/report` now accepts inclusive `fromDate` and `toDate` values (`YYYY-MM-DD`), replacing ISO timestamp parameters. CSV export and the internal `/api/v1/admin/report.csv` endpoint have been removed. Internal rebuild and status endpoints are added; the official `/api/open/v1` contract is unchanged. Back up before upgrading; rollback requires the complete version 19 backup and matching application.
 
 ## Administrator password recovery
 

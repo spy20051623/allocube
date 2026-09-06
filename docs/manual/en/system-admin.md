@@ -81,17 +81,17 @@ Verification, password recovery, and account-blocking messages remain required e
 
 The SMTP password is encrypted and saved using the instance secret key; the page and API will not echo the plaintext. If `instance-secrets.json` is replaced or lost, the SMTP password must be re-entered.
 
-## Statistics and export
+## Usage statistics
 
-Usage statistics settle the previous calendar day at 06:00 Beijing time each day. The page and CSV read stored results rather than recalculating live reservations. These figures describe recorded reservation periods, not actual hardware utilization.
+Usage statistics settle the previous calendar day at 06:00 Beijing time each day. The page reads stored results rather than recalculating live reservations. These figures describe recorded reservation periods, not actual hardware utilization.
 
-Date filters always use Beijing time and include both the start and end dates. The default is the latest seven days due for settlement; a query may span up to 366 days. Before 06:00 the latest due date is two days ago, and after 06:00 it is yesterday. Today is excluded, regardless of the calendar timezone setting. Refresh only reloads saved results.
+Date filters always use Beijing time and include both the start and end dates. The default is the latest seven days due for settlement. Before 06:00 the latest due date is two days ago, and after 06:00 it is yesterday. Today is excluded, regardless of the calendar timezone setting. Changes to dates or the machine filter take effect only after selecting Refresh, which reads saved results.
 
 Reservations spanning midnight contribute their overlapping duration to each day. Multi-day reservation counts deduplicate reservation IDs. Whole-machine reservations contribute to each relevant resource group but count only once toward a user's duration. Utilization uses aggregate durations rather than averaging daily percentages.
 
-The first upgrade backfills all existing history in the background, newest dates first. Pending dates are listed explicitly; displayed results include only completed days, and CSV export is unavailable until the selected range is complete. Backfill uses current records and cannot reconstruct deleted or changed historical configurations.
+The first upgrade backfills all existing history in the background, newest dates first. Queries aggregate stored results within the selected range. Dates without results contribute zero and do not produce pending-date notices; an entirely empty range displays zero. Backfill uses current records and cannot reconstruct deleted or changed historical configurations.
 
-System administrators can select **Recalculate all** beside the page title. After confirmation, it recalculates every machine and historical date regardless of filters. Closing the page does not cancel the task. Previous results remain readable and exportable until the entire new version is ready; a failed task preserves the previous results. Progress is displayed, and repeated submissions reuse the current task. Ordinary users and machine administrators cannot trigger this operation.
+System administrators can select **Recalculate all** at the top right of the page. After confirmation, it recalculates every machine and historical date regardless of filters. Closing the page does not cancel the task. Previous results remain readable until the entire new version is ready; a failed task preserves the previous results. Progress is displayed, and repeated submissions reuse the current task. Ordinary users and machine administrators cannot trigger this operation.
 
 Routine reservation changes do not revise settled figures. A system administrator must request a full recalculation to update history. Queries still enforce current machine permissions and anonymize deleted users and resources.
 

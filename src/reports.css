@@ -1,12 +1,9 @@
+.report-page > .page-header { flex-wrap: wrap; gap: 12px 24px; }
+.report-page .page-header-actions { margin-left: auto; }
 .report-rebuild-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .report-rebuild-button { min-height: 30px; padding: 5px 9px; font-size: 12px; }
 .report-status { color: var(--text-muted, #64748b); font-size: 12px; overflow-wrap: anywhere; }
-.report-pending { margin-left: 12px; }
-.report-pending-dates { flex-shrink: 0; font-size: 12px; overflow-wrap: anywhere; }
-.report-pending-dates summary { cursor: pointer; }
-.report-pending-dates { max-height: 90px; overflow: auto; }
 .admin-shell.report-admin-shell { grid-template-columns: 230px minmax(0, 1fr); }
-.report-page > .report-status { flex-shrink: 0; margin: 0 0 10px; }
 @media (max-width: 1200px) {
   .report-page .report-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .report-page .metric-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }

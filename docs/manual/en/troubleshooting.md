@@ -81,9 +81,9 @@ Check whether the log reports a missing or invalid `BOOTSTRAP_ADMIN_PASSWORD`, a
 
 ## Missing statistics dates or failed recalculation
 
-Today is excluded. Before 06:00 Beijing time, statistics normally extend through two days ago; afterward, through yesterday. Initial backfill or recovery after downtime can leave pending dates. These are not zero-usage days. Wait for completion and refresh before exporting CSV; Refresh does not recalculate data.
+Today is excluded. Before 06:00 Beijing time, statistics normally extend through two days ago; afterward, through yesterday. Dates without stored results contribute zero, without missing-day counts or date lists. After initial backfill or recovery completes, refresh to read the newly stored results; Refresh does not recalculate data.
 
-Only system administrators can start a full recalculation beside the title. Previous statistics remain available after failure. Check server logs, disk space, and database permissions before retrying. Closing the page does not cancel a task, and restarting the service resumes unfinished work. If submission encounters a network error, check task status before trying again.
+Only system administrators can start a full recalculation at the top right of the page. Previous statistics remain available after failure. Check server logs, disk space, and database permissions before retrying. Closing the page does not cancel a task, and restarting the service resumes unfinished work. If submission encounters a network error, check task status before trying again.
 
 ## Health check failure
 

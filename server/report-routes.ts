@@ -5,33 +5,25 @@ import { db } from "./db.js";
 import { mapResourceGroups } from "./resources.js";
 import { ReportStore } from "./report-store.js";
 import { wakeReportScheduler } from "./report-scheduler.js";
-import { latestReportDate, reportDayStart, REPORT_DAY_MS, shiftReportDate, type UsageReport } from "../src/shared/reports.js";
+import type { UsageReport } from "../src/shared/reports.js";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => {
   const ms = Date.parse(`${s}T00:00:00Z`);
   return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === s;
 }, "统计日期无效");
 const querySchema = z.object({
-  fromDate: date, toDate: date, machineId: z.string().uuid().optional(),
-  locale: z.enum(["zh-CN", "en"]).default("zh-CN")
-}).strict().refine((v) => v.fromDate <= v.toDate, "统计结束日期不能早于开始日期")
-  .refine((v) => reportDayStart(v.toDate) - reportDayStart(v.fromDate) < 366 * REPORT_DAY_MS, "单次统计范围不能超过 366 天");
+  fromDate: date, toDate: date, machineId: z.string().uuid().optional()
+}).strict().refine((v) => v.fromDate <= v.toDate, "统计结束日期不能早于开始日期");
 
 export function readUsageReport(machineIds: string[], from: string, to: string): UsageReport {
-  // Pin generation, coverage, permissions-independent facts and display data to one read transaction.
+  // Pin generation, metadata, permissions-independent facts and display data to one read transaction.
   return db.transaction(() => {
     const store = new ReportStore(db), state = store.state()!;
     const version = state.active_version;
-    const allDays = db.prepare("SELECT day,completed_at FROM report_days WHERE version_id=? AND day BETWEEN ? AND ?")
-      .all(version, from, to) as Array<{ day: string; completed_at: string }>;
-    const complete = new Set(allDays.map((r) => r.day));
-    const pendingDates: string[] = [];
-    for (let d = from; d <= to; d = shiftReportDate(d, 1)) if (d >= state.earliest_date && !complete.has(d)) pendingDates.push(d);
     const latest = db.prepare("SELECT MAX(day) AS day, MAX(completed_at) AS generated FROM report_days WHERE version_id=?").get(version) as { day: string | null; generated: string | null };
     const report: UsageReport = {
       groups: [], users: [], summary: { reservationCount: 0, reservedMinutes: 0, availableMinutes: 0, utilization: 0 },
-      coverage: { version, generatedAt: latest.generated, latestCompletedDate: latest.day, earliestDate: state.earliest_date,
-        latestDueDate: latestReportDate(), completedDays: complete.size, pendingDates }
+      coverage: { version, generatedAt: latest.generated, latestCompletedDate: latest.day }
     };
     if (!machineIds.length) return report;
     const allowed = JSON.stringify(machineIds);
@@ -79,26 +71,17 @@ export function readUsageReport(machineIds: string[], from: string, to: string):
   })();
 }
 
-export function registerReportRoutes(app: FastifyInstance, csvCell: (value: string) => string) {
+export function registerReportRoutes(app: FastifyInstance) {
   const store = new ReportStore(db);
   store.initialize();
-  for (const csv of [false, true]) app.get(csv ? "/api/v1/admin/report.csv" : "/api/v1/admin/report", async (request, reply) => {
+  app.get("/api/v1/admin/report", async (request, reply) => {
     const auth = requireAuth(request, reply);
     if (!auth) return;
     const query = querySchema.parse(request.query);
     const ids = query.machineId ? (canAccessMachine(auth.user.id, auth.user.role, query.machineId) ? [query.machineId] : [])
       : auth.user.role === "SYSTEM_ADMIN" ? (db.prepare("SELECT id FROM machines").all() as Array<{ id: string }>).map((r) => r.id)
       : getAccessibleMachineIds(auth.user.id, auth.user.role);
-    const report = readUsageReport(ids, query.fromDate, query.toDate);
-    if (!csv) return report;
-    if (report.coverage.pendingDates.length) return reply.code(409).send({ error: "所选日期尚未完成统计，暂不能导出", code: "REPORT_NOT_READY" });
-    const lines = [query.locale === "en"
-      ? ["Machine", "Resource group", "Resources", "Reserved minutes", "Available minutes", "Utilization"]
-      : ["机器", "资源组", "资源组成", "占用分钟", "可用分钟", "占用率"],
-      ...report.groups.map((r) => [r.machineName, r.groupName, r.resourceSummary, String(r.reservedMinutes), String(r.availableMinutes), `${r.utilization}%`])];
-    reply.header("content-type", "text/csv; charset=utf-8");
-    reply.header("content-disposition", 'attachment; filename="resource-report.csv"');
-    return "\uFEFF" + lines.map((line) => line.map(csvCell).join(",")).join("\r\n");
+    return readUsageReport(ids, query.fromDate, query.toDate);
   });
   app.get("/api/v1/admin/report/rebuild", async (request, reply) => {
     if (!requireSystemAdmin(request, reply)) return;

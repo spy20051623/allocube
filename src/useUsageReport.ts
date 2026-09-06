@@ -86,5 +86,5 @@ export function useUsageReport(fromDate: string, toDate: string, machineId: stri
       locked.current = false; if (mounted.current) setSubmitting(false);
     }
   };
-  return { report, job, loading, submitting, statusKnown, load, rebuild, query };
+  return { report, job, loading, submitting, statusKnown, load, rebuild };
 }

@@ -3672,7 +3672,7 @@ export function registerAdminRoutes(
     }
   );
 
-  registerReportRoutes(app, csvCell);
+  registerReportRoutes(app);
 
   app.get("/api/v1/admin/audit", async (request, reply) => {
     const auth = requireSystemAdmin(request, reply);
@@ -4419,11 +4419,4 @@ function deleteMachineRecords(
        disable_reason = '', version = version + 1, updated_at = ?
      WHERE id = ?`
   ).run(`deleted-${machineId}`, now, machineId);
-}
-
-export function csvCell(value: string) {
-  const safeValue = /^[\s\u0000-\u001f]*[=+\-@]/u.test(value)
-    ? `'${value}`
-    : value;
-  return `"${safeValue.replace(/"/g, '""')}"`;
 }

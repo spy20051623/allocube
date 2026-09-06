@@ -3,7 +3,6 @@ import { resolveNotificationDestination } from "../src/notification-navigation";
 import { SourceRateLimiter } from "../server/source-rate-limit";
 import { normalizeNotificationLink } from "../server/mailer";
 import { buildPasswordResetUrl } from "../server/security-urls";
-import { csvCell } from "../server/routes-admin";
 
 describe("安全边界", () => {
   it("拒绝外部、协议相对、反斜杠和损坏的通知链接", () => {
@@ -66,11 +65,4 @@ describe("安全边界", () => {
     });
   });
 
-  it("CSV 单元格阻止公式注入并正确转义引号", () => {
-    expect(csvCell("=HYPERLINK(\"https://attacker.invalid\")")).toBe(
-      "\"'=HYPERLINK(\"\"https://attacker.invalid\"\")\""
-    );
-    expect(csvCell("\t+cmd")).toBe("\"'\t+cmd\"");
-    expect(csvCell("普通文本")).toBe("\"普通文本\"");
-  });
 });

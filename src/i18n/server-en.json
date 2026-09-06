@@ -66,7 +66,6 @@
   "持久配置不完整，缺少系统管理员": "Persistent configuration is incomplete, missing system administrator",
   "持久配置不完整，缺少邮件发送配置": "Persistent configuration is incomplete, missing email sending configuration",
   "待审核的工号不存在": "Pending employee ID not found",
-  "单次统计范围不能超过 366 天": "Single statistical range cannot exceed 366 days",
   "单次占用最长 {{v0}} 分钟": "Maximum single reservation duration is {{v0}} minutes",
   "当前密码不正确": "Current password is incorrect",
   "当前姓名为 {{v0}}，工号为 {{v1}}。": "Current name is {{v0}}, employee ID is {{v1}}.",
@@ -492,6 +491,5 @@
   "编辑序列中的占用已结束，请重新核对": "A reservation in the editing sequence has ended. Review the selection again.",
   "不能同时使用单条和批量编辑参数": "Single and multiple replacement parameters cannot be combined.",
   "统计日期无效": "Invalid statistics date",
-  "统计结束日期不能早于开始日期": "The end date must not precede the start date",
-  "所选日期尚未完成统计，暂不能导出": "Statistics for the selected dates are not ready for export"
+  "统计结束日期不能早于开始日期": "The end date must not precede the start date"
 }

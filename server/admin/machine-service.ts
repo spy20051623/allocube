@@ -1,9 +1,7 @@
-import type { FastifyReply } from "fastify";
 import { db, nowIso, addAudit, bumpMachineAccessRevision, bumpScheduleRevision, parseTags } from "../db.js";
 import { createNotification } from "../mailer.js";
 
 export function assignMachineManager(
-  reply: FastifyReply,
   machineId: string,
   userId: string,
   actorUserId: string
@@ -18,8 +16,7 @@ export function assignMachineManager(
     )
     .get(machineId, userId) as { status: string } | undefined;
   if (!user || user.status !== "ACTIVE") {
-    reply.code(400).send({ error: "只能将这台机器已有的已启用用户设为管理员" });
-    return null;
+    return { ok: false, status: 400, message: "只能将这台机器已有的已启用用户设为管理员" } as const;
   }
   const result = db
     .prepare(
@@ -29,8 +26,7 @@ export function assignMachineManager(
     )
     .run(machineId, userId, actorUserId, nowIso());
   if (!result.changes) {
-    reply.code(409).send({ error: "该用户已经是这台机器的管理员" });
-    return null;
+    return { ok: false, status: 409, message: "该用户已经是这台机器的管理员" } as const;
   }
   addAudit(actorUserId, "MACHINE_ADMIN_ASSIGN", "machine", machineId, undefined, {
     userId
@@ -44,7 +40,7 @@ export function assignMachineManager(
     "你现在可以在资源管理中维护该机器并处理使用权申请。",
     "/admin/machines"
   );
-  return { message: "已设为机器管理员" };
+  return { ok: true, message: "已设为机器管理员" } as const;
 }
 
 export function machineAuditPayload(

@@ -1,34 +1,17 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
+import { createAdminFixture } from "./helpers/admin-fixture";
 import Fastify from "fastify";
-import cookie from "@fastify/cookie";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-settings-conflicts-"));
-process.env.NODE_ENV = "test";
-process.env.DATABASE_PATH = path.join(directory, "settings.sqlite");
-process.env.BOOTSTRAP_ADMIN_PASSWORD = "SettingsConflict82!";
-process.env.SESSION_SECRET = "settings-conflicts-test-secret-at-least-32-characters";
+const fixture = createAdminFixture("settings-conflicts");
 let app: ReturnType<typeof Fastify>;
 let database: typeof import("../server/db.js");
 let adminCookie: string;
 
 beforeAll(async () => {
-  database = await import("../server/db.js");
-  await database.initializeDatabase();
-  app = Fastify();
-  await app.register(cookie, { secret: process.env.SESSION_SECRET });
-  (await import("../server/routes-auth.js")).registerAuthRoutes(app);
-  (await import("../server/routes-schedule.js")).registerScheduleRoutes(app, () => undefined);
-  (await import("../server/routes-admin.js")).registerAdminRoutes(app, () => undefined);
-  const login = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: {
-    identifierType: "USERNAME", identifier: "Administrator", password: "SettingsConflict82!"
-  } });
-  expect(login.statusCode).toBe(200);
-  adminCookie = login.cookies.map(item => `${item.name}=${item.value}`).join("; ");
+  ({ app, database, adminCookie } = await fixture.start());
 });
-afterAll(async () => { await app?.close(); database?.db.close(); fs.rmSync(directory, { recursive: true, force: true }); });
+
+afterAll(() => fixture.close());
 
 const cases = [
   ["/settings", { minBookingMinutes: 3, maxBookingMinutes: 600, advanceDays: 20 }],
@@ -79,5 +62,25 @@ describe("系统设置显式覆盖", () => {
     } });
     expect(response.statusCode).toBe(400);
     expect(database.getAdminSettings()).toEqual(before);
+  });
+
+  it("审计失败时同时回滚设置值、版本和注册配置修订", async () => {
+    const before = database.getAdminSettings();
+    const revision = database.getRegistrationConfigRevision();
+    database.db.exec(`CREATE TEMP TRIGGER reject_settings_audit
+      BEFORE INSERT ON audit_logs WHEN NEW.action = 'REGISTRATION_EMAIL_POLICY_UPDATE'
+      BEGIN SELECT RAISE(ABORT, 'test audit failure'); END`);
+    try {
+      const response = await app.inject({
+        method: "PATCH", url: "/api/v1/admin/settings/registration-email",
+        headers: { cookie: adminCookie },
+        payload: { allowRegistrationWithoutEmail: !before.allowRegistrationWithoutEmail, expectedVersion: before.version }
+      });
+      expect(response.statusCode).toBe(500);
+      expect(database.getAdminSettings()).toEqual(before);
+      expect(database.getRegistrationConfigRevision()).toBe(revision);
+    } finally {
+      database.db.exec("DROP TRIGGER reject_settings_audit");
+    }
   });
 });

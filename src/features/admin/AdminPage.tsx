@@ -20,7 +20,7 @@ import { useState, useCallback, useEffect } from "react";
 import { api } from "../../api";
 import { type AdminTab, type MachineAdminSection } from "../../app-routing";
 import type { DashboardBootstrap } from "../../shared/types";
-import { notificationBadgeText } from "../../app/AppShell";
+import { notificationBadgeText } from "../../notification-navigation";
 import { MachineAdminPanel } from "../machines/MachineAdminPanel";
 import { UserAdminPanel } from "../users/UserAdminPanel";
 import { ReportPanel } from "../reports/ReportPanel";

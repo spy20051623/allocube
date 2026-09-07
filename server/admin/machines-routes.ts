@@ -344,9 +344,10 @@ export function registerMachinesAdminRoutes(app: FastifyInstance, publishRevisio
     if (!auth) return;
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const { userId } = z.object({ userId: z.string().uuid() }).parse(request.body);
-    const result = assignMachineManager(reply, id, userId, auth.user.id);
-    if (result) publishRevision(getScheduleRevision());
-    return result;
+    const result = assignMachineManager(id, userId, auth.user.id);
+    if (!result.ok) return reply.code(result.status).send({ error: result.message });
+    publishRevision(getScheduleRevision());
+    return { message: result.message };
   });
 
   app.put("/api/v1/admin/machines/:id/managers/:userId", async (request, reply) => {
@@ -355,9 +356,10 @@ export function registerMachinesAdminRoutes(app: FastifyInstance, publishRevisio
     const params = z
       .object({ id: z.string().uuid(), userId: z.string().uuid() })
       .parse(request.params);
-    const result = assignMachineManager(reply, params.id, params.userId, auth.user.id);
-    if (result) publishRevision(getScheduleRevision());
-    return result;
+    const result = assignMachineManager(params.id, params.userId, auth.user.id);
+    if (!result.ok) return reply.code(result.status).send({ error: result.message });
+    publishRevision(getScheduleRevision());
+    return { message: result.message };
   });
 
   app.delete("/api/v1/admin/machines/:id/managers/:userId", async (request, reply) => {

@@ -1,3 +1,4 @@
+import { indexTimeline } from "./timeline-index";
 import { useRealtimeRefresh } from "../../useRealtimeRefresh";
 import { withRequestDeadline } from "../../request-deadline";
 import { useServerClock } from "../../ServerClock";
@@ -5,7 +6,6 @@ import { tr } from "../../i18n/index";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { api } from "../../api";
 import { type RealtimeConnectionState, subscribeRealtimeConnection } from "../../realtime";
-import type { TimelineReservation, UnavailabilityWindow, ResourceGroup } from "../../shared/types";
 import { type TimelinePayload } from "./types";
 
 export function useTimelineData({ range, notify, synchronizeServerClock }: { range: { from: string; to: string }; notify: (kind: "success" | "error", message: string) => void; synchronizeServerClock: ReturnType<typeof useServerClock>["synchronize"] }) {
@@ -77,69 +77,13 @@ export function useTimelineData({ range, notify, synchronizeServerClock }: { ran
     return subscribeRealtimeConnection(setConnectionState);
   }, []);
 
-  const reservationsByGroup = useMemo(() => {
-    const map = new Map<string, TimelineReservation[]>();
-    for (const item of timeline?.reservations ?? []) {
-      if (item.scope === "MACHINE") continue;
-      const bucket = map.get(item.resourceGroupId) ?? [];
-      bucket.push(item);
-      map.set(item.resourceGroupId, bucket);
-    }
-    return map;
-  }, [timeline]);
-
-  const machineReservationsByMachine = useMemo(() => {
-    const map = new Map<string, TimelineReservation[]>();
-    for (const item of timeline?.reservations ?? []) {
-      if (item.scope !== "MACHINE") continue;
-      const bucket = map.get(item.machineId) ?? [];
-      bucket.push(item);
-      map.set(item.machineId, bucket);
-    }
-    return map;
-  }, [timeline]);
-
-  const unavailabilityByGroup = useMemo(() => {
-    const map = new Map<string, UnavailabilityWindow[]>();
-    for (const item of timeline?.unavailability ?? []) {
-      if (!item.resourceGroupId) continue;
-      const bucket = map.get(item.resourceGroupId) ?? [];
-      bucket.push(item);
-      map.set(item.resourceGroupId, bucket);
-    }
-    return map;
-  }, [timeline]);
-
-  const machineUnavailability = useMemo(() => {
-    const map = new Map<string, UnavailabilityWindow[]>();
-    for (const item of timeline?.unavailability ?? []) {
-      if (item.resourceGroupId) continue;
-      const bucket = map.get(item.machineId) ?? [];
-      bucket.push(item);
-      map.set(item.machineId, bucket);
-    }
-    return map;
-  }, [timeline]);
-
-  const groupsByMachine = useMemo(() => {
-    const map = new Map<string, Array<Omit<ResourceGroup, "version">>>();
-    for (const group of timeline?.groups ?? []) {
-      const list = map.get(group.machineId) ?? [];
-      list.push(group);
-      map.set(group.machineId, list);
-    }
-    return map;
-  }, [timeline]);
+  const index = useMemo(() => indexTimeline(timeline), [timeline]);
   return {
     timeline,
     initialLoading,
     refreshing,
     connectionState,
     loadTimeline,
-    reservationsByGroup,
-    machineReservationsByMachine,
-    unavailabilityByGroup,
-    machineUnavailability,
-    groupsByMachine
+    ...index
   };
 }

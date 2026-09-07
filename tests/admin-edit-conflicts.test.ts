@@ -1,39 +1,23 @@
+import { createAdminFixture } from "./helpers/admin-fixture";
 import { randomUUID } from "node:crypto";
 import multipart from "@fastify/multipart";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import Fastify from "fastify";
-import cookie from "@fastify/cookie";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-edit-conflicts-"));
-process.env.NODE_ENV = "test";
-process.env.DATABASE_PATH = path.join(directory, "edits.sqlite");
-process.env.BOOTSTRAP_ADMIN_PASSWORD = "SettingsConflict82!";
-process.env.SESSION_SECRET = "settings-conflicts-test-secret-at-least-32-characters";
+const fixture = createAdminFixture("edit-conflicts");
 let app: ReturnType<typeof Fastify>;
 let database: typeof import("../server/db.js");
 let adminCookie: string;
 
 beforeAll(async () => {
-  database = await import("../server/db.js");
-  await database.initializeDatabase();
-  app = Fastify();
-  await app.register(cookie, { secret: process.env.SESSION_SECRET });
-  await app.register(multipart);
-  (await import("../server/feedback.js")).registerFeedbackRoutes(app, () => undefined);
-  (await import("../server/announcements.js")).registerAnnouncementRoutes(app, () => undefined);
-  (await import("../server/routes-auth.js")).registerAuthRoutes(app);
-  (await import("../server/routes-schedule.js")).registerScheduleRoutes(app, () => undefined);
-  (await import("../server/routes-admin.js")).registerAdminRoutes(app, () => undefined);
-  const login = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: {
-    identifierType: "USERNAME", identifier: "Administrator", password: "SettingsConflict82!"
-  } });
-  expect(login.statusCode).toBe(200);
-  adminCookie = login.cookies.map(item => `${item.name}=${item.value}`).join("; ");
+  ({ app, database, adminCookie } = await fixture.start(async app => {
+    await app.register(multipart);
+    (await import("../server/feedback.js")).registerFeedbackRoutes(app, () => undefined);
+    (await import("../server/announcements.js")).registerAnnouncementRoutes(app, () => undefined);
+  }));
 });
-afterAll(async () => { await app?.close(); database?.db.close(); fs.rmSync(directory, { recursive: true, force: true }); });
+
+afterAll(() => fixture.close());
 
 
 const headers = (overwrite = false) => ({ cookie: adminCookie, ...(overwrite ? { "x-allocube-overwrite": "true" } : {}) });

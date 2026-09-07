@@ -1,19 +1,21 @@
+import { updateAdminSettings } from "./settings-service.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { normalizeSiteOrigin } from "../../src/shared/site-origin.js";
 import { icpFilingValidationError } from "../../src/shared/icp-filing.js";
 import { publicSecurityFilingValidationError } from "../../src/shared/public-security-filing.js";
 import { requireSystemAdmin } from "../auth.js";
-import { getAdminSettings, withImmediateTransaction, nowIso, db, addAudit, incrementRegistrationConfigRevision } from "../db.js";
-import { BusinessError } from "../business-error.js";
+import { getAdminSettings, db, incrementRegistrationConfigRevision } from "../db.js";
 import { normalizeAllowedEmailDomains } from "../../src/shared/email-domain-rules.js";
 
 export function registerSettingsAdminRoutes(app: FastifyInstance) {
+
   app.get("/api/v1/admin/settings", async (request, reply) => {
     const auth = requireSystemAdmin(request, reply);
     if (!auth) return;
     return getAdminSettings();
   });
+
   app.patch("/api/v1/admin/settings", async (request, reply) => {
     const auth = requireSystemAdmin(request, reply);
     if (!auth) return;
@@ -29,17 +31,7 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
         message: "最长时长不能小于最短时长"
       })
       .parse(request.body);
-    const settings = withImmediateTransaction(() => {
-      const before = getAdminSettings();
-      if (!body.overwrite && before.version !== body.expectedVersion) {
-        throw new BusinessError(
-          "系统设置已由其他管理员更新，请刷新后重试",
-          409,
-          undefined,
-          "SETTINGS_VERSION_CONFLICT"
-        );
-      }
-      const updatedAt = nowIso();
+    const settings = updateAdminSettings(auth.user.id, body, updatedAt => {
       const upsert = db.prepare(
         `INSERT INTO settings(key, value, updated_at) VALUES(?, ?, ?)
          ON CONFLICT(key) DO UPDATE SET
@@ -56,28 +48,20 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
         updatedAt
       );
       upsert.run("advance_days", String(body.advanceDays), updatedAt);
-      upsert.run("settings_version", String(before.version + 1), updatedAt);
-      const after = getAdminSettings();
-      addAudit(
-        auth.user.id,
-        "SETTINGS_UPDATE",
-        "settings",
-        "booking",
-        {
-          minBookingMinutes: before.minBookingMinutes,
-          maxBookingMinutes: before.maxBookingMinutes,
-          advanceDays: before.advanceDays
-        },
-        {
-          minBookingMinutes: after.minBookingMinutes,
-          maxBookingMinutes: after.maxBookingMinutes,
-          advanceDays: after.advanceDays
-        }
-      );
-      return after;
-    });
+    }, (before, after) => ({
+      action: "SETTINGS_UPDATE", entityId: "booking", before: {
+        minBookingMinutes: before.minBookingMinutes,
+        maxBookingMinutes: before.maxBookingMinutes,
+        advanceDays: before.advanceDays
+      }, after: {
+        minBookingMinutes: after.minBookingMinutes,
+        maxBookingMinutes: after.maxBookingMinutes,
+        advanceDays: after.advanceDays
+      }
+    }));
     return { message: "占用规则已更新", settings };
   });
+
   app.patch(
     "/api/v1/admin/settings/email-domains",
     async (request, reply) => {
@@ -106,37 +90,13 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
           code: "EMAIL_DOMAIN_VALIDATION_FAILED"
         });
       }
-      const settings = withImmediateTransaction(() => {
-        const before = getAdminSettings();
-        if (!body.overwrite && before.version !== body.expectedVersion) {
-          throw new BusinessError(
-            "系统设置已由其他管理员更新，请刷新后重试",
-            409,
-            undefined,
-            "SETTINGS_VERSION_CONFLICT"
-          );
-        }
-        const updatedAt = nowIso();
+      const settings = updateAdminSettings(auth.user.id, body, updatedAt => {
         db.prepare(
           `UPDATE settings SET value = ?, updated_at = ?
            WHERE key = 'allowed_email_domains'`
         ).run(JSON.stringify(allowedEmailDomains), updatedAt);
         incrementRegistrationConfigRevision(updatedAt);
-        db.prepare(
-          `UPDATE settings SET value = ?, updated_at = ?
-           WHERE key = 'settings_version'`
-        ).run(String(before.version + 1), updatedAt);
-        const after = getAdminSettings();
-        addAudit(
-          auth.user.id,
-          "EMAIL_DOMAIN_ALLOWLIST_UPDATE",
-          "settings",
-          "registration_email",
-          { allowedEmailDomains: before.allowedEmailDomains },
-          { allowedEmailDomains: after.allowedEmailDomains }
-        );
-        return after;
-      });
+      }, (before, after) => ({ action: "EMAIL_DOMAIN_ALLOWLIST_UPDATE", entityId: "registration_email", before: { allowedEmailDomains: before.allowedEmailDomains }, after: { allowedEmailDomains: after.allowedEmailDomains } }));
       return {
         message: allowedEmailDomains.length
           ? "注册邮箱域名已更新"
@@ -145,6 +105,7 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
       };
     }
   );
+
   app.patch(
     "/api/v1/admin/settings/registration-email",
     async (request, reply) => {
@@ -157,17 +118,7 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
           overwrite: z.boolean().optional().default(false)
         })
         .parse(request.body);
-      const settings = withImmediateTransaction(() => {
-        const before = getAdminSettings();
-        if (!body.overwrite && before.version !== body.expectedVersion) {
-          throw new BusinessError(
-            "系统设置已由其他管理员更新，请刷新后重试",
-            409,
-            undefined,
-            "SETTINGS_VERSION_CONFLICT"
-          );
-        }
-        const updatedAt = nowIso();
+      const settings = updateAdminSettings(auth.user.id, body, updatedAt => {
         db.prepare(
           `INSERT INTO settings(key, value, updated_at) VALUES(?, ?, ?)
            ON CONFLICT(key) DO UPDATE SET
@@ -178,27 +129,15 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
           updatedAt
         );
         incrementRegistrationConfigRevision(updatedAt);
-        db.prepare(
-          `UPDATE settings SET value = ?, updated_at = ?
-           WHERE key = 'settings_version'`
-        ).run(String(before.version + 1), updatedAt);
-        const after = getAdminSettings();
-        addAudit(
-          auth.user.id,
-          "REGISTRATION_EMAIL_POLICY_UPDATE",
-          "settings",
-          "registration_email",
-          {
-            allowRegistrationWithoutEmail:
-              before.allowRegistrationWithoutEmail
-          },
-          {
-            allowRegistrationWithoutEmail:
-              after.allowRegistrationWithoutEmail
-          }
-        );
-        return after;
-      });
+      }, (before, after) => ({
+        action: "REGISTRATION_EMAIL_POLICY_UPDATE", entityId: "registration_email", before: {
+          allowRegistrationWithoutEmail:
+            before.allowRegistrationWithoutEmail
+        }, after: {
+          allowRegistrationWithoutEmail:
+            after.allowRegistrationWithoutEmail
+        }
+      }));
       return {
         message: body.allowRegistrationWithoutEmail
           ? "已允许注册时不填写邮箱"
@@ -207,6 +146,7 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
       };
     }
   );
+
   app.patch(
     "/api/v1/admin/settings/site-profile",
     async (request, reply) => {
@@ -250,17 +190,7 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
           }
         });
       }
-      const settings = withImmediateTransaction(() => {
-        const before = getAdminSettings();
-        if (!body.overwrite && before.version !== body.expectedVersion) {
-          throw new BusinessError(
-            "系统设置已由其他管理员更新，请刷新后重试",
-            409,
-            undefined,
-            "SETTINGS_VERSION_CONFLICT"
-          );
-        }
-        const updatedAt = nowIso();
+      const settings = updateAdminSettings(auth.user.id, body, updatedAt => {
         const upsert = db.prepare(
           `INSERT INTO settings(key, value, updated_at) VALUES(?, ?, ?)
            ON CONFLICT(key) DO UPDATE SET
@@ -278,35 +208,23 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
           body.publicSecurityFilingNumber,
           updatedAt
         );
-        upsert.run(
-          "settings_version",
-          String(before.version + 1),
-          updatedAt
-        );
-        const after = getAdminSettings();
-        addAudit(
-          auth.user.id,
-          "SITE_PROFILE_UPDATE",
-          "settings",
-          "site_profile",
-          {
-            siteOrigin: before.siteOrigin,
-            icpFilingNumber: before.icpFilingNumber,
-            publicSecurityFilingNumber:
-              before.publicSecurityFilingNumber
-          },
-          {
-            siteOrigin: after.siteOrigin,
-            icpFilingNumber: after.icpFilingNumber,
-            publicSecurityFilingNumber:
-              after.publicSecurityFilingNumber
-          }
-        );
-        return after;
-      });
+      }, (before, after) => ({
+        action: "SITE_PROFILE_UPDATE", entityId: "site_profile", before: {
+          siteOrigin: before.siteOrigin,
+          icpFilingNumber: before.icpFilingNumber,
+          publicSecurityFilingNumber:
+            before.publicSecurityFilingNumber
+        }, after: {
+          siteOrigin: after.siteOrigin,
+          icpFilingNumber: after.icpFilingNumber,
+          publicSecurityFilingNumber:
+            after.publicSecurityFilingNumber
+        }
+      }));
       return { message: "站点信息已更新", settings };
     }
   );
+
   app.patch(
     "/api/v1/admin/settings/site-origin",
     async (request, reply) => {
@@ -331,17 +249,7 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
           code: "SITE_ORIGIN_VALIDATION_FAILED"
         });
       }
-      const settings = withImmediateTransaction(() => {
-        const before = getAdminSettings();
-        if (!body.overwrite && before.version !== body.expectedVersion) {
-          throw new BusinessError(
-            "系统设置已由其他管理员更新，请刷新后重试",
-            409,
-            undefined,
-            "SETTINGS_VERSION_CONFLICT"
-          );
-        }
-        const updatedAt = nowIso();
+      const settings = updateAdminSettings(auth.user.id, body, updatedAt => {
         db.prepare(
           `INSERT INTO settings(key, value, updated_at) VALUES(
             'public_site_origin', ?, ?
@@ -350,24 +258,11 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
             value = excluded.value,
             updated_at = excluded.updated_at`
         ).run(siteOrigin, updatedAt);
-        db.prepare(
-          `UPDATE settings SET value = ?, updated_at = ?
-           WHERE key = 'settings_version'`
-        ).run(String(before.version + 1), updatedAt);
-        const after = getAdminSettings();
-        addAudit(
-          auth.user.id,
-          "SITE_ORIGIN_UPDATE",
-          "settings",
-          "site_origin",
-          { siteOrigin: before.siteOrigin },
-          { siteOrigin: after.siteOrigin }
-        );
-        return after;
-      });
+      }, (before, after) => ({ action: "SITE_ORIGIN_UPDATE", entityId: "site_origin", before: { siteOrigin: before.siteOrigin }, after: { siteOrigin: after.siteOrigin } }));
       return { message: "站点地址已更新", settings };
     }
   );
+
   app.patch(
     "/api/v1/admin/settings/icp-filing",
     async (request, reply) => {
@@ -392,17 +287,7 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
           code: "ICP_FILING_VALIDATION_FAILED"
         });
       }
-      const settings = withImmediateTransaction(() => {
-        const before = getAdminSettings();
-        if (!body.overwrite && before.version !== body.expectedVersion) {
-          throw new BusinessError(
-            "系统设置已由其他管理员更新，请刷新后重试",
-            409,
-            undefined,
-            "SETTINGS_VERSION_CONFLICT"
-          );
-        }
-        const updatedAt = nowIso();
+      const settings = updateAdminSettings(auth.user.id, body, updatedAt => {
         db.prepare(
           `INSERT INTO settings(key, value, updated_at) VALUES(
             'icp_filing_number', ?, ?
@@ -411,27 +296,14 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
             value = excluded.value,
             updated_at = excluded.updated_at`
         ).run(body.icpFilingNumber, updatedAt);
-        db.prepare(
-          `UPDATE settings SET value = ?, updated_at = ?
-           WHERE key = 'settings_version'`
-        ).run(String(before.version + 1), updatedAt);
-        const after = getAdminSettings();
-        addAudit(
-          auth.user.id,
-          "ICP_FILING_UPDATE",
-          "settings",
-          "icp_filing",
-          { icpFilingNumber: before.icpFilingNumber },
-          { icpFilingNumber: after.icpFilingNumber }
-        );
-        return after;
-      });
+      }, (before, after) => ({ action: "ICP_FILING_UPDATE", entityId: "icp_filing", before: { icpFilingNumber: before.icpFilingNumber }, after: { icpFilingNumber: after.icpFilingNumber } }));
       return {
         message: body.icpFilingNumber ? "ICP备案号已更新" : "ICP备案号已清除",
         settings
       };
     }
   );
+
   app.patch(
     "/api/v1/admin/settings/public-security-filing",
     async (request, reply) => {
@@ -453,17 +325,7 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
           code: "PUBLIC_SECURITY_FILING_VALIDATION_FAILED"
         });
       }
-      const settings = withImmediateTransaction(() => {
-        const before = getAdminSettings();
-        if (!body.overwrite && before.version !== body.expectedVersion) {
-          throw new BusinessError(
-            "系统设置已由其他管理员更新，请刷新后重试",
-            409,
-            undefined,
-            "SETTINGS_VERSION_CONFLICT"
-          );
-        }
-        const updatedAt = nowIso();
+      const settings = updateAdminSettings(auth.user.id, body, updatedAt => {
         db.prepare(
           `INSERT INTO settings(key, value, updated_at) VALUES(
             'public_security_filing_number', ?, ?
@@ -472,27 +334,15 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
             value = excluded.value,
             updated_at = excluded.updated_at`
         ).run(body.publicSecurityFilingNumber, updatedAt);
-        db.prepare(
-          `UPDATE settings SET value = ?, updated_at = ?
-           WHERE key = 'settings_version'`
-        ).run(String(before.version + 1), updatedAt);
-        const after = getAdminSettings();
-        addAudit(
-          auth.user.id,
-          "PUBLIC_SECURITY_FILING_UPDATE",
-          "settings",
-          "public_security_filing",
-          {
-            publicSecurityFilingNumber:
-              before.publicSecurityFilingNumber
-          },
-          {
-            publicSecurityFilingNumber:
-              after.publicSecurityFilingNumber
-          }
-        );
-        return after;
-      });
+      }, (before, after) => ({
+        action: "PUBLIC_SECURITY_FILING_UPDATE", entityId: "public_security_filing", before: {
+          publicSecurityFilingNumber:
+            before.publicSecurityFilingNumber
+        }, after: {
+          publicSecurityFilingNumber:
+            after.publicSecurityFilingNumber
+        }
+      }));
       return {
         message: body.publicSecurityFilingNumber
           ? "公安备案号已更新"

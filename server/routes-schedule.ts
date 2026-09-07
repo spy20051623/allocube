@@ -1,41 +1,14 @@
-import { previewAvailableSegments, replacementSelectionSchema, previewMultipleReplacement, replaceMultipleReservations } from "./scheduling.js";
+import { reservationBatchRequestSchema, assertReservationReplacementOptions } from "./reservation-request.js";
+import { previewMultipleReplacement, previewAvailableSegments, replaceMultipleReservations } from "./scheduling.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import {
-  canManageMachine,
-  getAccessibleMachineIds,
-  requireAuth,
-  requireSession
-} from "./auth.js";
-import {
-  addAudit,
-  bumpMachineAccessRevision,
-  bumpScheduleRevision,
-  db,
-  getScheduleRevision,
-  getSettings,
-  nowIso,
-  parseTags,
-  withImmediateTransaction
-} from "./db.js";
+import { requireAuth, getAccessibleMachineIds, canManageMachine, requireSession } from "./auth.js";
+import { nowIso, db, parseTags, getScheduleRevision, withImmediateTransaction, addAudit, bumpMachineAccessRevision, bumpScheduleRevision, getSettings } from "./db.js";
 import { createNotification } from "./mailer.js";
 import { removeMachineMembership } from "./machine-access.js";
-import {
-  BusinessError,
-  cancelReservation,
-  commitReservationBatch,
-  endReservationEarly,
-  assertUserCanAccessSegments,
-  previewReplacementSegments,
-  previewSegments,
-  replaceReservationBatch,
-  updateReservation
-} from "./scheduling.js";
-import {
-  machineResourceSummary,
-  mapResourceGroups
-} from "./resources.js";
+import { BusinessError, assertUserCanAccessSegments, previewReplacementSegments, previewSegments, replaceReservationBatch, commitReservationBatch, updateReservation, cancelReservation, endReservationEarly } from "./scheduling.js";
+import { machineResourceSummary, mapResourceGroups } from "./resources.js";
 import { registerMyReservationRoutes } from "./my-reservations.js";
 
 export function registerScheduleRoutes(
@@ -516,17 +489,9 @@ export function registerScheduleRoutes(
   app.post("/api/v1/reservations/preview", async (request, reply) => {
     const auth = requireAuth(request, reply);
     if (!auth) return;
-    const { segments, replaceReservationId, replaceReservations, autoAdjust } = z
-      .object({
-        segments: z.array(z.unknown()).min(1).max(100),
-        replaceReservationId: z.string().uuid().optional(),
-        replaceReservations: replacementSelectionSchema.optional(),
-        autoAdjust: z.boolean().optional().default(false)
-      })
-      .parse(request.body);
+    const { segments, replaceReservationId, replaceReservations, autoAdjust } = reservationBatchRequestSchema.parse(request.body);
     assertUserCanAccessSegments(auth.user.id, segments);
-    if (autoAdjust && replaceReservationId) throw new BusinessError("请使用批量编辑参数提交自动调整");
-    if (replaceReservationId && replaceReservations) throw new BusinessError("不能同时使用单条和批量编辑参数");
+    assertReservationReplacementOptions({ autoAdjust, replaceReservationId, replaceReservations });
     const items = replaceReservations ? previewMultipleReplacement(auth.user.id, replaceReservations, segments, autoAdjust) : replaceReservationId
         ? previewReplacementSegments(
             auth.user.id,
@@ -540,16 +505,8 @@ export function registerScheduleRoutes(
   app.post("/api/v1/reservations/batch", async (request, reply) => {
     const auth = requireAuth(request, reply);
     if (!auth) return;
-    const { segments, replaceReservationId, replaceReservations, autoAdjust } = z
-      .object({
-        segments: z.array(z.unknown()).min(1).max(100),
-        replaceReservationId: z.string().uuid().optional(),
-        replaceReservations: replacementSelectionSchema.optional(),
-        autoAdjust: z.boolean().optional().default(false)
-      })
-      .parse(request.body);
-    if (autoAdjust && replaceReservationId) throw new BusinessError("请使用批量编辑参数提交自动调整");
-    if (replaceReservationId && replaceReservations) throw new BusinessError("不能同时使用单条和批量编辑参数");
+    const { segments, replaceReservationId, replaceReservations, autoAdjust } = reservationBatchRequestSchema.parse(request.body);
+    assertReservationReplacementOptions({ autoAdjust, replaceReservationId, replaceReservations });
     const result = replaceReservations ? replaceMultipleReservations(auth.user.id, replaceReservations, segments, autoAdjust) : replaceReservationId
       ? replaceReservationBatch(
           auth.user.id,

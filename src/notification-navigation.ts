@@ -43,3 +43,7 @@ export function resolveNotificationDestination({
   const path = internalTarget(link);
   return path ? { path } : null;
 }
+
+export function notificationBadgeText(count: number) {
+  return count > 99 ? "99+" : String(count);
+}

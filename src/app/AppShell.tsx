@@ -1,3 +1,4 @@
+import { notificationBadgeText } from "../notification-navigation";
 import { tr } from "../i18n/index";
 import { LanguageSwitcher } from "../i18n/LanguageSwitcher";
 import {
@@ -210,9 +211,7 @@ export function Topbar({
   );
 }
 
-export function notificationBadgeText(count: number) {
-  return count > 99 ? "99+" : String(count);
-}
+
 
 export function PasswordBanner({
   onModify,

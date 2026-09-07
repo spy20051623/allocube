@@ -1,0 +1,3 @@
+
+
+export const TIMELINE_RESOURCE_COLUMN_WIDTH = 260;

@@ -1,0 +1,100 @@
+.calendar-layout {
+  height: calc(100vh - var(--app-header-height));
+  height: calc(100dvh - var(--app-header-height));
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.calendar-layout.composer-open {
+  grid-template-columns: minmax(760px, 1fr) 356px;
+}
+
+.calendar-main {
+  min-width: 0;
+  min-height: 0;
+  padding: 28px 26px;
+  display: flex;
+  flex-direction: column;
+}
+
+.booking-drawer {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 26px 24px 40px;
+  border-left: 1px solid var(--line);
+  background: #fbfbfc;
+}
+
+.page-header {
+  min-height: 39px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 22px;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: 29px;
+  line-height: 1.2;
+  letter-spacing: -.035em;
+  white-space: nowrap;
+}
+
+.page-header-title-group {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.page-header-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.live-state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.live-state span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #29a972;
+  box-shadow: 0 0 0 4px #e5f6ee;
+}
+
+.live-state.connecting,
+.live-state.refreshing {
+  color: #6a7485;
+}
+
+.live-state.connecting span,
+.live-state.refreshing span {
+  background: #8490a2;
+  box-shadow: 0 0 0 4px #eef0f3;
+}
+
+.live-state.disconnected {
+  color: #a45b24;
+}
+
+.live-state.disconnected span {
+  background: #d9823f;
+  box-shadow: 0 0 0 4px #fff0e3;
+}
+

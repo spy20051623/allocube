@@ -1617,9 +1617,10 @@
 
 .timeline-bar-visual.booking-bar {
   overflow: hidden;
-  border: 1px solid var(--border-accent, #c5d2f3);
-  color: var(--text-accent, #345390);
-  background: var(--surface-accent, #eaf0ff);
+  border: 1px solid var(--border-booking-own);
+  color: var(--text-booking-own);
+  background: var(--surface-booking-other);
+  box-shadow: inset 0 1px 0 var(--booking-glass-highlight), 0 2px 6px var(--shadow-color, rgb(57 94 174 / 14%));
   font-family: inherit;
   text-align: left;
   cursor: pointer;
@@ -1627,10 +1628,10 @@
 
 .timeline-bar-anchor.booking-bar:hover > .timeline-bar-visual,
 .timeline-bar-anchor.booking-bar:focus-visible > .timeline-bar-visual {
-  border-color: var(--border-focus, #9eb3e5);
-  background: var(--surface-accent-hover, #e4ecff);
+  border-color: color-mix(in srgb, var(--border-booking-own) 65%, var(--text-booking-own));
+  background: var(--surface-booking-other-hover);
   outline: none;
-  box-shadow: 0 2px 7px var(--shadow-color, rgb(49 82 151 / 14%));
+  box-shadow: inset 0 1px 0 var(--booking-glass-highlight), 0 3px 8px var(--shadow-color, rgb(57 94 174 / 18%));
 }
 
 .timeline-bar-anchor.booking-bar::after,
@@ -1650,36 +1651,34 @@
 }
 
 .timeline-bar-visual.booking-bar.mine {
-  border-color: var(--border-accent, #7296e8);
-  color: var(--text-accent, #173d9c);
-  background: var(--surface-booking-own, #d6e1ff);
-  box-shadow: 0 2px 6px var(--shadow-color, rgb(57 94 174 / 14%));
+  background: var(--surface-booking-own);
 }
 
 .timeline-bar-anchor.booking-bar.mine:hover > .timeline-bar-visual,
 .timeline-bar-anchor.booking-bar.mine:focus-visible > .timeline-bar-visual {
-  border-color: var(--border-focus, #5f85da);
-  background: var(--surface-booking-own-hover, #cfdcff);
-  box-shadow: 0 3px 8px var(--shadow-color, rgb(57 94 174 / 18%));
+  background: var(--surface-booking-own-hover);
 }
 
 .timeline-bar-visual.booking-bar.machine-scope {
-  border-color: var(--border-purple, #a99bdc);
-  color: var(--text-purple, #4c3a88);
-  background: var(--surface-purple, #f0edff);
+  border-color: var(--border-machine-own);
+  color: var(--text-machine-own);
+  background: var(--surface-machine-other);
+  box-shadow: inset 0 1px 0 var(--booking-glass-highlight), 0 2px 6px var(--shadow-color, rgb(91 65 169 / 14%));
+}
+
+.timeline-bar-anchor.booking-bar.machine-scope:hover > .timeline-bar-visual,
+.timeline-bar-anchor.booking-bar.machine-scope:focus-visible > .timeline-bar-visual {
+  border-color: color-mix(in srgb, var(--border-machine-own) 65%, var(--text-machine-own));
+  background: var(--surface-machine-other-hover);
 }
 
 .timeline-bar-visual.booking-bar.machine-scope.mine {
-  border-color: var(--border-purple, #806bc8);
-  color: var(--text-purple, #3f287f);
-  background: var(--surface-machine-own, #ded7fa);
-  box-shadow: 0 2px 6px var(--shadow-color, rgb(91 65 169 / 14%));
+  background: var(--surface-machine-own);
 }
 
 .timeline-bar-anchor.booking-bar.machine-scope.mine:hover > .timeline-bar-visual,
 .timeline-bar-anchor.booking-bar.machine-scope.mine:focus-visible > .timeline-bar-visual {
-  border-color: var(--border-focus, #725db9);
-  background: var(--surface-machine-own-hover, #d7cff6);
+  background: var(--surface-machine-own-hover);
 }
 
 .timeline-bar-visual.booking-bar.editing-history {
@@ -1689,10 +1688,13 @@
   cursor: default;
 }
 
-.booking-bar small,
 .draft-timeline-bar small {
   color: inherit;
   opacity: var(--event-detail-opacity, .72);
+}
+
+.booking-bar small {
+  color: inherit;
 }
 
 .booking-bar-copy {
@@ -1743,8 +1745,8 @@
   background: var(--marker-accent, #7893cf);
 }
 
-.booking-bar.mine .booking-dot {
-  background: var(--marker-accent-strong, #3564ca);
+.booking-bar .booking-dot {
+  background: currentColor;
   box-shadow: none;
 }
 
@@ -1755,10 +1757,14 @@
 }
 
 .timeline-bar-visual.unavailability-bar {
+  --unavailability-tint: var(--calendar-crystal-yellow);
+  --unavailability-base: var(--surface-calendar-maintenance);
+  --unavailability-fill: var(--unavailability-base);
+  --unavailability-stripe: color-mix(in srgb, var(--unavailability-fill) 80%, var(--booking-glass-base));
   border: 1px solid var(--border-warning, #e0a36e);
-  color: var(--text-warning, #9b541d);
-  background: repeating-linear-gradient(-45deg, var(--surface-warning, #fff0e2), var(--surface-warning, #fff0e2) 6px, var(--surface-warning-hover, #fff7ef) 6px, var(--surface-warning-hover, #fff7ef) 12px);
-  box-shadow: 0 2px 6px var(--shadow-color, rgb(155 84 29 / 10%));
+  color: var(--text-warning, #924e1c);
+  background: repeating-linear-gradient(-45deg, var(--unavailability-fill), var(--unavailability-fill) 6px, var(--unavailability-stripe) 6px, var(--unavailability-stripe) 12px);
+  box-shadow: inset 0 1px 0 var(--booking-glass-highlight), 0 2px 6px var(--shadow-color, rgb(155 84 29 / 10%));
   font-family: inherit;
   text-align: left;
   cursor: pointer;
@@ -1766,10 +1772,10 @@
 
 .timeline-bar-anchor.unavailability-bar:hover > .timeline-bar-visual,
 .timeline-bar-anchor.unavailability-bar:focus-visible > .timeline-bar-visual {
-  border-color: var(--border-focus, #cf8548);
-  background: repeating-linear-gradient(-45deg, var(--surface-warning-hover, #ffead7), var(--surface-warning-hover, #ffead7) 6px, var(--surface-warning-stripe-hover, #fff4e8) 6px, var(--surface-warning-stripe-hover, #fff4e8) 12px);
+  --unavailability-fill: color-mix(in srgb, var(--unavailability-base) var(--calendar-crystal-hover-base-weight), var(--unavailability-tint));
+  border-color: color-mix(in srgb, var(--border-warning, #e0a36e) 65%, var(--text-warning, #9b541d));
   outline: none;
-  box-shadow: 0 2px 8px var(--shadow-color, rgb(155 84 29 / 18%));
+  box-shadow: inset 0 1px 0 var(--booking-glass-highlight), 0 2px 8px var(--shadow-color, rgb(155 84 29 / 18%));
 }
 
 .unavailability-bar .unavailability-icon {
@@ -1778,33 +1784,26 @@
 
 .unavailability-bar small {
   color: inherit;
-  opacity: var(--event-detail-opacity, .72);
 }
 
 .timeline-bar-visual.unavailability-bar.disable-history-bar {
+  --unavailability-tint: var(--calendar-crystal-red);
+  --unavailability-base: var(--surface-calendar-disabled);
   border-color: var(--border-danger, #d5656a);
-  color: var(--text-danger, #9f3038);
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--surface-danger, #ffe5e7),
-    var(--surface-danger, #ffe5e7) 6px,
-    var(--surface-danger-hover, #fff1f2) 6px,
-    var(--surface-danger-hover, #fff1f2) 12px
-  );
-  box-shadow: 0 2px 6px var(--shadow-color, rgb(159 48 56 / 12%));
+  color: var(--text-danger, #922a35);
+  box-shadow: inset 0 1px 0 var(--booking-glass-highlight), 0 2px 6px var(--shadow-color, rgb(159 48 56 / 12%));
 }
 
 .timeline-bar-anchor.unavailability-bar.disable-history-bar:hover > .timeline-bar-visual,
 .timeline-bar-anchor.unavailability-bar.disable-history-bar:focus-visible > .timeline-bar-visual {
-  border-color: var(--border-focus, #c34850);
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--surface-danger-hover, #ffdade),
-    var(--surface-danger-hover, #ffdade) 6px,
-    var(--surface-danger-stripe-hover, #ffebed) 6px,
-    var(--surface-danger-stripe-hover, #ffebed) 12px
-  );
-  box-shadow: 0 2px 8px var(--shadow-color, rgb(159 48 56 / 20%));
+  border-color: color-mix(in srgb, var(--border-danger, #d5656a) 65%, var(--text-danger, #922a35));
+  box-shadow: inset 0 1px 0 var(--booking-glass-highlight), 0 2px 8px var(--shadow-color, rgb(159 48 56 / 20%));
+}
+
+:root:not([data-theme="dark"]) :is(.timeline-bar-anchor.booking-bar.mine, .timeline-bar-anchor.unavailability-bar):is(:hover, :focus-visible) > .timeline-bar-visual {
+  box-shadow:
+    inset 0 1px 0 var(--booking-glass-highlight),
+    0 3px 8px color-mix(in srgb, currentColor 18%, transparent);
 }
 
 .timeline-bar-visual.draft-timeline-bar {
@@ -2237,12 +2236,31 @@
   background: var(--marker-accent, #5579d8);
 }
 
-.unavailability-popover::before {
-  background: var(--marker-warning, #d78644);
+.booking-detail-popover {
+  --calendar-popover-border: var(--border-booking-own);
 }
 
-.unavailability-popover.disable-history-popover::before {
-  background: var(--marker-danger, #c84f57);
+.booking-detail-popover.machine-scope {
+  --calendar-popover-border: var(--border-machine-own);
+}
+
+.unavailability-popover {
+  --calendar-popover-border: var(--border-warning, #e0a36e);
+}
+
+.unavailability-popover.disable-history-popover {
+  --calendar-popover-border: var(--border-danger, #d5656a);
+}
+
+.booking-detail-popover,
+.unavailability-popover {
+  border-color: var(--calendar-popover-border);
+  border-top-width: 0;
+}
+
+.booking-detail-popover::before,
+.unavailability-popover::before {
+  background: var(--calendar-popover-border);
 }
 
 .unavailability-source-list {

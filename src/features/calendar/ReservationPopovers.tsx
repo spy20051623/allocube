@@ -167,6 +167,7 @@ export function CalendarReservationPopover({
     <CalendarAnchoredPopover
       anchor={detail.anchor}
       ariaLabel={tr("占用详情")}
+      className={`booking-detail-popover${item.scope === "MACHINE" ? " machine-scope" : ""}`}
       heading={tr("占用详情")}
       badge={
         <span className={`state-chip ${active ? "active" : ""}`}>

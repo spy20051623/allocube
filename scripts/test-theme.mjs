@@ -43,7 +43,17 @@ async function screenshot(page, name) {
   screenshots.push(name);
   if (name.endsWith("dark")) {
     const findings = await page.evaluate(() => {
-      const rgba = value => (value.match(/[\d.]+/g) || []).map(Number);
+      // Normalize modern CSS colors (including color-mix's color(srgb ...)) to byte RGB.
+      const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true }), cache = new Map();
+      const rgba = value => {
+        if (!cache.has(value)) {
+          ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = value; ctx.fillRect(0, 0, 1, 1);
+          const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+          cache.set(value, [r, g, b, a / 255]);
+        }
+        return [...cache.get(value)];
+      };
       const over = (fg, bg) => fg.slice(0, 3).map((v, i) => v * (fg[3] ?? 1) + bg[i] * (1 - (fg[3] ?? 1)));
       const luminance = rgb => rgb.slice(0, 3).map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
       const findings = [];

@@ -1,7 +1,39 @@
-/* Light mode uses each component's existing fallback; dark roles are shared. */
-:root { color-scheme: light; }
+/* Shared roles; unchanged light colors remain in component fallbacks. */
+:root {
+  color-scheme: light;
+  --booking-glass-base: #ffffff80;
+  --booking-glass-base-weight: 25%;
+  --calendar-crystal-hover-base-weight: 40%;
+  --booking-glass-blue: #2585ff80;
+  --booking-glass-purple: #955dff80;
+  --calendar-crystal-yellow: #ffb92880;
+  --calendar-crystal-red: #ff486880;
+  --surface-calendar-maintenance: color-mix(in srgb, var(--booking-glass-base) var(--booking-glass-base-weight), var(--calendar-crystal-yellow));
+  --surface-calendar-disabled: color-mix(in srgb, var(--booking-glass-base) var(--booking-glass-base-weight), var(--calendar-crystal-red));
+  --surface-booking-own: color-mix(in srgb, var(--booking-glass-base) var(--booking-glass-base-weight), var(--booking-glass-blue));
+  --surface-booking-own-hover: color-mix(in srgb, var(--surface-booking-own) var(--calendar-crystal-hover-base-weight), var(--booking-glass-blue));
+  --text-booking-own: #173d9c;
+  --border-booking-own: #7296e8;
+  /* Peers retain the lighter glass tint; own bookings have more gemstone color. */
+  --surface-booking-other: color-mix(in srgb, var(--booking-glass-base) 65%, var(--booking-glass-blue));
+  --surface-booking-other-hover: color-mix(in srgb, var(--surface-booking-other) 80%, var(--booking-glass-blue));
+  --surface-machine-own: color-mix(in srgb, var(--booking-glass-base) var(--booking-glass-base-weight), var(--booking-glass-purple));
+  --surface-machine-own-hover: color-mix(in srgb, var(--surface-machine-own) var(--calendar-crystal-hover-base-weight), var(--booking-glass-purple));
+  --text-machine-own: #3f287f;
+  --border-machine-own: #9580d0;
+  --surface-machine-other: color-mix(in srgb, var(--booking-glass-base) 65%, var(--booking-glass-purple));
+  --surface-machine-other-hover: color-mix(in srgb, var(--surface-machine-other) 80%, var(--booking-glass-purple));
+  --booking-glass-highlight: #ffffff99;
+}
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --booking-glass-base: #00000080;
+  --booking-glass-base-weight: 80%;
+  --calendar-crystal-hover-base-weight: 80%;
+  --surface-booking-other: #354f73c7;
+  --surface-booking-other-hover: #3d5b82d1;
+  --surface-machine-other: #53426fc7;
+  --surface-machine-other-hover: #604d7fd1;
   --ink: #e5e7eb;
   --muted: #a1a8b5;
   --line: #3b424f;
@@ -81,10 +113,14 @@
   --marker-danger: #ff899b;
   --marker-danger-soft: #ffc0cb;
   --marker-info: #98dce7;
-  --surface-booking-own: #2b426a;
-  --surface-booking-own-hover: #354f7c;
-  --surface-machine-own: #493c68;
-  --surface-machine-own-hover: #534573;
+
+  --text-booking-own: #bbd4ff;
+  --border-booking-own: #769dde;
+
+  --text-machine-own: #dfcfff;
+  --border-machine-own: #a38bcf;
+
+  --booking-glass-highlight: #c9dfff26;
   --event-detail-opacity: 1;
   --readable-detail-opacity: 1;
   --shadow-color: #0005;

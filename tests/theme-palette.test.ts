@@ -20,16 +20,14 @@ describe("深色主题的语义配色对比度", () => {
       for (const surface of ["surface-page", "surface-panel", "surface-raised", "surface-hover", "surface-input", "surface-disabled"])
         expect(contrast(text, surface), `${text} on ${surface}`).toBeGreaterThanOrEqual(4.5);
   });
-  it("状态文字、预约和填充按钮达到 4.5:1", () => {
+  it("状态文字和填充按钮达到 4.5:1", () => {
     for (const tone of ["accent", "success", "warning", "danger", "purple", "info"]) {
       const text = tone === "accent" ? "text-accent" : `text-${tone}`;
       for (const variant of ["", "-hover"])
         expect(contrast(text, `surface-${tone}${variant}`), tone + variant).toBeGreaterThanOrEqual(4.5);
       expect(contrast("text-on-accent", `fill-${tone}`), `fill-${tone}`).toBeGreaterThanOrEqual(4.5);
     }
-    for (const [text, surface] of [["text-accent", "surface-booking-own"], ["text-accent", "surface-booking-own-hover"],
-      ["text-purple", "surface-machine-own"], ["text-purple", "surface-machine-own-hover"],
-      ["text-warning", "surface-warning-stripe-hover"], ["text-danger", "surface-danger-stripe-hover"]])
+    for (const [text, surface] of [["text-warning", "surface-warning-stripe-hover"], ["text-danger", "surface-danger-stripe-hover"]])
       expect(contrast(text, surface), `${text} on ${surface}`).toBeGreaterThanOrEqual(4.5);
   });
   it("控件边界、焦点环和日历状态边界达到 3:1", () => {

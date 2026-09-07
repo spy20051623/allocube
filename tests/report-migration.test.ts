@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { afterAll, expect, it } from "vitest";
-import { FINAL_SCHEMA_SQL } from "../server/schema";
+import { FINAL_SCHEMA_SQL, FINAL_SCHEMA_VERSION } from "../server/schema";
 import { REPORT_SCHEMA_SQL } from "../server/report-schema";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-report-migration-"));
@@ -18,7 +18,7 @@ it("版本 19 原地升级保留旧数据，新增统计表可随数据库备份
   legacy.prepare("INSERT INTO schema_migrations VALUES(19,?)").run(new Date().toISOString());
   legacy.prepare("INSERT INTO app_meta VALUES('retained','original')").run(); legacy.close();
   database = await import("../server/db"); await database.initializeDatabase();
-  expect(database.db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 20 });
+  expect(database.db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: FINAL_SCHEMA_VERSION });
   expect(database.db.prepare("SELECT value FROM app_meta WHERE key='retained'").get()).toEqual({ value: "original" });
   await database.initializeDatabase();
   expect(database.db.prepare("SELECT COUNT(*) AS count FROM schema_migrations WHERE version=20").get()).toEqual({ count: 1 });

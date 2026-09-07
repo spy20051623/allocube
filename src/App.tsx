@@ -1,3 +1,4 @@
+import { AuditPanel } from "./AuditPanel";
 import { canSyncDraft, claimEdit, hasUncertainEdit, markEditUncertain, EditCancelled } from "./edit-conflict";
 import { useEditConflict } from "./useEditConflict";
 import { useRealtimeRefresh } from "./useRealtimeRefresh";
@@ -284,7 +285,6 @@ import type {
   UnavailabilityWindow
 } from "./shared/types";
 import {
-  auditActionLabel,
   userStatusLabel
 } from "./ui-copy";
 
@@ -10489,7 +10489,7 @@ function AdminPage({
   ];
 
   return (
-    <div className={`admin-shell${visibleTab === "feedback" ? " feedback-admin-shell" : ""}${visibleTab === "report" ? " report-admin-shell" : ""}`}>
+    <div className={`admin-shell${visibleTab === "feedback" ? " feedback-admin-shell" : ""}${visibleTab === "report" ? " report-admin-shell" : ""}${visibleTab === "audit" ? " audit-admin-shell" : ""}`}>
       <aside className="admin-sidebar">
         <div>
           <h2>{tr("管理控制台")}</h2>
@@ -10624,7 +10624,7 @@ function AdminPage({
           />
         )}
         {visibleTab === "settings" && <SettingsPanel notify={notify} />}
-        {visibleTab === "audit" && <AuditPanel notify={notify} />}
+        {visibleTab === "audit" && <AuditPanel />}
       </section>
       {newMachineOpen && (
         <MachineFormModal
@@ -15531,32 +15531,6 @@ function SettingsPanel({
         )}
       </section>
       </fieldset>}
-    </div>
-  );
-}
-
-function AuditPanel({
-  notify
-}: {
-  notify: (kind: "success" | "error", message: string) => void;
-}) {
-  const [logs, setLogs] = useState<any[]>([]);
-  useEffect(() => {
-    api<{ logs: any[] }>("/admin/audit").then((result) => setLogs(result.logs)).catch((error) => notify("error", error.message));
-  }, [notify]);
-  return (
-    <div className="audit-management-page">
-      <PageHeader title={tr("审计记录")} />
-      <div className="card audit-list">
-        {logs.map((log) => (
-          <div className="audit-row" key={log.id}>
-            <span className="audit-dot" />
-            <div><strong>{auditActionLabel(log.action)}</strong><p>{log.actorName}{log.apiTokenName ? ` · API：${log.apiTokenName}` : ""} · {log.entityName ?? log.entityType} · {log.entityId.slice(0, 8)}</p></div>
-            <time>{formatChina(log.createdAt, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}</time>
-          </div>
-        ))}
-        {!logs.length && <div className="mini-empty">{tr("暂无审计记录")}</div>}
-      </div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { registerAuditRoutes } from "./audit-routes.js";
 import { checkEditVersion, overwriteRequested } from "./edit-conflict.js";
 import { registerReportRoutes } from "./report-routes.js";
 import { randomUUID } from "node:crypto";
@@ -3695,106 +3696,7 @@ export function registerAdminRoutes(
 
   registerReportRoutes(app);
 
-  app.get("/api/v1/admin/audit", async (request, reply) => {
-    const auth = requireSystemAdmin(request, reply);
-    if (!auth) return;
-    const rows = db
-      .prepare(
-        `SELECT a.*, u.display_name AS actor_name,
-          api_token.name AS token_name,
-          CASE
-            WHEN a.entity_type = 'user' THEN COALESCE(
-              (SELECT CASE WHEN dut.user_id IS NOT NULL
-                THEN '用户已删除' ELSE target.display_name END
-               FROM users target
-               LEFT JOIN deleted_user_tombstones dut ON dut.user_id = target.id
-               WHERE target.id = a.entity_id),
-              '用户已删除'
-            )
-            WHEN a.entity_type = 'machine' THEN COALESCE(
-              (SELECT CASE WHEN dmt.machine_id IS NOT NULL
-                THEN '机器已删除' ELSE target.name END
-               FROM machines target
-               LEFT JOIN deleted_machine_tombstones dmt ON dmt.machine_id = target.id
-               WHERE target.id = a.entity_id),
-              '机器已删除'
-            )
-            WHEN a.entity_type = 'resource_group' THEN COALESCE(
-              (SELECT CASE WHEN drgt.resource_group_id IS NOT NULL
-                THEN '资源组已删除' ELSE target.name END
-               FROM resource_groups target
-               LEFT JOIN deleted_resource_group_tombstones drgt
-                 ON drgt.resource_group_id = target.id
-               WHERE target.id = a.entity_id),
-              '资源组已删除'
-            )
-            WHEN a.entity_type = 'resource_pool' THEN COALESCE(
-              (SELECT CASE WHEN drpt.resource_pool_id IS NOT NULL
-                THEN '资源项已删除' ELSE target.name END
-               FROM resource_pools target
-               LEFT JOIN deleted_resource_pool_tombstones drpt
-                 ON drpt.resource_pool_id = target.id
-               WHERE target.id = a.entity_id),
-              '资源项已删除'
-            )
-            WHEN a.entity_type = 'announcement' THEN COALESCE(
-              (SELECT target.title FROM announcements target
-               WHERE target.id = a.entity_id),
-              '系统公告'
-            )
-            ELSE NULL
-          END AS entity_name,
-          CASE
-            WHEN a.entity_type = 'user' THEN EXISTS(
-              SELECT 1 FROM deleted_user_tombstones dut
-              WHERE dut.user_id = a.entity_id
-            )
-            WHEN a.entity_type = 'machine' THEN EXISTS(
-              SELECT 1 FROM deleted_machine_tombstones dmt
-              WHERE dmt.machine_id = a.entity_id
-            )
-            WHEN a.entity_type = 'resource_group' THEN EXISTS(
-              SELECT 1 FROM deleted_resource_group_tombstones drgt
-              WHERE drgt.resource_group_id = a.entity_id
-            )
-            WHEN a.entity_type = 'resource_pool' THEN EXISTS(
-              SELECT 1 FROM deleted_resource_pool_tombstones drpt
-              WHERE drpt.resource_pool_id = a.entity_id
-            )
-            ELSE 0
-          END AS entity_deleted
-         FROM audit_logs a
-         LEFT JOIN users u ON u.id = a.actor_user_id
-         LEFT JOIN api_tokens api_token ON api_token.id = a.actor_api_token_id
-         ORDER BY a.created_at DESC LIMIT 300`
-      )
-      .all() as Array<Record<string, unknown>>;
-    return {
-      logs: rows.map((row) => {
-        const entityDeleted = Boolean(row.entity_deleted);
-        return {
-          id: row.id,
-          actorName: row.actor_name ?? "系统",
-          apiTokenId: row.actor_api_token_id,
-          apiTokenName: row.token_name,
-          apiOperationId: row.api_operation_id,
-          entityName: row.entity_name,
-          action: row.action,
-          entityType: row.entity_type,
-          entityId: row.entity_id,
-          before:
-            !entityDeleted && row.before_json
-              ? JSON.parse(String(row.before_json))
-              : null,
-          after:
-            !entityDeleted && row.after_json
-              ? JSON.parse(String(row.after_json))
-              : null,
-          createdAt: row.created_at
-        };
-      })
-    };
-  });
+  registerAuditRoutes(app);
 }
 
 function requireMachineManager(request: FastifyRequest, reply: FastifyReply) {

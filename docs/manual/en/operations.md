@@ -176,3 +176,7 @@ This command should only be executed locally on the server. After recovery, log 
 - Do not log passwords, `Authorization` headers, confirmation tokens, or request bodies.
 - Regularly monitor for 401, 403, 409, 429, 5xx errors, response latency, email delivery failures, and backup results.
 - Personal access tokens are valid indefinitely by default; establish a regular review and revocation process.
+
+## Audit queries
+
+Schema version 21 adds audit query indexes without rewriting historical records or changing audit writers. Upgrades from version 20 preserve existing data. Back up the database before upgrading; a downgrade must restore a compatible pre-upgrade backup. Audit queries remain restricted to system administrators. The internal list, filter-options, and detail endpoints are under `/api/v1/admin/audit`; the official API is unchanged. Lists return safe summaries and details are loaded on demand. No retention or export policy is added. After building, run `npm run test:audit-http` for isolated HTTP, permission, bilingual layout, and network-failure checks; use the Playwright configuration described above.

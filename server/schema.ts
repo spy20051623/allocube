@@ -1,6 +1,7 @@
+import { AUDIT_INDEX_SQL } from "./audit-schema.js";
 import { REPORT_SCHEMA_SQL } from "./report-schema.js";
 
-export const FINAL_SCHEMA_VERSION = 20;
+export const FINAL_SCHEMA_VERSION = 21;
 
 export const FINAL_SCHEMA_SQL = `
   ${REPORT_SCHEMA_SQL}
@@ -636,6 +637,7 @@ export const FINAL_SCHEMA_SQL = `
     created_at TEXT NOT NULL
   );
   CREATE INDEX audit_created_idx ON audit_logs(created_at DESC);
+  ${AUDIT_INDEX_SQL}
 
   CREATE TABLE app_meta (
     key TEXT PRIMARY KEY,

@@ -18,7 +18,8 @@
     "test:calendar-adjustment": "node scripts/test-calendar-adjustment.mjs",
     "test:edit-conflicts": "node scripts/test-edit-conflicts.mjs",
     "test:docs-loading": "node scripts/test-docs-loading.mjs",
-    "test:browser-cache": "node scripts/test-browser-cache.mjs"
+    "test:browser-cache": "node scripts/test-browser-cache.mjs",
+    "test:audit-http": "node scripts/test-audit-http.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

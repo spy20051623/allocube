@@ -56,6 +56,13 @@ export function reservationStatusClass(
 export function auditActionLabel(action: string) {
   return (
     {
+      PASSWORD_RESET_LINK_CREATE: tr("创建密码重置链接"),
+      RESOURCE_POOL_CREATE: tr("创建资源项"),
+      RESOURCE_POOL_UPDATE: tr("修改资源项"),
+      EMAIL_PREFERENCES_UPDATE: tr("修改邮件通知偏好"),
+      PASSWORD_CHANGE: tr("修改密码"),
+      REGISTRATION_PROFILE_EDIT: tr("修改注册资料"),
+      PASSWORD_RESET: tr("重置密码"),
       REPORT_REBUILD_REQUEST: tr("发起全部重新统计"),
       REPORT_REBUILD_SUCCEEDED: tr("全部重新统计完成"),
       REPORT_REBUILD_FAILED: tr("全部重新统计失败"),
@@ -99,6 +106,14 @@ export function auditActionLabel(action: string) {
       RESOURCE_DISABLE_WINDOW_END: tr("结束停用记录"),
       RESERVATION_ADJUST_UNAVAILABILITY: tr("因维护调整占用"),
       RESERVATION_SPLIT_UNAVAILABILITY: tr("因维护拆分占用"),
+      RESERVATION_REPLACE: tr("替换资源占用"),
+      FEEDBACK_CREATE: tr("提交反馈"),
+      FEEDBACK_UPDATE: tr("修改反馈"),
+      FEEDBACK_WITHDRAW: tr("撤回反馈"),
+      FEEDBACK_ADMIN_COMMENT: tr("管理员回复反馈"),
+      FEEDBACK_USER_COMMENT: tr("用户回复反馈"),
+      FEEDBACK_STATUS_CHANGE: tr("更改反馈状态"),
+      FEEDBACK_LEVEL_CHANGE: tr("更改反馈级别"),
       RESERVATION_CREATE: tr("登记资源占用"),
       RESERVATION_UPDATE: tr("修改占用时间"),
       RESERVATION_CANCEL: tr("取消资源占用"),
@@ -124,5 +139,5 @@ export function auditActionLabel(action: string) {
       ANNOUNCEMENT_REACTIVATE: tr("重新启用系统公告"),
       ANNOUNCEMENT_WITHDRAW: tr("撤下系统公告")
     } as Record<string, string>
-  )[action] ?? tr("其他系统操作");
+  )[action] ?? action;
 }

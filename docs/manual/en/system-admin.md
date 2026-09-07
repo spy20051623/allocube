@@ -102,4 +102,10 @@ Routine reservation changes do not revise settled figures. A system administrato
 
 ## Audit logs
 
-Audit logs preserve key management and reservation operations. Official API operations will display the corresponding personal access token and the source of the preflight operation; passwords, token plaintexts, and SMTP ciphertexts are not included in audit content.
+Only system administrators can access audit logs. Filter by operation date, actor, action, and source, then select **Query** to apply the filters. **Reset** clears the filters and runs a new query. Dates use the current timezone mode and include both boundary dates; they refer to when the operation occurred.
+
+Records appear newest first, with 50 records per page and access to all retained history. Pagination keeps the same record boundary, including when returning to the first page. Run a new query to include newly recorded operations. The page does not poll automatically. Failed requests retain the displayed records and offer Retry.
+
+Select a record to open read-only details with complete identifiers, recorded changes, reasons, and related identifiers. Reservation objects show the machine, resource group or whole-machine scope, and intervals present in the historical payload when available. Names come from current profiles; missing historical values are never filled using current business values. Batch operations remain separate records.
+
+The **Personal API** source is identified by an existing token or API operation identifier. Details show the available token name and operation identifier. Other sources are labeled **Other**, without assuming that old records originated from the website. Passwords, plaintext tokens, SMTP ciphertext, and management-note contents are not exposed by the audit page. Deleted users and resources remain anonymized, and related details may be hidden. Missing or unreadable historical content does not prevent other records from loading.

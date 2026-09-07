@@ -1210,9 +1210,7 @@ describe("机器使用权与管理员专用信息", () => {
           log.action === "MACHINE_DELETE" && log.entityId === machineId
       )
     ).toMatchObject({
-      entityName: "机器已删除",
-      before: null,
-      after: null
+      entityName: "机器已删除"
     });
     expect(
       dbModule.db

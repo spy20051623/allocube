@@ -40,7 +40,7 @@ describe("角色化界面文案", () => {
       "撤销刚开始的占用"
     );
     expect(userStatusLabel("UNKNOWN")).toBe("状态未知");
-    expect(auditActionLabel("UNKNOWN")).toBe("其他系统操作");
+    expect(auditActionLabel("UNKNOWN")).toBe("UNKNOWN");
   });
 
   it("占用状态样式只依赖稳定状态和值", () => {

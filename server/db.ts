@@ -1,3 +1,4 @@
+import { AUDIT_INDEX_SQL } from "./audit-schema.js";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -589,6 +590,13 @@ export async function initializeDatabase() {
       db.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES(20, ?)").run(nowIso());
     }).exclusive();
     schemaVersion = { version: 20 };
+  }
+  if (schemaVersion.version === 20 && FINAL_SCHEMA_VERSION >= 21) {
+    db.transaction(() => {
+      db.exec(AUDIT_INDEX_SQL);
+      db.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES(21, ?)").run(nowIso());
+    }).exclusive();
+    schemaVersion = { version: 21 };
   }
   if (schemaVersion.version !== FINAL_SCHEMA_VERSION) {
     throw new Error(

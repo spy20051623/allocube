@@ -59,7 +59,7 @@ export async function startRealtimeFixture() {
       const response=await fetch(origin+"/api/v1"+url,{method,headers:{origin,cookie:accounts[name].cookie,"x-csrf-token":accounts[name].csrf,...(body===undefined?{}:{"content-type":"application/json"})},...(body===undefined?{}:{body:JSON.stringify(body)})});
       return {status:response.status,body:await response.json()};
     };
-    return {origin,ids,accounts,password,request,close,logs:()=>output};
+    return {origin,ids,accounts,password,request,close,databasePath:env.DATABASE_PATH,logs:()=>output};
   } catch(error) { await close(); throw error; }
 }
 

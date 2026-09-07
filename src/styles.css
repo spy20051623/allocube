@@ -7503,35 +7503,6 @@ textarea::placeholder {
   white-space: nowrap;
 }
 
-.audit-list {
-  overflow: hidden;
-}
-
-.audit-row {
-  min-height: 62px;
-  padding: 11px 16px;
-  display: grid;
-  grid-template-columns: 12px 1fr auto;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid var(--line);
-}
-
-.audit-row:last-child { border-bottom: 0; }
-
-.audit-dot {
-  width: 8px;
-  height: 8px;
-  border: 2px solid #8fa9e8;
-  border-radius: 50%;
-  background: white;
-}
-
-.audit-row div { display: flex; flex-direction: column; gap: 3px; }
-.audit-row strong { font-size: 11px; }
-.audit-row p { margin: 0; color: var(--muted); font-size: 9px; }
-.audit-row time { color: var(--muted); font-size: 9px; }
-
 .mini-empty {
   padding: 30px 10px;
   color: var(--muted);

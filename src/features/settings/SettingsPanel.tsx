@@ -4,7 +4,7 @@ import { RefreshCw, Clock3, Globe2, Mail, CircleAlert, ShieldCheck, X, Settings 
 import { formatChina } from "../../date";
 import { SectionHeader } from "../../components/SectionHeader";
 import { Field, ChoiceField } from "../../components/forms";
-import { ContextNotice } from "../../components/feedback";
+import { BusyButtonContent, ContextNotice } from "../../components/feedback";
 import { PasswordField } from "../../components/PasswordFields";
 import { useSettingsController } from "./useSettingsController";
 
@@ -487,13 +487,7 @@ export function SettingsPanel({
                         aria-label={smtpDirty ? tr("发送测试，请先保存当前修改") : tr("发送测试")}
                         onClick={testSmtp}
                       >
-                        {testingSmtp ? (
-                          <span className="async-button-spinner" aria-hidden="true">
-                            <RefreshCw size={15} className="spin" />
-                          </span>
-                        ) : (
-                          <span>{tr("发送测试")}</span>
-                        )}
+                        <BusyButtonContent busy={testingSmtp}>{tr("发送测试")}</BusyButtonContent>
                       </button>
                     </div>
                   </div>
@@ -519,15 +513,10 @@ export function SettingsPanel({
                       className="primary-button async-button smtp-save-button"
                       disabled={settingsUncertain || savingSmtp}
                       aria-busy={savingSmtp}
+                      aria-label={tr("保存邮件配置")}
                       onClick={saveSmtp}
                     >
-                      {savingSmtp ? (
-                        <span className="async-button-spinner" aria-hidden="true">
-                          <RefreshCw size={15} className="spin" />
-                        </span>
-                      ) : (
-                        <span>{tr("保存邮件配置")}</span>
-                      )}
+                      <BusyButtonContent busy={savingSmtp}>{tr("保存邮件配置")}</BusyButtonContent>
                     </button>
                   </div>
                 </div>

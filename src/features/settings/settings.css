@@ -569,13 +569,6 @@
   position: relative;
 }
 
-.async-button-spinner {
-  width: 15px;
-  height: 15px;
-  display: grid;
-  place-items: center;
-}
-
 .smtp-test-button {
   width: 100px;
 }

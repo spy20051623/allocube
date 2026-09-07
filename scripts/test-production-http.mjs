@@ -3,6 +3,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import assert from "node:assert/strict";
 
 const TEST_PASSWORD = "LocalProduction123!";
 
@@ -79,6 +80,21 @@ async function main() {
 
     const page = await fetch(`${origin}/login`);
     const html = await page.text();
+    assert.equal(page.headers.get("cache-control"), "no-cache");
+    assert(page.headers.get("etag"));
+    // Match browser revalidation; Node fetch otherwise adds a cache-bypassing no-cache header.
+    const unchangedPage = await fetch(`${origin}/login`, { headers: { "if-none-match": page.headers.get("etag"), "cache-control": "max-age=0" } });
+    assert.equal(unchangedPage.status, 304);
+    assert.equal(await unchangedPage.text(), "");
+    for (const asset of new Set(html.match(/\/assets\/[^"\s]+\.(?:js|css)/g))) {
+      const response = await fetch(origin + asset);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable");
+      await response.arrayBuffer();
+    }
+    const missingAsset = await fetch(`${origin}/assets/missing-abcdefgh.js`);
+    assert.equal(missingAsset.status, 404);
+    assert.equal(missingAsset.headers.get("cache-control"), "no-store");
     if (page.status !== 200 || !html.includes('<div id="root"></div>')) {
       throw new Error(`登录页检查失败：HTTP ${page.status}`);
     }
@@ -130,6 +146,7 @@ async function main() {
     const session = await fetch(`${origin}/api/v1/auth/me`, {
       headers: { cookie }
     });
+    assert.equal(session.headers.get("cache-control"), "no-store");
     if (session.status !== 200) {
       throw new Error(`会话读取失败：HTTP ${session.status}`);
     }

@@ -6,7 +6,7 @@ import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
-import fastifyStatic from "@fastify/static";
+import { registerStaticFiles } from "./static-files.js";
 import {
   SESSION_COOKIE,
   assertCsrf,
@@ -405,16 +405,7 @@ app.get("/health", async (_request, reply) => {
 if (config.isProduction) {
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
   const staticRoot = path.resolve(currentDir, "../../dist");
-  await app.register(fastifyStatic, {
-    root: staticRoot,
-    prefix: "/"
-  });
-  app.setNotFoundHandler((request, reply) => {
-    if (request.method === "GET" && !request.url.startsWith("/api/")) {
-      return reply.sendFile("index.html");
-    }
-    return reply.code(404).send({ error: "接口不存在" });
-  });
+  await registerStaticFiles(app, staticRoot);
 }
 
 function effectiveUnavailabilityKey() {

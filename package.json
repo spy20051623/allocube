@@ -16,7 +16,9 @@
     "db:reset": "node scripts/reset-db.mjs",
     "admin:reset-password": "node scripts/reset-admin-password.mjs",
     "test:calendar-adjustment": "node scripts/test-calendar-adjustment.mjs",
-    "test:edit-conflicts": "node scripts/test-edit-conflicts.mjs"
+    "test:edit-conflicts": "node scripts/test-edit-conflicts.mjs",
+    "test:docs-loading": "node scripts/test-docs-loading.mjs",
+    "test:browser-cache": "node scripts/test-browser-cache.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

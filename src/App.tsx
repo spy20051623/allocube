@@ -107,7 +107,7 @@ import {
   subscribeRealtimeEvent,
   type RealtimeConnectionState
 } from "./realtime";
-import { DocumentationPage } from "./DocumentationPage";
+import { DocumentationRoute } from "./DocumentationRoute";
 import { AnnouncementMarkdown } from "./AnnouncementMarkdown";
 import {
   appPath,
@@ -713,7 +713,7 @@ export function App() {
   if (docsRoute) {
     return (
       <>
-        <DocumentationPage route={docsRoute} notify={notify} />
+        <DocumentationRoute route={docsRoute} notify={notify} />
         {toast && <Toast {...toast} />}
       </>
     );

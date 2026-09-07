@@ -1,0 +1,89 @@
+/* Light mode uses each component's existing fallback; dark roles are shared. */
+:root { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #e5e7eb;
+  --muted: #a1a8b5;
+  --line: #3b424f;
+  --line-strong: #69768a;
+  --panel: #1a1d24;
+  --soft: #242832;
+  --blue: #3565d1;
+  --blue-dark: #2c57ba;
+  --blue-soft: #22334f;
+  --cyan: #76d1e2;
+  --green: #8bdab2;
+  --green-soft: #193c2e;
+  --orange: #f2c181;
+  --orange-soft: #3c2e1e;
+  --red: #ffacb5;
+  --red-soft: #452931;
+  --navy: #121720;
+  --shadow: 0 1px 2px #0004, 0 10px 30px #0003;
+
+  --surface-page: #111318;
+  --surface-panel: #1a1d24;
+  --surface-raised: #242832;
+  --surface-hover: #2c3340;
+  --surface-input: #171a21;
+  --surface-disabled: #252a33;
+  --surface-inverse: #111925;
+  --text-primary: #e5e7eb;
+  --text-secondary: #a1a8b5;
+  --text-disabled: #a1a8b5;
+  --text-accent: #a8c5ff;
+  --text-on-accent: #ffffff;
+  --border-subtle: #3b424f;
+  --border-control: #69768a;
+  --border-focus: #8fb1ff;
+  --focus-ring: #8fb1ff;
+  --surface-accent: #22334f;
+  --surface-accent-hover: #2c4163;
+  --border-accent: #769dde;
+  --surface-success: #193c2e;
+  --surface-success-hover: #234936;
+  --text-success: #9fe2ba;
+  --border-success: #63b98a;
+  --surface-warning: #3c2e1e;
+  --surface-warning-hover: #4a3823;
+  --text-warning: #f2c181;
+  --border-warning: #bf945c;
+  --surface-danger: #452931;
+  --surface-danger-hover: #54303b;
+  --text-danger: #ffb6c0;
+  --border-danger: #d17e8b;
+  --surface-purple: #342d4f;
+  --surface-purple-hover: #453764;
+  --text-purple: #d5c2ff;
+  --border-purple: #a38bcf;
+  --surface-info: #183c45;
+  --surface-info-hover: #214b54;
+  --text-info: #98dce7;
+  --border-info: #66adbf;
+  --fill-accent: #3565d1;
+  --fill-accent-hover: #2c57ba;
+  --fill-danger: #a53047;
+  --fill-danger-hover: #89283b;
+  --fill-success: #236644;
+  --fill-warning: #805720;
+  --fill-purple: #654394;
+  --fill-info: #246071;
+  --shadow-color: #0005;
+  --overlay-backdrop: #0009;
+  --overlay-past: #9aa8bb14;
+  --overlay-grid: #9aa8bb20;
+}
+
+.display-preferences { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.theme-switcher.compact .language-switcher-trigger { min-width: 42px; padding-inline: 10px; }
+.preference-menu .language-switcher-option-code { display: grid; place-items: center; }
+.preference-menu .language-switcher-popover { z-index: 110; }
+
+@media (max-width: 820px) {
+  .display-preferences { gap: 6px; }
+  .display-preferences .language-switcher-current,
+  .display-preferences .language-switcher-chevron { display: none; }
+  .display-preferences .locale-switcher .language-switcher-code { display: inline; }
+  .display-preferences .language-switcher-trigger { min-width: 42px; padding-inline: 10px; }
+  .auth-page-tools { gap: 8px; flex-wrap: wrap; }
+}

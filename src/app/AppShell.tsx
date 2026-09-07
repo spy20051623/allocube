@@ -1,6 +1,6 @@
 import { notificationBadgeText } from "../notification-navigation";
 import { tr } from "../i18n/index";
-import { LanguageSwitcher } from "../i18n/LanguageSwitcher";
+import { DisplayPreferences } from "../components/DisplayPreferences";
 import {
   CalendarDays,
   Settings,
@@ -90,7 +90,7 @@ export function Topbar({
         ))}
       </nav>
       <div className="topbar-actions">
-        <LanguageSwitcher compact />
+        <DisplayPreferences compact />
         <div className="topbar-user" ref={userMenuRef}>
           <button
             type="button"

@@ -1,5 +1,5 @@
 import { tr } from "../../i18n/index";
-import { LanguageSwitcher } from "../../i18n/LanguageSwitcher";
+import { DisplayPreferences } from "../../components/DisplayPreferences";
 import { Boxes, BookOpenText } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "../../api";
@@ -85,7 +85,7 @@ export function AuthLayout({
           <div className="auth-page-tools">
             <a className="auth-docs-link" href="/docs/getting-started">
               <BookOpenText size={15} />{tr("帮助与文档")}</a>
-            <LanguageSwitcher />
+            <DisplayPreferences />
           </div>
           <div className="auth-card">
             <div className="auth-card-head">

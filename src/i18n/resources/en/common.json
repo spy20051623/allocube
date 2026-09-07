@@ -372,5 +372,11 @@
   "数据已更新": "Data updated",
   "数据已在其他页面或设备更新。是否用本次提交的内容覆盖对应数据？取消将保留当前草稿。": "This data was updated on another page or device. Overwrite the corresponding data with your submission? Cancel to keep your draft.",
   "占用情况已变化。是否按最新影响范围执行本次操作？取消将保留当前输入。": "Reservations have changed. Apply this operation to the latest affected reservations? Cancel to keep your input.",
-  "上次操作的结果尚未确认。请手动刷新页面核对后再操作。": "The outcome of the last operation is unknown. Refresh the page manually to check before trying again."
+  "上次操作的结果尚未确认。请手动刷新页面核对后再操作。": "The outcome of the last operation is unknown. Refresh the page manually to check before trying again.",
+  "跟随系统": "System",
+  "浅色": "Light",
+  "深色": "Dark",
+  "切换主题": "Change theme",
+  "当前主题：{{v0}}": "Current theme: {{v0}}",
+  "界面主题": "Appearance"
 }

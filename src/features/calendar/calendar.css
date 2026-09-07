@@ -116,6 +116,12 @@
   gap: 4px;
 }
 
+.calendar-hint-combination {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
 .calendar-wheel-hint b {
   margin: 0 1px;
   color: var(--text-secondary, #99a3b3);
@@ -132,9 +138,10 @@
 }
 
 .calendar-wheel-hint > i {
+  flex: 0 0 1px;
   width: 1px;
   height: 11px;
-  background: var(--surface-raised, #d9dfe8);
+  background: var(--border-control, #d9dfe8);
 }
 
 .calendar-wheel-hint kbd {

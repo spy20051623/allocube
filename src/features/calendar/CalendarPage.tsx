@@ -259,13 +259,13 @@ export function CalendarPage({
             <i />
             <span>
               <MouseRightButtonIcon />{tr("拖动")}<b>/</b>
-              <kbd>Ctrl</kbd>+<MouseLeftButtonIcon />{tr("拖动 删除")}</span>
+              <span className="calendar-hint-combination"><kbd>Ctrl</kbd>+<MouseLeftButtonIcon /></span>{tr("拖动 删除")}</span>
             <i />
             <span><MouseWheelIcon />{tr("上下")}</span>
             <i />
-            <span><kbd>Shift</kbd> + <MouseWheelIcon />{tr("左右")}</span>
+            <span><span className="calendar-hint-combination"><kbd>Shift</kbd>+<MouseWheelIcon /></span>{tr("左右")}</span>
             <i />
-            <span><kbd>Alt</kbd> + <MouseWheelIcon />{tr("缩放")}</span>
+            <span><span className="calendar-hint-combination"><kbd>Alt</kbd>+<MouseWheelIcon /></span>{tr("缩放")}</span>
           </div>
         </div>
         <div className="toolbar">

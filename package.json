@@ -19,7 +19,8 @@
     "test:edit-conflicts": "node scripts/test-edit-conflicts.mjs",
     "test:docs-loading": "node scripts/test-docs-loading.mjs",
     "test:browser-cache": "node scripts/test-browser-cache.mjs",
-    "test:audit-http": "node scripts/test-audit-http.mjs"
+    "test:audit-http": "node scripts/test-audit-http.mjs",
+    "test:theme": "node scripts/test-theme.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

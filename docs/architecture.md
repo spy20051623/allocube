@@ -10,6 +10,7 @@ Allocube 继续使用单个 Fastify 应用和 SQLite 数据库。本轮重构不
 | `src/app/` | 会话、提示消息、全局输入行为、冲突对话框与请求的衔接 |
 | `src/components/` | 表单、密码输入、弹窗、标签编辑、操作反馈等跨功能组件 |
 | `src/features/` | 按业务组织的页面、局部组件、控制 Hook 和专属类型 |
+| `src/theme/`、`public/theme-init.js` | 浏览器主题状态、React 适配及语义配色；详见 [主题维护说明](theme.md) |
 | `src/shared/` | 前后端共用的契约与规则；新增模块不依赖页面、HTTP 框架或数据库 |
 
 已有的 `PageHeader`、`Modal`、`SelectControl`、日期工具和实时刷新模块继续复用。公共组件不能导入业务页面；业务模块不能导入 `App` 或应用外壳。功能之间需要共用逻辑时，先检查现有公共模块，再确定归属，避免通过另一个页面获取工具函数。

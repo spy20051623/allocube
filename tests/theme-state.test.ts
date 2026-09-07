@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import type { ThemePreference } from "../src/theme/state";
 
 const source = readFileSync(new URL("../public/theme-init.js", import.meta.url), "utf8");
-function fixture({ stored = null, dark = false, blocked = false, noMedia = false }: {
-  stored?: string | null; dark?: boolean; blocked?: boolean; noMedia?: boolean;
+function fixture({ stored = null, dark = false, blocked = false, noMedia = false, blockedGetter = false, legacyMedia = false }: {
+  stored?: string | null; dark?: boolean; blocked?: boolean; noMedia?: boolean; blockedGetter?: boolean; legacyMedia?: boolean;
 } = {}) {
   let saved = stored;
   const root = { dataset: {} as Record<string, string>, style: {} as Record<string, string> };
@@ -16,7 +16,10 @@ function fixture({ stored = null, dark = false, blocked = false, noMedia = false
     getItem: () => { if (blocked) throw new Error("blocked"); return saved; },
     setItem: (_key: string, value: string) => { if (blocked) throw new Error("blocked"); saved = value; }
   };
-  const media = { matches: dark, addEventListener: (_event: string, listener: () => void) => systemListeners.push(listener) };
+  const media = { matches: dark,
+    addEventListener: legacyMedia ? undefined : (_event: string, listener: () => void) => systemListeners.push(listener),
+    addListener: (listener: () => void) => systemListeners.push(listener)
+  };
   const window = {
     localStorage: storage,
     matchMedia: noMedia ? undefined : () => media,
@@ -24,6 +27,7 @@ function fixture({ stored = null, dark = false, blocked = false, noMedia = false
     allocubeTheme: undefined as unknown as Window["allocubeTheme"]
   };
   const context = { window, document: { documentElement: root, querySelector: () => meta } };
+  if (blockedGetter) Object.defineProperty(window, "localStorage", { get() { throw new Error("Denied"); } });
   runInNewContext(source, context);
   return {
     root, meta, store: window.allocubeTheme, saved: () => saved,
@@ -76,6 +80,15 @@ describe("主题偏好与首屏初始化", () => {
     expect(f.store.getSnapshot().resolved).toBe("light");
     f.store.setPreference("dark");
     expect(f.root.dataset.theme).toBe("dark");
+  });
+  it("读取存储对象被拒绝时仍能切换，兼容旧版系统主题监听", () => {
+    const f = fixture({ blockedGetter: true, legacyMedia: true });
+    f.store.setPreference("dark");
+    expect(f.root.dataset.theme).toBe("dark");
+    f.store.setPreference("system"); f.system(true);
+    expect(f.root.dataset.theme).toBe("dark");
+    f.system(false);
+    expect(f.root.dataset.theme).toBe("light");
   });
   it("只在状态变化时通知，可解除订阅，重复初始化不增加监听", () => {
     const f = fixture();

@@ -37,7 +37,7 @@ try {
   assert(requested.some(url => /DocumentationPage-.*\.js/.test(url)));
   assert(requested.some(url => /DocumentationPage-.*\.css/.test(url)));
   assert.equal(await page.locator(".docs-header").evaluate(element => getComputedStyle(element).position), "sticky");
-  await page.locator(".docs-header-actions .language-switcher-trigger").click();
+  await page.locator(".docs-header-actions .locale-switcher .language-switcher-trigger").click();
   await page.getByRole("menuitemradio", { name: /English/ }).click();
   await page.locator(".docs-article h1").filter({ hasText: "User guide" }).waitFor();
   await page.locator('.docs-sidebar a[href="/docs/api"]').click();

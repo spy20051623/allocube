@@ -26,7 +26,7 @@
 
 .announcement-markdown {
   min-width: 0;
-  color: #455166;
+  color: var(--text-primary, #455166);
   font-size: 14px;
   line-height: 1.75;
   overflow-wrap: anywhere;
@@ -38,25 +38,25 @@
 .announcement-markdown ul,
 .announcement-markdown ol { margin: 9px 0; padding-left: 23px; }
 .announcement-markdown li { margin: 4px 0; }
-.announcement-markdown a { color: var(--blue); text-underline-offset: 3px; }
+.announcement-markdown a { color: var(--text-accent, var(--blue)); text-underline-offset: 3px; }
 .announcement-markdown code {
   padding: 2px 5px;
-  border: 1px solid #e1e6ef;
+  border: 1px solid var(--border-subtle, #e1e6ef);
   border-radius: 5px;
-  color: #a43258;
-  background: #f7f8fa;
+  color: var(--text-danger, #a43258);
+  background: var(--surface-raised, #f7f8fa);
   font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 .announcement-markdown blockquote {
   margin: 12px 0;
   padding: 9px 13px;
-  border-left: 3px solid #8aa7ee;
-  color: #53627a;
-  background: #f5f8ff;
+  border-left: 3px solid var(--border-accent, #8aa7ee);
+  color: var(--text-secondary, #53627a);
+  background: var(--surface-panel, #f5f8ff);
 }
 .announcement-markdown table { width: 100%; border-collapse: collapse; }
 .announcement-markdown th,
-.announcement-markdown td { padding: 7px 9px; border: 1px solid #e1e6ee; text-align: left; }
+.announcement-markdown td { padding: 7px 9px; border: 1px solid var(--border-subtle, #e1e6ee); text-align: left; }
 .announcement-subheading { display: block; margin: 16px 0 7px; color: var(--ink); font-size: 15px; }
 
 .announcement-management-page { min-width: 0; }
@@ -132,7 +132,7 @@
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fafbfc;
+  background: var(--surface-raised, #fafbfc);
 }
 .announcement-preview > strong { display: block; margin-bottom: 13px; color: var(--muted); font-size: 11px; }
 .announcement-preview > span { color: var(--muted); font-size: 13px; }
@@ -161,7 +161,7 @@
     flex: 0 0 auto;
     grid-column: auto;
     padding-top: 12px;
-    background: white;
+    background: var(--surface-raised, white);
   }
   .announcement-preview {
     height: 220px;

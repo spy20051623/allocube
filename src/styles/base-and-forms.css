@@ -1,8 +1,8 @@
 :root {
   --font-ui: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   font-family: var(--font-ui);
-  color: #172033;
-  background: #f4f5f7;
+  color: var(--text-primary, #172033);
+  background: var(--surface-page, #f4f5f7);
   font-synthesis: none;
   --ink: #172033;
   --muted: #70798b;
@@ -34,7 +34,7 @@
 }
 
 html {
-  background: #f4f5f7;
+  background: var(--surface-page, #f4f5f7);
 }
 
 body {
@@ -79,7 +79,7 @@ input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 a:focus-visible {
-  outline: 3px solid rgba(37, 88, 217, 0.18);
+  outline: 3px solid var(--focus-ring, rgba(37, 88, 217, 0.18));
   outline-offset: 1px;
 }
 
@@ -102,10 +102,10 @@ a {
   display: grid;
   place-items: center;
   border-radius: 15px;
-  color: white;
+  color: var(--text-on-accent, white);
   background: var(--blue);
   font-weight: 800;
-  box-shadow: 0 12px 28px rgba(37, 88, 217, 0.24);
+  box-shadow: 0 12px 28px var(--shadow-color, rgba(37, 88, 217, 0.24));
 }
 
 .boot-shell h1 {
@@ -125,7 +125,7 @@ a {
   overflow: hidden;
   display: grid;
   grid-template-columns: repeat(2, minmax(510px, 1fr));
-  background: #f6f7f9;
+  background: var(--surface-page, #f6f7f9);
 }
 
 .auth-story {
@@ -135,7 +135,7 @@ a {
   padding: 48px;
   display: flex;
   flex-direction: column;
-  color: #f6f8fd;
+  color: var(--text-primary, #f6f8fd);
   background: var(--navy);
 }
 
@@ -143,7 +143,7 @@ a {
 .auth-story::after {
   content: "";
   position: absolute;
-  border: 1px solid rgba(255,255,255,.07);
+  border: 1px solid var(--border-subtle, rgba(255,255,255,.07));
   border-radius: 50%;
 }
 
@@ -174,7 +174,7 @@ a {
   position: relative;
   z-index: 1;
   gap: 13px;
-  color: white;
+  color: var(--text-on-accent, white);
   font-size: 20px;
   letter-spacing: -.03em;
 }
@@ -202,7 +202,7 @@ a {
 .auth-intro p {
   max-width: 350px;
   margin: 0;
-  color: #aeb9cb;
+  color: var(--text-secondary, #aeb9cb);
   font-size: 15px;
   line-height: 1.75;
 }
@@ -214,20 +214,20 @@ a {
   border-radius: 10px;
   display: grid;
   place-items: center;
-  color: white;
+  color: var(--text-on-accent, white);
   background: var(--blue);
 }
 
 .eyebrow {
   display: block;
-  color: #86a7ff;
+  color: var(--text-accent, #86a7ff);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .15em;
 }
 
 .eyebrow.dark {
-  color: var(--blue);
+  color: var(--text-accent, var(--blue));
 }
 
 .auth-panel {
@@ -275,22 +275,22 @@ a {
   flex: 0 0 auto;
   padding: 38px 42px;
   border: 1px solid var(--line);
-  background: white;
-  box-shadow: 0 24px 80px rgba(22, 31, 50, .08);
+  background: var(--surface-panel, white);
+  box-shadow: 0 24px 80px var(--shadow-color, rgba(22, 31, 50, .08));
 }
 
 .auth-docs-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #667085;
+  color: var(--text-secondary, #667085);
   text-decoration: none;
   font-size: 13px;
   font-weight: 600;
 }
 
 .auth-icp-link {
-  color: #aeb9cb;
+  color: var(--text-secondary, #aeb9cb);
   font-size: 12px;
   text-decoration: none;
 }
@@ -299,7 +299,7 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #aeb9cb;
+  color: var(--text-secondary, #aeb9cb);
   font-size: 12px;
   text-decoration: none;
 }
@@ -312,11 +312,11 @@ a {
 
 .auth-icp-link:hover,
 .auth-public-security-link:hover {
-  color: white;
+  color: var(--text-on-accent, white);
 }
 
 .auth-docs-link:hover {
-  color: #2457e6;
+  color: var(--text-accent, #2457e6);
 }
 
 .auth-card-head {
@@ -348,7 +348,7 @@ a {
   min-width: 0;
   flex-direction: column;
   gap: 7px;
-  color: #3f4859;
+  color: var(--text-primary, #3f4859);
   font-size: 12px;
   font-weight: 600;
 }
@@ -379,7 +379,7 @@ select {
   border: 1px solid var(--line-strong);
   border-radius: 7px;
   color: var(--ink);
-  background: white;
+  background: var(--surface-input, white);
   transition: border-color .15s, box-shadow .15s;
 }
 
@@ -423,24 +423,24 @@ select {
   place-items: center;
   border: 0;
   border-radius: 6px;
-  color: #758095;
+  color: var(--text-secondary, #758095);
   background: transparent;
   cursor: pointer;
 }
 
 .password-visibility-button:hover {
-  color: var(--blue);
+  color: var(--text-accent, var(--blue));
   background: var(--blue-soft);
 }
 
 .password-visibility-button:focus-visible {
-  outline: 3px solid rgba(37, 88, 217, 0.18);
+  outline: 3px solid var(--focus-ring, rgba(37, 88, 217, 0.18));
   outline-offset: 0;
 }
 
 .registration-field input:disabled {
-  color: #929aaa;
-  background: #f1f3f6;
+  color: var(--text-disabled, #929aaa);
+  background: var(--surface-disabled, #f1f3f6);
   cursor: not-allowed;
 }
 
@@ -453,26 +453,26 @@ textarea {
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: #8da9ec;
-  box-shadow: 0 0 0 3px rgba(37, 88, 217, .08);
+  border-color: var(--border-focus, #8da9ec);
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(37, 88, 217, .08));
   outline: none;
 }
 
 .password-input-shell:focus-within input {
-  border-color: #8da9ec;
-  box-shadow: 0 0 0 3px rgba(37, 88, 217, .08);
+  border-color: var(--border-focus, #8da9ec);
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(37, 88, 217, .08));
 }
 
 .registration-field.has-error input,
 .auth-field.has-error input,
 .field.has-error input,
 .field.has-error textarea {
-  border-color: #d98989;
-  box-shadow: 0 0 0 3px rgba(181, 62, 62, .07);
+  border-color: var(--border-danger, #d98989);
+  box-shadow: 0 0 0 3px var(--shadow-color, rgba(181, 62, 62, .07));
 }
 
 .field-inline-error {
-  color: #9b4141 !important;
+  color: var(--text-danger, #9b4141) !important;
   font-size: 10px !important;
   font-weight: 550 !important;
   line-height: 1.4 !important;
@@ -482,10 +482,10 @@ select:focus {
   position: relative;
   margin-top: 2px;
   padding: 9px 11px;
-  border: 1px solid #bfd0f5;
+  border: 1px solid var(--border-accent, #bfd0f5);
   border-radius: 7px;
-  color: #31549d;
-  background: #f2f6ff;
+  color: var(--text-accent, #31549d);
+  background: var(--surface-accent, #f2f6ff);
   font-size: 11px;
   font-weight: 500;
   line-height: 1.5;
@@ -498,30 +498,30 @@ select:focus {
   left: 15px;
   width: 8px;
   height: 8px;
-  border-top: 1px solid #bfd0f5;
-  border-left: 1px solid #bfd0f5;
+  border-top: 1px solid var(--border-accent, #bfd0f5);
+  border-left: 1px solid var(--border-accent, #bfd0f5);
   background: inherit;
   transform: rotate(45deg);
 }
 
 .field-bubble.error {
-  border-color: #e2aaaa;
-  color: #913f3f;
-  background: #fff3f3;
+  border-color: var(--border-danger, #e2aaaa);
+  color: var(--text-danger, #913f3f);
+  background: var(--surface-raised, #fff3f3);
 }
 
 .field-bubble.error::before {
-  border-color: #e2aaaa;
+  border-color: var(--border-danger, #e2aaaa);
 }
 
 .field-bubble.warning {
-  border-color: #e1c28f;
-  color: #8a561e;
-  background: #fff8e9;
+  border-color: var(--border-warning, #e1c28f);
+  color: var(--text-warning, #8a561e);
+  background: var(--surface-warning, #fff8e9);
 }
 
 .field-bubble.warning::before {
-  border-color: #e1c28f;
+  border-color: var(--border-warning, #e1c28f);
 }
 
 .field-bubble.form-feedback {
@@ -562,19 +562,19 @@ select:focus {
 }
 
 .password-checklist li.passed {
-  color: #28734b;
+  color: var(--text-success, #28734b);
 }
 
 .password-checklist li.failed {
-  color: #a33e3e;
+  color: var(--text-danger, #a33e3e);
 }
 
 .field-bubble.hint.password-checklist li.failed {
-  color: #6f7d91;
+  color: var(--text-secondary, #6f7d91);
 }
 
 .password-checklist li.pending {
-  color: #6f7d91;
+  color: var(--text-secondary, #6f7d91);
 }
 
 .check-dot {
@@ -587,7 +587,7 @@ select:focus {
 
 input::placeholder,
 textarea::placeholder {
-  color: #a7afbd;
+  color: var(--text-disabled, #a7afbd);
 }
 
 .primary-button,
@@ -608,7 +608,7 @@ textarea::placeholder {
 
 .primary-button {
   border: 1px solid var(--blue);
-  color: white;
+  color: var(--text-on-accent, white);
   background: var(--blue);
 }
 
@@ -632,29 +632,29 @@ textarea::placeholder {
 
 .secondary-button {
   border: 1px solid var(--line-strong);
-  color: #354052;
-  background: white;
+  color: var(--text-primary, #354052);
+  background: var(--surface-panel, white);
 }
 
 .secondary-button:hover {
-  border-color: #aab4c2;
-  background: #f8f9fb;
+  border-color: var(--border-control, #aab4c2);
+  background: var(--surface-hover, #f8f9fb);
 }
 
 .danger-button {
-  border: 1px solid #b94b4b;
-  color: white;
-  background: #b94b4b;
+  border: 1px solid var(--border-danger, #b94b4b);
+  color: var(--text-on-accent, white);
+  background: var(--fill-danger, #b94b4b);
 }
 
 .danger-button:hover {
-  border-color: #983939;
-  background: #983939;
+  border-color: var(--border-danger, #983939);
+  background: var(--fill-danger-hover, #983939);
 }
 
 .secondary-button.accent {
-  color: var(--blue);
-  border-color: #aabff1;
+  color: var(--text-accent, var(--blue));
+  border-color: var(--border-accent, #aabff1);
   background: var(--blue-soft);
 }
 
@@ -678,7 +678,7 @@ textarea::placeholder {
 .text-action {
   padding: 0;
   border: 0;
-  color: var(--blue);
+  color: var(--text-accent, var(--blue));
   background: none;
   font-size: 12px;
   font-weight: 600;
@@ -714,18 +714,18 @@ textarea::placeholder {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  border: 1px solid #c8d6f5;
-  color: #2f539f;
-  background: #f0f4fd;
+  border: 1px solid var(--border-accent, #c8d6f5);
+  color: var(--text-accent, #2f539f);
+  background: var(--surface-accent, #f0f4fd);
   border-radius: 7px;
   font-size: 12px;
   line-height: 1.5;
 }
 
 .inline-message.error {
-  border-color: #ecc5c5;
-  color: #934242;
-  background: #fff2f2;
+  border-color: var(--border-danger, #ecc5c5);
+  color: var(--text-danger, #934242);
+  background: var(--surface-danger, #fff2f2);
 }
 
 .registration-success {
@@ -748,8 +748,8 @@ textarea::placeholder {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: #26734a;
-  background: #eaf7ef;
+  color: var(--text-success, #26734a);
+  background: var(--surface-success, #eaf7ef);
 }
 
 .sr-only {
@@ -770,7 +770,7 @@ textarea::placeholder {
   gap: 2px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f2f4f7;
+  background: var(--surface-raised, #f2f4f7);
 }
 
 .segmented button {
@@ -787,8 +787,8 @@ textarea::placeholder {
 
 .segmented button.active {
   color: var(--ink);
-  background: white;
-  box-shadow: 0 1px 3px rgba(16,24,40,.12);
+  background: var(--surface-panel, white);
+  box-shadow: 0 1px 3px var(--shadow-color, rgba(16,24,40,.12));
 }
 
 .segmented button:disabled {

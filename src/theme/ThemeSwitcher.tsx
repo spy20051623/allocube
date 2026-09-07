@@ -15,5 +15,5 @@ export function ThemeSwitcher({ compact = false, ...control }: PreferenceMenuCon
   const current = options.find(option => option.value === preference)!;
   return <PreferenceMenu<ThemePreference> {...control} className="theme-switcher" compact={compact}
     value={preference} options={options} onSelect={setThemePreference} icon={current.icon} label={current.label}
-    title={tr("切换主题")} ariaLabel={tr("当前主题：{{v0}}", { v0: current.label })} menuLabel={tr("界面主题")} />;
+    title={tr("当前主题：{{v0}}", { v0: current.label })} ariaLabel={tr("当前主题：{{v0}}", { v0: current.label })} menuLabel={tr("界面主题")} />;
 }

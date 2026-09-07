@@ -20,7 +20,7 @@
   grid-template-columns: 240px 1fr 240px;
   align-items: center;
   border-bottom: 1px solid var(--line);
-  background: rgba(255,255,255,.97);
+  background: var(--surface-panel, rgba(255,255,255,.97));
 }
 
 .topbar .brand-icon {
@@ -43,7 +43,7 @@
   align-items: center;
   gap: 7px;
   border: 0;
-  color: #667084;
+  color: var(--text-secondary, #667084);
   background: transparent;
   font-size: 13px;
   font-weight: 600;
@@ -61,7 +61,7 @@
 }
 
 .main-nav button.active {
-  color: var(--blue);
+  color: var(--text-accent, var(--blue));
 }
 
 .main-nav button.active::after {
@@ -97,7 +97,7 @@
 .topbar-user-trigger:hover,
 .topbar-user-trigger.open {
   border-color: var(--line);
-  background: #f7f8fa;
+  background: var(--surface-hover, #f7f8fa);
 }
 
 .topbar-user-copy {
@@ -138,8 +138,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  color: #fff;
-  background: #dc3545;
+  color: var(--text-on-accent, #fff);
+  background: var(--fill-danger, #dc3545);
   font-weight: 750;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -152,9 +152,9 @@
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
-  border: 2px solid #fff;
+  border: 2px solid var(--border-subtle, #fff);
   font-size: 9px;
-  box-shadow: 0 1px 3px rgba(137, 18, 31, .18);
+  box-shadow: 0 1px 3px var(--shadow-color, rgba(137, 18, 31, .18));
 }
 
 .topbar-user-menu {
@@ -168,8 +168,8 @@
   gap: 2px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 12px 30px rgba(30, 41, 59, .14);
+  background: var(--surface-raised, #fff);
+  box-shadow: 0 12px 30px var(--shadow-color, rgba(30, 41, 59, .14));
   animation: ui-popover-in .14s ease-out;
 }
 
@@ -182,7 +182,7 @@
   gap: 9px;
   border: 0;
   border-radius: 7px;
-  color: #465166;
+  color: var(--text-primary, #465166);
   background: transparent;
   font-size: 12px;
   text-align: left;
@@ -194,8 +194,8 @@
 .topbar-user-menu button.active,
 .topbar-user-menu > a:hover,
 .topbar-user-menu > a.active {
-  color: var(--blue);
-  background: #eef3ff;
+  color: var(--text-accent, var(--blue));
+  background: var(--surface-accent-hover, #eef3ff);
 }
 
 .notification-menu-indicator {
@@ -207,8 +207,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  color: #fff;
-  background: #dc3545;
+  color: var(--text-on-accent, #fff);
+  background: var(--fill-danger, #dc3545);
   font-size: 10px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -221,8 +221,8 @@
   display: grid;
   place-items: center;
   border-radius: 10px;
-  color: #1947bd;
-  background: #e4ebfc;
+  color: var(--text-accent, #1947bd);
+  background: var(--surface-accent, #e4ebfc);
   font-weight: 700;
 }
 
@@ -241,14 +241,14 @@
   place-items: center;
   border: 1px solid transparent;
   border-radius: 7px;
-  color: #657084;
+  color: var(--text-secondary, #657084);
   background: transparent;
   cursor: pointer;
 }
 
 .icon-button:hover {
   border-color: var(--line);
-  background: #f5f6f8;
+  background: var(--surface-hover, #f5f6f8);
 }
 
 .icon-button.tiny {
@@ -266,16 +266,16 @@
   justify-content: center;
   align-items: center;
   gap: 8px;
-  border-bottom: 1px solid #edd2b4;
-  color: #885021;
-  background: #fff5e9;
+  border-bottom: 1px solid var(--border-warning, #edd2b4);
+  color: var(--text-warning, #885021);
+  background: var(--surface-warning, #fff5e9);
   font-size: 12px;
 }
 
 .password-banner button {
   padding: 0;
   border: 0;
-  color: #a24e0b;
+  color: var(--text-warning, #a24e0b);
   background: transparent;
   font-weight: 700;
   cursor: pointer;

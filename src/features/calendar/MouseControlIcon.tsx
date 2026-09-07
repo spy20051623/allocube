@@ -20,11 +20,7 @@ function MouseControlIcon({
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <path
-        className="mouse-control-base"
-        d="M5 10V9a7 7 0 0 1 14 0v1Z"
-        stroke="none"
-      />
+      {/* Keep inactive regions transparent; fill only the illustrated control. */}
       {(highlight === "LEFT_BUTTON" || highlight === "RIGHT_BUTTON") && (
         <path
           className="mouse-control-accent"

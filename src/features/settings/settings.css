@@ -16,8 +16,8 @@
 }
 
 .smtp-settings-card.is-disabled {
-  border-color: #d9dde3;
-  background: #f0f2f5;
+  border-color: var(--border-subtle, #d9dde3);
+  background: var(--surface-disabled, #f0f2f5);
   box-shadow: none;
 }
 
@@ -28,26 +28,26 @@
 }
 
 .smtp-settings-card.is-disabled .settings-intro {
-  border-bottom-color: #d7dbe1;
+  border-bottom-color: var(--border-subtle, #d7dbe1);
 }
 
 .smtp-settings-card.is-disabled .settings-intro .section-header-icon {
-  color: #737d8d;
-  background: #e1e4e9;
+  color: var(--text-disabled, #737d8d);
+  background: var(--surface-disabled, #e1e4e9);
 }
 
 .smtp-settings-card.is-disabled .smtp-settings-body {
-  opacity: .68;
+  opacity: var(--readable-detail-opacity, .68);
 }
 
 .smtp-settings-card.is-disabled:focus-within .smtp-settings-body {
-  opacity: .88;
+  opacity: var(--readable-detail-opacity, .88);
 }
 
 .smtp-settings-card.is-disabled input,
 .smtp-settings-card.is-disabled .select-control-trigger,
 .smtp-settings-card.is-disabled .smtp-test-control {
-  background: rgba(255, 255, 255, .78);
+  background: var(--surface-disabled, rgba(255, 255, 255, .78));
 }
 
 .smtp-settings-body {
@@ -69,12 +69,12 @@
   flex: 0 0 36px;
   place-items: center;
   border-radius: 9px;
-  color: var(--blue);
+  color: var(--text-accent, var(--blue));
   background: var(--blue-soft);
 }
 
 .settings-intro h3 {
-  color: #2f3a4d;
+  color: var(--text-primary, #2f3a4d);
   font-size: 15px;
   font-weight: 700;
 }
@@ -113,12 +113,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #344054;
+  color: var(--text-primary, #344054);
 }
 
 .mail-service-section-heading svg {
   flex: 0 0 auto;
-  color: #64748b;
+  color: var(--text-secondary, #64748b);
 }
 
 .mail-service-section-heading strong {
@@ -158,16 +158,16 @@
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  color: #6d7686;
-  background: #eef1f5;
+  color: var(--text-secondary, #6d7686);
+  background: var(--surface-raised, #eef1f5);
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .email-domain-policy-badge.is-restricted {
-  color: #315ea8;
-  background: #eaf1ff;
+  color: var(--text-accent, #315ea8);
+  background: var(--surface-accent, #eaf1ff);
 }
 
 .registration-email-policy {
@@ -180,7 +180,7 @@
 }
 
 .registration-email-field-title {
-  color: #3d4758;
+  color: var(--text-primary, #3d4758);
   font-size: 12px;
   font-weight: 700;
 }
@@ -194,7 +194,7 @@
 }
 
 .registration-email-policy-control > strong {
-  color: #5d6879;
+  color: var(--text-secondary, #5d6879);
   font-size: 12px;
   font-weight: 600;
 }
@@ -222,10 +222,10 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  border: 1px solid #cbd8f2;
+  border: 1px solid var(--border-accent, #cbd8f2);
   border-radius: 999px;
-  color: #38568f;
-  background: #eef4ff;
+  color: var(--text-secondary, #38568f);
+  background: var(--surface-accent, #eef4ff);
   font-size: 11px;
   font-weight: 700;
 }
@@ -238,14 +238,14 @@
   place-items: center;
   border: 0;
   border-radius: 50%;
-  color: #6c7fa5;
+  color: var(--text-secondary, #6c7fa5);
   background: transparent;
 }
 
 .email-domain-token button:hover,
 .email-domain-token button:focus-visible {
-  color: #b23a48;
-  background: #fff;
+  color: var(--text-danger, #b23a48);
+  background: var(--surface-hover, #fff);
 }
 
 .email-domain-entry {
@@ -270,13 +270,13 @@
 .email-domain-entry.is-invalid input {
   position: relative;
   z-index: 1;
-  border-color: #d86c6c;
-  box-shadow: 0 0 0 2px rgba(196, 72, 72, .08);
+  border-color: var(--border-danger, #d86c6c);
+  box-shadow: 0 0 0 2px var(--shadow-color, rgba(196, 72, 72, .08));
 }
 
 .email-domain-error {
   min-height: 16px;
-  color: #b42334;
+  color: var(--text-danger, #b42334);
   font-size: 11px;
   font-weight: 600;
 }
@@ -308,21 +308,21 @@
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  color: #70798a;
-  background: #eef1f5;
+  color: var(--text-secondary, #70798a);
+  background: var(--surface-raised, #eef1f5);
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .smtp-state.ready {
-  color: #277250;
-  background: #e7f5ed;
+  color: var(--text-success, #277250);
+  background: var(--surface-success, #e7f5ed);
 }
 
 .smtp-state.warning {
-  color: #a36619;
-  background: #fff2d8;
+  color: var(--text-warning, #a36619);
+  background: var(--surface-warning, #fff2d8);
 }
 
 .settings-toggle-control {
@@ -335,7 +335,7 @@
 }
 
 .settings-toggle-control strong {
-  color: #3d4758;
+  color: var(--text-primary, #3d4758);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
@@ -355,9 +355,9 @@
   height: 19px;
   display: block;
   flex: 0 0 34px;
-  border: 1px solid #b9c1cd;
+  border: 1px solid var(--border-control, #b9c1cd);
   border-radius: 999px;
-  background: #dfe3e9;
+  background: var(--surface-raised, #dfe3e9);
   transition: border-color .15s, background .15s, box-shadow .15s;
 }
 
@@ -368,8 +368,8 @@
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 3px rgba(29, 41, 61, .24);
+  background: var(--text-on-accent, white);
+  box-shadow: 0 1px 3px var(--shadow-color, rgba(29, 41, 61, .24));
   transition: transform .15s;
 }
 
@@ -383,7 +383,7 @@
 }
 
 .settings-toggle-control input:focus-visible + .settings-toggle {
-  box-shadow: 0 0 0 3px rgba(51, 101, 209, .16);
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(51, 101, 209, .16));
 }
 
 .settings-toggle-control:has(input:disabled) {
@@ -444,7 +444,7 @@
 .smtp-summary strong {
   min-width: 0;
   overflow: hidden;
-  color: #354052;
+  color: var(--text-primary, #354052);
   font-size: 15px;
   font-weight: 700;
   line-height: 1.25;
@@ -459,10 +459,10 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  border: 1px solid #e7b8b8;
+  border: 1px solid var(--border-danger, #e7b8b8);
   border-radius: 7px;
-  color: #a53c3c;
-  background: #fff5f5;
+  color: var(--text-danger, #a53c3c);
+  background: var(--surface-panel, #fff5f5);
   font-size: 10px;
   line-height: 1.5;
 }
@@ -515,7 +515,7 @@
 }
 
 .smtp-test strong {
-  color: #3d4758;
+  color: var(--text-primary, #3d4758);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
@@ -533,13 +533,13 @@
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
-  background: white;
+  background: var(--surface-panel, white);
   transition: border-color .15s, box-shadow .15s;
 }
 
 .smtp-test-control:focus-within {
-  border-color: #7197eb;
-  box-shadow: 0 0 0 3px rgba(51, 101, 209, .11);
+  border-color: var(--border-focus, #7197eb);
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(51, 101, 209, .11));
 }
 
 .smtp-test-control input {
@@ -562,7 +562,7 @@
   border: 0;
   border-left: 1px solid var(--line-strong);
   border-radius: 0;
-  background: #f8f9fb;
+  background: var(--surface-raised, #f8f9fb);
 }
 
 .async-button {
@@ -578,7 +578,7 @@
 }
 
 .smtp-test-control .secondary-button:hover {
-  background: #f0f3f7;
+  background: var(--surface-hover, #f0f3f7);
 }
 
 .smtp-footer {

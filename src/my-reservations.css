@@ -4,7 +4,7 @@ body.my-reservations-view { min-width: 320px; }
 .own-section-heading, .own-card-heading, .own-detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .own-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
 .own-tabs button { display: flex; align-items: center; gap: 8px; border: 0; border-radius: 8px; padding: 10px 14px; background: transparent; color: var(--muted); cursor: pointer; }
-.own-tabs button.selected { color: var(--blue); background: var(--blue-soft); font-weight: 600; }
+.own-tabs button.selected { color: var(--text-accent, var(--blue)); background: var(--blue-soft); font-weight: 600; }
 .own-tabs button span, .own-section-heading h2 > span { border-radius: 5px; background: var(--soft); padding: 2px 7px; font-size: 12px; font-weight: 500; color: var(--muted); }
 .own-section { padding: 22px; }
 .own-section-heading { margin-bottom: 18px; }
@@ -13,7 +13,7 @@ body.my-reservations-view { min-width: 320px; }
 .own-active-scroll { max-height: clamp(260px, 52vh, 540px); overflow-y: auto; scrollbar-gutter: stable; padding: 2px; }
 .own-active-scroll:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 6px; }
 .own-active-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 10px; }
-.own-active-card { min-width: 0; padding: 12px 14px; background: linear-gradient(145deg, #f7faff, #fff 60%); border: 1px solid var(--line); border-top: 2px solid var(--blue); border-radius: 8px; }
+.own-active-card { min-width: 0; padding: 12px 14px; background: linear-gradient(145deg, var(--surface-panel, #f7faff), var(--surface-panel, #fff) 60%); border: 1px solid var(--line); border-top: 2px solid var(--blue); border-radius: 8px; }
 .own-active-card .own-card-heading { gap: 8px; }
 .own-identity { display: flex; align-items: center; gap: 10px; min-width: 0; text-align: left; }
 .own-identity > svg { color: var(--muted); flex-shrink: 0; }
@@ -23,7 +23,7 @@ body.my-reservations-view { min-width: 320px; }
 .own-identity span { color: var(--muted); font-size: 12px; }
 .own-status { display: inline-flex; flex-shrink: 0; border-radius: 5px; padding: 4px 7px; color: var(--muted); background: var(--soft); font-size: 12px; white-space: nowrap; }
 .own-status.active { color: var(--green); background: var(--green-soft); }
-.own-status.upcoming { color: var(--blue); background: var(--blue-soft); }
+.own-status.upcoming { color: var(--text-accent, var(--blue)); background: var(--blue-soft); }
 .own-status.cancelled { color: var(--red); background: var(--red-soft); }
 .own-remaining { display: flex; align-items: baseline; gap: 10px; margin: 12px 0 10px; }
 .own-remaining > span { font-size: 12px; color: var(--muted); }
@@ -38,22 +38,22 @@ body.my-reservations-view { min-width: 320px; }
 .own-active-card .own-row-actions { margin-top: 10px; }
 .own-row-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .own-reservations-page .secondary-button, .own-reservations-page .danger-button { min-height: 32px; padding: 6px 10px; font-size: 12px; }
-.own-row-actions .danger-button { color: var(--red); background: #fff; border-color: #ecd0d0; }
+.own-row-actions .danger-button { color: var(--red); background: var(--surface-panel, #fff); border-color: var(--border-danger, #ecd0d0); }
 .own-row-actions .danger-button:hover { background: var(--red-soft); }
 .own-filters { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
 .own-filters label { display: flex; flex-direction: column; gap: 6px; min-width: 140px; font-size: 12px; color: var(--muted); }
 .own-filters label:first-child { min-width: 200px; max-width: 280px; }
-.own-filters input { min-height: 34px; padding: 6px 8px; width: 100%; border: 1px solid var(--line-strong); border-radius: 6px; background: white; color: var(--ink); }
+.own-filters input { min-height: 34px; padding: 6px 8px; width: 100%; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-input, white); color: var(--ink); }
 .own-selection-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 48px; padding: 8px 10px; background: var(--soft); border-radius: 6px; color: var(--muted); font-size: 12px; }
 .own-selection-bar label { display: flex; align-items: center; gap: 8px; color: var(--ink); }
 .own-reservations-page input[type=checkbox] { width: 16px; height: 16px; margin: 0; flex-shrink: 0; accent-color: var(--blue); }
 .own-list-row { display: flex; align-items: center; gap: 16px; padding: 16px 10px; border-bottom: 1px solid var(--line); }
 .own-record-button { display: grid; grid-template-columns: minmax(160px, .8fr) minmax(200px, 1fr); align-items: center; gap: 20px; flex: 1; min-width: 0; padding: 4px 0; border: 0; background: transparent; cursor: pointer; text-align: left; color: inherit; }
-.own-record-button:hover strong { color: var(--blue); }
+.own-record-button:hover strong { color: var(--text-accent, var(--blue)); }
 .own-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; color: var(--muted); font-size: 12px; }
 .own-pagination > div { display: flex; align-items: center; gap: 12px; }
 .own-empty { padding: 25px 12px; color: var(--muted); text-align: center; font-size: 13px; }
-.own-alert { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; margin: 12px 0; border: 1px solid #eed4b8; border-radius: 6px; background: var(--orange-soft); color: #82501d; font-size: 13px; line-height: 1.6; }
+.own-alert { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; margin: 12px 0; border: 1px solid var(--border-warning, #eed4b8); border-radius: 6px; background: var(--orange-soft); color: var(--text-warning, #82501d); font-size: 13px; line-height: 1.6; }
 .own-prewrap { white-space: pre-wrap; }
 .own-dialog { width: min(760px, calc(100vw - 32px)); min-width: 0; max-height: calc(100dvh - 32px); overflow-y: auto; }
 .own-detail-heading { margin: 14px 0; }
@@ -65,7 +65,7 @@ body.my-reservations-view { min-width: 320px; }
 .own-edit-fields { border: 0; padding: 0; margin: 20px 0 0; min-width: 0; }
 .own-time-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
 .own-time-fields label, .own-reason { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
-.own-dialog input, .own-dialog textarea { width: 100%; min-width: 0; border: 1px solid var(--line-strong); background: #fff; border-radius: 6px; padding: 10px; color: var(--ink); }
+.own-dialog input, .own-dialog textarea { width: 100%; min-width: 0; border: 1px solid var(--line-strong); background: var(--surface-raised, #fff); border-radius: 6px; padding: 10px; color: var(--ink); }
 .own-dialog input[readonly] { background: var(--soft); color: var(--muted); }
 .own-confirm-copy { padding: 18px 0; line-height: 1.7; }
 .own-batch-list { max-height: 42vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin: 14px 0; }

@@ -19,33 +19,33 @@
   border: 1px solid var(--line-strong);
   border-radius: 7px;
   color: var(--ink);
-  background: white;
+  background: var(--surface-input, white);
   text-align: left;
   cursor: pointer;
   transition: border-color .15s ease, color .15s ease, background-color .15s ease, box-shadow .15s ease;
 }
 
 .select-control-trigger:hover:not(:disabled) {
-  border-color: #aebfe9;
-  background: #fbfcff;
+  border-color: var(--border-accent, #aebfe9);
+  background: var(--surface-disabled, #fbfcff);
 }
 
 .select-control.open .select-control-trigger {
-  border-color: #8ca8e8;
-  color: #1947bd;
-  background: #f8faff;
-  box-shadow: 0 0 0 3px rgba(37, 88, 217, .1);
+  border-color: var(--border-accent, #8ca8e8);
+  color: var(--text-accent, #1947bd);
+  background: var(--surface-input, #f8faff);
+  box-shadow: 0 0 0 3px var(--shadow-color, rgba(37, 88, 217, .1));
 }
 
 .select-control-trigger:focus-visible {
-  border-color: #8ca8e8;
-  outline: 3px solid rgba(37, 88, 217, .16);
+  border-color: var(--border-focus, #8ca8e8);
+  outline: 3px solid var(--focus-ring, rgba(37, 88, 217, .16));
   outline-offset: 1px;
 }
 
 .select-control-trigger:disabled {
-  color: #8c95a4;
-  background: #f3f4f6;
+  color: var(--text-disabled, #8c95a4);
+  background: var(--surface-disabled, #f3f4f6);
   cursor: not-allowed;
   opacity: .72;
 }
@@ -58,17 +58,17 @@
 }
 
 .select-control-value.placeholder {
-  color: #929baa;
+  color: var(--text-disabled, #929baa);
 }
 
 .select-control-chevron {
   justify-self: end;
-  color: #8a94a5;
+  color: var(--text-secondary, #8a94a5);
   transition: transform .16s ease, color .16s ease;
 }
 
 .select-control.open .select-control-chevron {
-  color: #5475bd;
+  color: var(--text-secondary, #5475bd);
   transform: rotate(180deg);
 }
 
@@ -86,13 +86,13 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  border: 1px solid #dce2ec;
+  border: 1px solid var(--border-control, #dce2ec);
   border-radius: 12px;
   color: var(--ink);
-  background: rgba(255, 255, 255, .99);
-  box-shadow: 0 18px 46px rgba(24, 36, 58, .18), 0 2px 8px rgba(24, 36, 58, .06);
+  background: var(--surface-raised, rgba(255, 255, 255, .99));
+  box-shadow: 0 18px 46px var(--shadow-color, rgba(24, 36, 58, .18)), 0 2px 8px var(--shadow-color, rgba(24, 36, 58, .06));
   scrollbar-width: thin;
-  scrollbar-color: #c8d0dc transparent;
+  scrollbar-color: var(--border-control, #c8d0dc) transparent;
   animation: ui-popover-in .14s ease-out;
 }
 
@@ -114,7 +114,7 @@
   gap: 10px;
   border: 0;
   border-radius: 8px;
-  color: #3e4a5e;
+  color: var(--text-primary, #3e4a5e);
   background: transparent;
   font-size: 12px;
   line-height: 1.35;
@@ -130,14 +130,14 @@
 .select-control-option:hover:not(:disabled),
 .select-control-option.active:not(:disabled),
 .select-control-option:focus-visible:not(:disabled) {
-  color: var(--blue);
-  background: #f1f5ff;
+  color: var(--text-accent, var(--blue));
+  background: var(--surface-accent-hover, #f1f5ff);
   outline: none;
 }
 
 .select-control-option.selected {
-  color: #1947bd;
-  background: #eaf0ff;
+  color: var(--text-accent, #1947bd);
+  background: var(--surface-accent, #eaf0ff);
   font-weight: 650;
 }
 
@@ -150,7 +150,7 @@
 }
 
 .select-control-option:disabled {
-  color: #a0a7b2;
+  color: var(--text-disabled, #a0a7b2);
   cursor: not-allowed;
 }
 
@@ -167,11 +167,11 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid #dce1e9;
+  border: 1px solid var(--border-control, #dce1e9);
   border-radius: 10px;
-  color: #536075;
-  background: rgba(255, 255, 255, .92);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+  color: var(--text-secondary, #536075);
+  background: var(--surface-panel, rgba(255, 255, 255, .92));
+  box-shadow: 0 1px 2px var(--shadow-color, rgba(16, 24, 40, .04));
   font-size: 13px;
   font-weight: 650;
   white-space: nowrap;
@@ -181,19 +181,19 @@
 
 .language-switcher-trigger:hover,
 .language-switcher.open .language-switcher-trigger {
-  border-color: #aebfe9;
-  color: var(--blue);
-  background: #f7f9ff;
-  box-shadow: 0 4px 14px rgba(37, 88, 217, .1);
+  border-color: var(--border-accent, #aebfe9);
+  color: var(--text-accent, var(--blue));
+  background: var(--surface-hover, #f7f9ff);
+  box-shadow: 0 4px 14px var(--shadow-color, rgba(37, 88, 217, .1));
 }
 
 .language-switcher-trigger:focus-visible {
-  outline: 3px solid rgba(37, 88, 217, .18);
+  outline: 3px solid var(--focus-ring, rgba(37, 88, 217, .18));
   outline-offset: 1px;
 }
 
 .language-switcher-chevron {
-  color: #8a94a5;
+  color: var(--text-secondary, #8a94a5);
   transition: transform .16s ease;
 }
 
@@ -235,11 +235,11 @@
   padding: 8px;
   display: grid;
   gap: 3px;
-  border: 1px solid #dce2ec;
+  border: 1px solid var(--border-subtle, #dce2ec);
   border-radius: 13px;
   color: var(--ink);
-  background: rgba(255, 255, 255, .98);
-  box-shadow: 0 18px 46px rgba(24, 36, 58, .18), 0 2px 8px rgba(24, 36, 58, .06);
+  background: var(--surface-raised, rgba(255, 255, 255, .98));
+  box-shadow: 0 18px 46px var(--shadow-color, rgba(24, 36, 58, .18)), 0 2px 8px var(--shadow-color, rgba(24, 36, 58, .06));
   animation: ui-popover-in .14s ease-out;
 }
 
@@ -253,7 +253,7 @@
   gap: 10px;
   border: 0;
   border-radius: 9px;
-  color: #39465b;
+  color: var(--text-primary, #39465b);
   background: transparent;
   text-align: left;
   cursor: pointer;
@@ -261,14 +261,14 @@
 
 .language-switcher-option:hover,
 .language-switcher-option:focus-visible {
-  color: var(--blue);
-  background: #f1f5ff;
+  color: var(--text-accent, var(--blue));
+  background: var(--surface-accent-hover, #f1f5ff);
   outline: none;
 }
 
 .language-switcher-option.selected {
-  color: #1947bd;
-  background: #eaf0ff;
+  color: var(--text-accent, #1947bd);
+  background: var(--surface-accent, #eaf0ff);
 }
 
 .language-switcher-option-code {
@@ -276,17 +276,17 @@
   height: 34px;
   display: grid;
   place-items: center;
-  border: 1px solid #d8dfeb;
+  border: 1px solid var(--border-subtle, #d8dfeb);
   border-radius: 9px;
-  color: #526078;
-  background: white;
+  color: var(--text-secondary, #526078);
+  background: var(--surface-panel, white);
   font-size: 11px;
   font-weight: 850;
 }
 
 .language-switcher-option.selected .language-switcher-option-code {
-  border-color: #b9c9ee;
-  color: #1947bd;
+  border-color: var(--border-accent, #b9c9ee);
+  color: var(--text-accent, #1947bd);
 }
 
 .language-switcher-option-copy {

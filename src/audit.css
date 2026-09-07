@@ -1,7 +1,7 @@
 .audit-management-page { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .audit-management-page > * { flex-shrink: 0; }
 .audit-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 16px; }
-.audit-filters > label { display: grid; gap: 6px; flex: 1 1 145px; min-width: 0; font-size: 12px; }
+.audit-filters > label, .audit-filters > .audit-date-field { display: grid; gap: 6px; flex: 1 1 145px; min-width: 0; font-size: 12px; }
 .audit-filters input { width: 100%; min-width: 0; }
 .audit-filter-actions, .audit-pagination { display: flex; align-items: center; gap: 8px; }
 .audit-pagination { justify-content: flex-end; font-size: 12px; }
@@ -52,3 +52,6 @@ button.audit-record:focus-visible { outline: 2px solid var(--blue); outline-offs
   .audit-management-page { height: auto; padding-right: 0; overflow: visible; }
   .audit-filters { padding: 12px; }
 }
+
+.audit-date-field .date-button { width: 100%; min-height: 38px; justify-content: flex-start; font-variant-numeric: tabular-nums; }
+@media (max-width: 820px) { .audit-date-field .calendar-date-popover { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); max-width: calc(100vw - 24px); } }

@@ -4,7 +4,8 @@ import { api, ApiError } from "./api";
 import { AuditRequestSequence } from "./audit-state";
 import type { AuditDetail, AuditFilters, AuditOptions, AuditPage } from "./shared/audit";
 
-export function useAuditRecords() {
+export function useAuditRecords(initialFilters: AuditFilters = {}) {
+  const initial = useRef(initialFilters);
   const [data, setData] = useState<AuditPage | null>(null);
   const [options, setOptions] = useState<AuditOptions>({ actors: [], actions: [] });
   const [loading, setLoading] = useState(true), [error, setError] = useState("");
@@ -42,7 +43,7 @@ export function useAuditRecords() {
     } catch (e) { if (task.current()) setOptionsError(e instanceof Error ? e.message : "请求失败"); }
   }, []);
   useEffect(() => {
-    void load({}, undefined, true); void loadOptions();
+    void load(initial.current, undefined, true); void loadOptions();
     return () => { sequence.current.cancel(); optionSequence.current.cancel(); };
   }, [load, loadOptions]);
   return { data, options, loading, error, optionsError, loadOptions,

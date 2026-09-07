@@ -1,8 +1,11 @@
-import { addDays, chinaLocalToIso } from "./date";
+import { addDays, chinaLocalToIso, todayChina } from "./date";
 import type { AuditFilters } from "./shared/audit";
 
 export type AuditDraft = { fromDate: string; toDate: string; actor: string; action: string; source: string };
 export const emptyAuditDraft: AuditDraft = { fromDate: "", toDate: "", actor: "", action: "", source: "" };
+export function defaultAuditDraft(today = todayChina()): AuditDraft {
+  return { ...emptyAuditDraft, fromDate: addDays(today, -6), toDate: today };
+}
 export function auditFilters(draft: AuditDraft): AuditFilters {
   for (const date of [draft.fromDate, draft.toDate]) {
     if (date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0,10) !== date)) throw new Error("日期范围无效");

@@ -1,7 +1,14 @@
 import { afterEach, expect, it } from "vitest";
-import { auditFilters, AuditRequestSequence, emptyAuditDraft } from "../src/audit-state";
+import { auditFilters, AuditRequestSequence, defaultAuditDraft, emptyAuditDraft } from "../src/audit-state";
 import { setBeijingTimeMode } from "../src/date";
 afterEach(() => setBeijingTimeMode(false));
+it("defaults to seven inclusive dates and supports either or both unbounded ends", () => {
+  setBeijingTimeMode(true);
+  expect(defaultAuditDraft("2026-03-03")).toEqual({...emptyAuditDraft,fromDate:"2026-02-25",toDate:"2026-03-03"});
+  expect(auditFilters({...emptyAuditDraft,fromDate:"2026-09-07"})).toEqual({from:"2026-09-06T16:00:00.000Z"});
+  expect(auditFilters({...emptyAuditDraft,toDate:"2026-09-07"})).toEqual({to:"2026-09-07T16:00:00.000Z"});
+  expect(auditFilters(emptyAuditDraft)).toEqual({});
+});
 it("converts inclusive calendar dates using the selected timezone", () => {
   setBeijingTimeMode(true);
   expect(auditFilters({...emptyAuditDraft,fromDate:"2026-09-07",toDate:"2026-09-07"})).toEqual({from:"2026-09-06T16:00:00.000Z",to:"2026-09-07T16:00:00.000Z"});

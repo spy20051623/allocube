@@ -1,12 +1,13 @@
+import { CalendarDateButton } from "./CalendarDateButton";
 import { useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader } from "./PageHeader";
 import { Modal } from "./Modal";
 import { SelectControl } from "./SelectControl";
-import { formatChina } from "./date";
+import { formatChina, todayChina } from "./date";
 import { tr, trDynamic } from "./i18n";
 import { auditActionLabel } from "./ui-copy";
-import { auditFilters, emptyAuditDraft, type AuditDraft } from "./audit-state";
+import { auditFilters, defaultAuditDraft, type AuditDraft } from "./audit-state";
 import { useAuditDetail, useAuditRecords } from "./useAuditRecords";
 import type { AuditEntry, AuditValue } from "./shared/audit";
 import "./audit.css";
@@ -80,8 +81,9 @@ function AuditDetails({ id, close }: { id: string; close: () => void }) {
   </Modal>;
 }
 export function AuditPanel() {
-  const { data, options, loading, error, optionsError, query, retry, go, loadOptions } = useAuditRecords();
-  const [draft, setDraft] = useState<AuditDraft>({ ...emptyAuditDraft }), [validation, setValidation] = useState("");
+  const [initialDraft] = useState(defaultAuditDraft);
+  const { data, options, loading, error, optionsError, query, retry, go, loadOptions } = useAuditRecords(auditFilters(initialDraft));
+  const [draft, setDraft] = useState<AuditDraft>(initialDraft), [validation, setValidation] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const change = (key: keyof AuditDraft, value: string) => setDraft(old => ({ ...old, [key]: value }));
@@ -94,12 +96,12 @@ export function AuditPanel() {
   return <div className="audit-management-page">
     <PageHeader title={tr("审计记录")} />
     <form className="card audit-filters" onSubmit={event => { event.preventDefault(); submit(); }}>
-      <label>{tr("起始日期")}<input type="date" value={draft.fromDate} onChange={e => change("fromDate", e.target.value)} /></label>
-      <label>{tr("截止日期")}<input type="date" value={draft.toDate} onChange={e => change("toDate", e.target.value)} /></label>
+      <div className="audit-date-field"><span>{tr("起始日期")}</span><CalendarDateButton date={draft.fromDate} today={todayChina()} label={draft.fromDate || tr("不限")} ariaLabel={tr("起始日期")} onSelect={value => change("fromDate", value)} allowUnbounded /></div>
+      <div className="audit-date-field"><span>{tr("截止日期")}</span><CalendarDateButton date={draft.toDate} today={todayChina()} label={draft.toDate || tr("不限")} ariaLabel={tr("截止日期")} onSelect={value => change("toDate", value)} allowUnbounded /></div>
       <label>{tr("操作者")}<SelectControl value={draft.actor} ariaLabel={tr("操作者")} options={[all, ...options.actors.map(actor => ({ value: actor.id, label: label(actor.name) }))]} onChange={v => change("actor", v)} /></label>
       <label>{tr("操作类型")}<SelectControl value={draft.action} ariaLabel={tr("操作类型")} options={[all, ...options.actions.map(action => ({ value: action, label: auditActionLabel(action) }))]} onChange={v => change("action", v)} /></label>
       <label>{tr("来源")}<SelectControl value={draft.source} ariaLabel={tr("来源")} options={[all, { value: "API", label: tr("个人 API") }, { value: "OTHER", label: tr("其他") }]} onChange={v => change("source", v)} /></label>
-      <div className="audit-filter-actions"><button className="primary-button" type="submit">{tr("查询")}</button><button className="secondary-button" type="button" onClick={() => { setDraft({ ...emptyAuditDraft }); submit(emptyAuditDraft); }}>{tr("重置")}</button></div>
+      <div className="audit-filter-actions"><button className="primary-button" type="submit">{tr("查询")}</button><button className="secondary-button" type="button" onClick={() => { const next = defaultAuditDraft(); setDraft(next); submit(next); }}>{tr("重置")}</button></div>
     </form>
     {validation && <div role="alert" className="audit-error">{validation}</div>}
     {optionsError && <div role="alert" className="audit-error">{tr("筛选选项加载失败")} <button className="secondary-button compact" onClick={() => void loadOptions()}>{tr("重试")}</button></div>}

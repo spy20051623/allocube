@@ -102,7 +102,7 @@ Routine reservation changes do not revise settled figures. A system administrato
 
 ## Audit logs
 
-Only system administrators can access audit logs. Filter by operation date, actor, action, and source, then select **Query** to apply the filters. **Reset** clears the filters and runs a new query. Dates use the current timezone mode and include both boundary dates; they refer to when the operation occurred.
+Only system administrators can access audit logs. Filter by operation date, actor, action, and source, then select **Query** to apply the filters. The default range is the latest seven dates including today. **Reset** restores this range, clears other filters, and runs a new query. Each date picker supports **Any date**: an unbounded start includes all records through the selected end date, an unbounded end includes all records from the selected start date, and two unbounded ends include all retained history. Dates use the current timezone mode and include both boundary dates; they refer to when the operation occurred.
 
 Records appear newest first, with 50 records per page and access to all retained history. Pagination keeps the same record boundary, including when returning to the first page. Run a new query to include newly recorded operations. The page does not poll automatically. Failed requests retain the displayed records and offer Retry.
 

@@ -12,7 +12,7 @@ const database = new Database(fixture.databasePath);
 try {
   const admin = database.prepare("SELECT id FROM users WHERE role='SYSTEM_ADMIN'").get().id;
   const insert = database.prepare("INSERT INTO audit_logs(id,actor_user_id,action,entity_type,entity_id,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?,?)");
-  const stamp = "2026-09-07T00:00:00.000Z";
+  const stamp = new Date().toISOString();
   database.transaction(()=>{for(let i=0;i<367;i++)insert.run(randomUUID(),admin,"RESERVATION_UPDATE","reservation",`legacy-${i}`,JSON.stringify({resource_group_id:fixture.ids.group1,start_at:stamp,end_at:"2026-09-07T01:00:00.000Z",note:"Before"}),JSON.stringify({resourceGroupId:fixture.ids.group1,startAt:stamp,endAt:"2026-09-07T02:00:00.000Z",note:"After",secret:"DO-NOT-EXPOSE"}),stamp);})();
   for(const name of ["owner","peer"]) for(const endpoint of ["/admin/audit","/admin/audit/options","/admin/audit/missing"]) assert.equal((await fixture.request(name,endpoint)).status,403);
   database.prepare("INSERT INTO machine_admins(machine_id,user_id,assigned_by,created_at) VALUES(?,?,?,?)").run(fixture.ids.machine1,fixture.ids.peer,admin,stamp);
@@ -35,8 +35,26 @@ try {
     await page.goto(fixture.origin+"/admin/audit");await page.locator("button.audit-record").first().waitFor();return page;
   }
   const page=await pageFor("zh-CN",1440);
+  const dates=await page.evaluate(()=>{
+    const day=new Date(),format=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    const end=format(day);day.setDate(day.getDate()-6);return {start:format(day),end};
+  });
+  assert.equal(await page.getByRole("button",{name:"起始日期",exact:true}).innerText(),dates.start);
+  assert.equal(await page.getByRole("button",{name:"截止日期",exact:true}).innerText(),dates.end);
+  assert.equal(await page.locator('input[type="date"]').count(),0);
+  async function unbound(field) {
+    await page.getByRole("button",{name:field,exact:true}).click();
+    await page.getByRole("dialog").getByRole("button",{name:"不限",exact:true}).click();
+    assert.equal(await page.getByRole("button",{name:field,exact:true}).innerText(),"不限");
+  }
+  async function futureStart() {
+    await unbound("截止日期");
+    await page.getByRole("button",{name:"起始日期",exact:true}).click();
+    await page.locator('.calendar-date-grid button[tabindex="0"]').focus();
+    await page.keyboard.press("PageDown");await page.keyboard.press("PageDown");await page.keyboard.press("Enter");
+  }
   let reads=0;page.on("request",r=>{const u=new URL(r.url());if(u.pathname==="/api/v1/admin/audit")reads++;});
-  await page.locator('input[type="date"]').first().fill("2099-01-01");assert.equal(reads,0);
+  await futureStart();assert.equal(reads,0);
   await page.getByRole("button",{name:"查询",exact:true}).click();await page.getByText("暂无审计记录",{exact:true}).waitFor();
   await page.getByRole("button",{name:"重置",exact:true}).click();await page.locator("button.audit-record").first().waitFor();
   await page.getByRole("button",{name:"下一页",exact:true}).click();await page.getByText(/第 2 页/).waitFor();
@@ -45,6 +63,12 @@ try {
   assert(scrollTop >= containerTop && scrollTop < containerTop + 30, `List top after paging: ${scrollTop}, container: ${containerTop}`);
   await page.locator("button.audit-record").first().click();await page.getByRole("dialog").getByText("修改后 / 记录值",{exact:true}).first().waitFor();await page.keyboard.press("Escape");
   results.explicitQueryPaginationAndKeyboard=true;
+  await unbound("起始日期");await page.getByRole("button",{name:"查询",exact:true}).click();
+  await page.locator('.audit-records[aria-busy="false"]').waitFor();
+  await unbound("截止日期");await page.getByRole("button",{name:"查询",exact:true}).click();
+  await page.locator('.audit-records[aria-busy="false"]').waitFor();
+  assert.equal(await page.locator('button.audit-record').count(),50);
+  results.defaultWeekAndUnboundedDates=true;
   // A failed refresh must retain content; an explicit retry resolves it.
   let fail=true;
   await page.route("**/api/v1/admin/audit?*",async route=>{if(fail){fail=false;await route.abort();}else await route.continue();});
@@ -55,7 +79,7 @@ try {
   let release;const held=new Promise(resolve=>{release=resolve;});let started;const heldStarted=new Promise(resolve=>{started=resolve;});let hold=true;
   await page.route("**/api/v1/admin/audit?*",async route=>{if(hold){hold=false;const response=await route.fetch();started();await held;await route.fulfill({response}).catch(()=>{});}else await route.continue();});
   await page.getByRole("button",{name:"查询",exact:true}).click();await heldStarted;
-  await page.locator('input[type="date"]').first().fill("2099-01-01");await page.getByRole("button",{name:"查询",exact:true}).click();await page.getByText("暂无审计记录",{exact:true}).waitFor();release();
+  await futureStart();await page.getByRole("button",{name:"查询",exact:true}).click();await page.getByText("暂无审计记录",{exact:true}).waitFor();release();
   await page.unrouteAll({behavior:"wait"});assert.equal(await page.locator("button.audit-record").count(),0);
   results.failedRefreshAndOutOfOrder=true;
   await page.getByRole("button",{name:"重置",exact:true}).click();await page.locator("button.audit-record").first().waitFor();
@@ -79,6 +103,17 @@ try {
     await screen.context().close();
   }
   results.bilingualDesktopAndNarrow=true;
+  const calendar = await pageFor("en",1440);
+  await calendar.goto(fixture.origin+"/calendar");
+  const calendarDate=calendar.locator(".calendar-date-control .date-button");
+  await calendarDate.click();
+  const selectedDate=await calendar.locator(".calendar-date-grid .selected").getAttribute("data-date");
+  await calendar.keyboard.press("ArrowRight");await calendar.keyboard.press("Enter");
+  await calendarDate.click();
+  assert.equal(await calendar.locator(".calendar-date-grid .selected").getAttribute("data-date"),new Date(Date.parse(selectedDate+"T00:00:00Z")+86400000).toISOString().slice(0,10));
+  assert.equal(await calendar.getByRole("button",{name:"Any date",exact:true}).count(),0);
+  await calendar.keyboard.press("Escape");await calendar.context().close();
+  results.sharedCalendarPicker=true;
   // Bulk history must not transfer payloads or stall independent health reads.
   database.transaction(()=>{for(let i=0;i<20000;i++)insert.run(randomUUID(),admin,"USER_LOGIN","session",admin,null,null,stamp);})();
   const start=performance.now();const [list,health]=await Promise.all([fixture.request("Administrator","/admin/audit"),fetch(fixture.origin+"/health")]);

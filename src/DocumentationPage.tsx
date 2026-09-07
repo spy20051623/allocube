@@ -175,11 +175,6 @@ export function DocumentationPage({ route, notify }: { route: ResolvedDocsRoute;
         </div>
         <nav className="docs-header-actions" aria-label={tr("文档快捷入口")}>
           <DisplayPreferences />
-          {section.slug === "api" && (
-            <a href={OPENAPI_URL} target="_blank" rel="noreferrer">
-              <FileJson size={16} /> OpenAPI JSON
-            </a>
-          )}
           <a href="/login"><ArrowLeft size={16} /> {tr("返回系统")}</a>
         </nav>
         <div className="docs-mobile-language"><DisplayPreferences compact /></div>

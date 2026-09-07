@@ -9,7 +9,7 @@ body.docs-page-active {
 .docs-shell { min-height: 100vh; background: var(--surface-page, #f8fafc); }
 .docs-header {
   position: sticky; top: 0; z-index: 50; height: 68px; padding: 0 28px;
-  display: grid; grid-template-columns: 245px minmax(280px, 620px) 1fr;
+  display: grid; grid-template-columns: 245px minmax(0, 1fr) max-content;
   align-items: center; gap: 22px; border-bottom: 1px solid var(--border-subtle, #e4e9f1);
   background: var(--surface-panel, rgba(255,255,255,.96)); backdrop-filter: blur(12px);
 }
@@ -18,7 +18,7 @@ body.docs-page-active {
 .docs-brand > span:last-child { display: flex; flex-direction: column; line-height: 1.05; }
 .docs-brand strong { font-size: 15px; letter-spacing: -.01em; }
 .docs-brand small { margin-top: 4px; color: var(--text-secondary, #748097); font-size: 11px; }
-.docs-search { position: relative; display: flex; align-items: center; gap: 9px; height: 40px; padding: 0 12px; border: 1px solid var(--border-subtle, #dbe2ec); border-radius: 11px; color: var(--text-secondary, #7b879b); background: var(--surface-panel, #f8fafc); }
+.docs-search { position: relative; display: flex; align-items: center; gap: 9px; min-width: 0; width: 100%; max-width: 620px; height: 40px; padding: 0 12px; border: 1px solid var(--border-subtle, #dbe2ec); border-radius: 11px; color: var(--text-secondary, #7b879b); background: var(--surface-panel, #f8fafc); }
 .docs-search:focus-within { border-color: var(--border-focus, #86a6ff); background: var(--surface-panel, white); box-shadow: 0 0 0 3px var(--focus-ring, rgba(36,87,230,.1)); }
 .docs-search input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--text-primary, #19243a); background: transparent; font: inherit; font-size: 14px; }
 .docs-search > button { display: grid; place-items: center; padding: 3px; border: 0; color: var(--text-secondary, #738096); background: transparent; cursor: pointer; }
@@ -29,8 +29,8 @@ body.docs-page-active {
 .docs-search-results strong { font-size: 13px; }
 .docs-search-results small { overflow: hidden; color: var(--text-secondary, #6e7a90); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .docs-search-empty { padding: 24px; color: var(--text-secondary, #7b8799); text-align: center; font-size: 13px; }
-.docs-header-actions { display: flex; justify-content: flex-end; gap: 18px; }
-.docs-header-actions a { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary, #526078); text-decoration: none; font-size: 13px; font-weight: 600; }
+.docs-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 18px; }
+.docs-header-actions a { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; color: var(--text-secondary, #526078); text-decoration: none; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .docs-header-actions a:hover { color: var(--text-accent, #2457e6); }
 .docs-mobile-menu { display: none; border: 0; background: transparent; color: var(--text-primary, #293650); }
 .docs-mobile-language { display: none; }
@@ -203,7 +203,7 @@ body.docs-page-active {
 @media (max-width: 1150px) {
   .docs-layout { grid-template-columns: 225px minmax(0, 800px); gap: 34px; }
   .docs-toc { display: none; }
-  .docs-header { grid-template-columns: 205px minmax(260px, 1fr) auto; }
+  .docs-header { grid-template-columns: 205px minmax(0, 1fr) max-content; }
   .docs-header-actions .language-switcher-current,
   .docs-header-actions .language-switcher-chevron { display: none; }
   .docs-header-actions .locale-switcher .language-switcher-code { display: inline; }
@@ -213,7 +213,7 @@ body.docs-page-active {
   .docs-header { height: 60px; padding: 0 16px; grid-template-columns: 1fr auto auto; gap: 8px; }
   .docs-brand small, .docs-header-actions { display: none; }
   .docs-mobile-language { display: block; }
-  .docs-search { grid-row: 2; grid-column: 1 / -1; height: 38px; }
+  .docs-search { grid-row: 2; grid-column: 1 / -1; max-width: none; height: 38px; }
   .docs-header:has(.docs-search) { height: 112px; align-content: center; }
   .docs-search-results { top: 44px; }
   .docs-mobile-menu { display: grid; place-items: center; }

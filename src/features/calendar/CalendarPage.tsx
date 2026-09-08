@@ -23,6 +23,7 @@ import {
   CircleAlert
 } from "lucide-react";
 import { createPortal } from "react-dom";
+import { useRef } from "react";
 import { api } from "../../api";
 import { type Page } from "../../app-routing";
 import {
@@ -70,6 +71,7 @@ import {
 } from "./ReservationPopovers";
 import { CalendarManualBookingModal } from "./ManualBookingModal";
 import { useCalendarController } from "./useCalendarController";
+import { CalendarZoomGuide } from "./CalendarZoomGuide";
 
 export function CalendarPage({
   user,
@@ -86,6 +88,9 @@ export function CalendarPage({
   beijingTimeMode: boolean;
   onBeijingTimeModeChange: (enabled: boolean) => void;
 }) {
+  const zoomInButtonRef = useRef<HTMLButtonElement>(null);
+  const zoomOutButtonRef = useRef<HTMLButtonElement>(null);
+  const zoomControlRef = useRef<HTMLDivElement>(null);
   const {
     setMyReservationsOpen,
     serverClockReady,
@@ -107,6 +112,8 @@ export function CalendarPage({
     setReservationMode,
     visibleHours,
     changeTimelineZoom,
+    zoomGuideDismissed,
+    dismissZoomGuide,
     timeline,
     search,
     setSearch,
@@ -348,12 +355,16 @@ export function CalendarPage({
           </div>
           <div
             className={`timeline-zoom-control calendar-day-control${view === "day" ? "" : " hidden"}`}
+            ref={zoomControlRef}
             aria-label={tr("时间轴缩放")}
+            title={tr("使用 − / + 或 Alt＋滚轮缩放")}
             aria-hidden={view !== "day"}
           >
             <button
               type="button"
               aria-label={tr("缩小时间轴")}
+              title={tr("缩小时间轴")}
+              ref={zoomOutButtonRef}
               disabled={visibleHours === 24}
               onClick={() => changeTimelineZoom("OUT")}
             >
@@ -365,6 +376,8 @@ export function CalendarPage({
             <button
               type="button"
               aria-label={tr("放大时间轴")}
+              title={tr("放大时间轴")}
+              ref={zoomInButtonRef}
               disabled={visibleHours === 6}
               onClick={() => changeTimelineZoom("IN")}
             >
@@ -382,6 +395,12 @@ export function CalendarPage({
             {refreshing ? <RefreshCw size={16} className="spin" /> : <RefreshCw size={16} />}
             {tr("刷新")}</button>
         </div>
+        {view === "day" && !zoomGuideDismissed && (
+          <CalendarZoomGuide anchorRef={zoomControlRef} onDismiss={() => {
+            dismissZoomGuide();
+            (visibleHours === 6 ? zoomOutButtonRef : zoomInButtonRef).current?.focus();
+          }} />
+        )}
         <div ref={timelineFrameRef} className="timeline-scroll-frame">
           {initialLoading && !timeline ? (
             <div className="timeline-loading calendar-panel-state">

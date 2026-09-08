@@ -706,6 +706,64 @@
   user-select: none;
 }
 
+.calendar-zoom-guide {
+  position: fixed;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  width: min(300px, calc(100vw - 24px));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-raised, white);
+  box-shadow: 0 8px 26px var(--shadow-color, rgb(29 42 68 / 18%));
+  color: var(--text-secondary, #657086);
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+.calendar-zoom-guide-arrow {
+  position: absolute;
+  left: calc(var(--guide-arrow-left) - 5px);
+  width: 9px;
+  height: 9px;
+  background: inherit;
+  transform: rotate(45deg);
+}
+.calendar-zoom-guide.above .calendar-zoom-guide-arrow {
+  bottom: -5px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.calendar-zoom-guide.below .calendar-zoom-guide-arrow {
+  top: -5px;
+  border-left: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+}
+
+.calendar-zoom-guide > svg { flex-shrink: 0; }
+.calendar-zoom-guide > span { flex: 1; min-width: 0; }
+.calendar-zoom-guide button {
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.calendar-zoom-guide button:hover,
+.calendar-zoom-guide button:focus-visible {
+  color: var(--text-accent, var(--blue));
+  background: var(--surface-accent-hover, #edf2ff);
+}
+
 .calendar-panel-state,
 .calendar-empty-state {
   min-width: 0;
@@ -2545,4 +2603,3 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-

@@ -67,6 +67,7 @@ import {
 import { TIMELINE_RESOURCE_COLUMN_WIDTH } from "./layout";
 import { useTimelineData } from "./useTimelineData";
 import { useDragAutoScroll } from "./useDragAutoScroll";
+import { readZoomGuideDismissed, saveZoomGuideDismissed } from "./calendar-zoom-guide-preference";
 
 export function useCalendarController({
   user,
@@ -124,6 +125,11 @@ export function useCalendarController({
   const [visibleHours, setVisibleHours] = useState(
     initialCalendarPreference.visibleHours
   );
+  const [zoomGuideDismissed, setZoomGuideDismissed] = useState(readZoomGuideDismissed);
+  const dismissZoomGuide = useCallback(() => {
+    setZoomGuideDismissed(true);
+    saveZoomGuideDismissed();
+  }, []);
   const [timelineWindowStartMinutes, setTimelineWindowStartMinutes] = useState(
     () => defaultDayWindowStartMinutes(currentTime)
   );
@@ -372,12 +378,13 @@ export function useCalendarController({
     );
     timelineStartMinutesRef.current = nextStartMinutes;
     setVisibleHours(nextHours);
+    dismissZoomGuide();
     writeCalendarPreference({ visibleHours: nextHours });
     setTimelineScrollTarget((current) => ({
       startMinutes: nextStartMinutes,
       revision: current.revision + 1
     }));
-  }, [visibleHours]);
+  }, [visibleHours, dismissZoomGuide]);
 
   const handleTimelineWheel = useCallback((event: WheelEvent) => {
     if (view !== "day") return;
@@ -1313,6 +1320,8 @@ export function useCalendarController({
     setReservationMode,
     visibleHours,
     changeTimelineZoom,
+    zoomGuideDismissed,
+    dismissZoomGuide,
     timeline,
     search,
     setSearch,

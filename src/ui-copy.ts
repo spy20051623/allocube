@@ -81,6 +81,7 @@ export function auditActionLabel(action: string) {
       PROFILE_CHANGE_REJECT: tr("拒绝资料修改"),
       MACHINE_CREATE: tr("创建机器"),
       MACHINE_UPDATE: tr("修改机器资料"),
+      MACHINE_ANNOUNCEMENT_UPDATE: tr("修改机器公告"),
       MACHINE_ADMIN_ASSIGN: tr("授权机器管理员"),
       MACHINE_ADMIN_REMOVE: tr("移除机器管理员"),
       MACHINE_ACCESS_REQUEST_CREATE: tr("申请机器使用权"),

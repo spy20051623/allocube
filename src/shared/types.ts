@@ -37,6 +37,7 @@ export interface Machine {
   name: string;
   address: string;
   hardwareNotes: string;
+  announcement: string;
   connectionGuide: string;
   tags: string[];
   resourceSummary: string;

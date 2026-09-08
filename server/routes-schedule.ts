@@ -470,6 +470,7 @@ export function registerScheduleRoutes(
         address: row.address,
         resourceSummary: machineResourceSummary(String(row.id)),
         hardwareNotes: row.hardware_notes,
+        announcement: row.announcement,
         connectionGuide: row.connection_guide,
         tags: parseTags(String(row.tags_json)),
         status: row.status,

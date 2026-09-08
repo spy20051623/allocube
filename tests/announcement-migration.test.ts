@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { beforeAll, describe, expect, it } from "vitest";
-import { FINAL_SCHEMA_SQL, FINAL_SCHEMA_VERSION } from "../server/schema.js";
+import { SCHEMA_V21_SQL, FINAL_SCHEMA_VERSION } from "./helpers/schema-v21";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-announcement-migration-"));
 const databasePath = path.join(directory, "version-15.sqlite");
@@ -15,7 +15,7 @@ process.env.BOOTSTRAP_ADMIN_PASSWORD = "Admin12#$";
 let dbModule: typeof import("../server/db.js");
 
 beforeAll(async () => {
-  const version15Schema = FINAL_SCHEMA_SQL
+  const version15Schema = SCHEMA_V21_SQL
     .replace("    published_at TEXT NOT NULL,\n", "")
     .replace(
       "  CREATE INDEX announcements_status_published_idx\n    ON announcements(status, published_at, id);",

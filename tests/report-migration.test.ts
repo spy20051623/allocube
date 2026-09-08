@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { afterAll, expect, it } from "vitest";
-import { FINAL_SCHEMA_SQL, FINAL_SCHEMA_VERSION } from "../server/schema";
+import { SCHEMA_V21_SQL, FINAL_SCHEMA_VERSION } from "./helpers/schema-v21";
 import { REPORT_SCHEMA_SQL } from "../server/report-schema";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-report-migration-"));
@@ -14,7 +14,7 @@ let database: typeof import("../server/db");
 afterAll(() => database?.db.close());
 it("版本 19 原地升级保留旧数据，新增统计表可随数据库备份恢复", async () => {
   const legacy = new Database(process.env.DATABASE_PATH!);
-  legacy.exec(FINAL_SCHEMA_SQL.replace(REPORT_SCHEMA_SQL, ""));
+  legacy.exec(SCHEMA_V21_SQL.replace(REPORT_SCHEMA_SQL, ""));
   legacy.prepare("INSERT INTO schema_migrations VALUES(19,?)").run(new Date().toISOString());
   legacy.prepare("INSERT INTO app_meta VALUES('retained','original')").run(); legacy.close();
   database = await import("../server/db"); await database.initializeDatabase();

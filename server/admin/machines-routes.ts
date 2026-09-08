@@ -23,6 +23,7 @@ import { machineAuditPayload, machineAuditPayloadFromRow, assignMachineManager }
 import { longDisableSchema, versionSchema } from "./unavailability-schema.js";
 import { getCurrentMachineRow } from "./records.js";
 import { machineDeleteImpact, notifyDeletedMachineUsers, deleteMachineRecords } from "./deletion-service.js";
+import { registerMachineAnnouncementRoutes } from "./machine-announcement-routes.js";
 
 const machineSchema = z.object({
   name: z.string().trim().min(1).max(80),
@@ -38,6 +39,7 @@ const machineUpdateSchema = machineSchema.extend({
 });
 
 export function registerMachinesAdminRoutes(app: FastifyInstance, publishRevision: (revision: number) => void) {
+  registerMachineAnnouncementRoutes(app, publishRevision);
 
   app.get("/api/v1/admin/machines", async (request, reply) => {
     const auth = requireAuth(request, reply);
@@ -146,6 +148,7 @@ export function registerMachinesAdminRoutes(app: FastifyInstance, publishRevisio
       address: row.address,
       resourceSummary: machineResourceSummary(String(row.id)),
       hardwareNotes: row.hardware_notes,
+      announcement: row.announcement,
       connectionGuide: row.connection_guide,
       tags: parseTags(String(row.tags_json)),
       status: row.status,

@@ -1,7 +1,7 @@
 import { AUDIT_INDEX_SQL } from "./audit-schema.js";
 import { REPORT_SCHEMA_SQL } from "./report-schema.js";
 
-export const FINAL_SCHEMA_VERSION = 21;
+export const FINAL_SCHEMA_VERSION = 22;
 
 export const FINAL_SCHEMA_SQL = `
   ${REPORT_SCHEMA_SQL}
@@ -210,6 +210,7 @@ export const FINAL_SCHEMA_SQL = `
     hardware_notes TEXT NOT NULL DEFAULT '',
     connection_guide TEXT NOT NULL DEFAULT '',
     management_notes TEXT NOT NULL DEFAULT '',
+    announcement TEXT NOT NULL DEFAULT '',
     tags_json TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE', 'DISABLED')),
     disabled_at TEXT,

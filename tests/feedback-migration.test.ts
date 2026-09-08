@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { beforeAll, describe, expect, it } from "vitest";
-import { FINAL_SCHEMA_SQL, FINAL_SCHEMA_VERSION } from "../server/schema.js";
+import { SCHEMA_V21_SQL, FINAL_SCHEMA_VERSION } from "./helpers/schema-v21";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-feedback-migration-"));
 const databasePath = path.join(directory, "version-16.sqlite");
@@ -15,11 +15,11 @@ process.env.BOOTSTRAP_ADMIN_PASSWORD = "Admin12#$";
 let dbModule: typeof import("../server/db.js");
 
 beforeAll(async () => {
-  const feedbackStart = FINAL_SCHEMA_SQL.indexOf("  CREATE TABLE feedback_tickets (");
-  const auditStart = FINAL_SCHEMA_SQL.indexOf("  CREATE TABLE audit_logs (");
+  const feedbackStart = SCHEMA_V21_SQL.indexOf("  CREATE TABLE feedback_tickets (");
+  const auditStart = SCHEMA_V21_SQL.indexOf("  CREATE TABLE audit_logs (");
   if (feedbackStart < 0 || auditStart <= feedbackStart) throw new Error("无法构造版本 16 数据库");
   const version16Schema = (
-    FINAL_SCHEMA_SQL.slice(0, feedbackStart) + FINAL_SCHEMA_SQL.slice(auditStart)
+    SCHEMA_V21_SQL.slice(0, feedbackStart) + SCHEMA_V21_SQL.slice(auditStart)
   )
     .replace("    entity_type TEXT,\n", "")
     .replace("    entity_id TEXT,\n", "")

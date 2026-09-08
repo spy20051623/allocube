@@ -116,7 +116,7 @@ Store instance secrets separately from the backup set. Before restoring, stop Al
 3. Build and start the new version.
 4. Check `/health`, login, "Calendar", feedback and private images, notification badges, write operations, email delivery, and the backup manifest.
 
-The current database schema version is 20. Startup applies supported migrations automatically. Recent changes are:
+The current database schema version is 22. Startup applies supported migrations automatically. Recent changes are:
 
 | Version | Change |
 |---|---|
@@ -124,6 +124,8 @@ The current database schema version is 20. Startup applies supported migrations 
 | 18 | Translation templates and parameters for in-app notifications |
 | 19 | Deduplication records for overdue administrator review emails |
 | 20 | Daily usage statistics, report versions, and full recalculation tasks |
+| 21 | Audit query indexes |
+| 22 | Machine announcement text, empty for existing machines |
 
 The earlier Reservations redesign and production bootstrap-password fix did not add schema changes. After upgrading, check atomic editing-sequence submissions, redirects from old `/reservations` links, and administrator review reminders. Existing instances do not need a bootstrap password variable, but operators must still check for legacy default passwords.
 
@@ -180,3 +182,9 @@ This command should only be executed locally on the server. After recovery, log 
 ## Audit queries
 
 Schema version 21 adds audit query indexes without rewriting historical records or changing audit writers. Upgrades from version 20 preserve existing data. Back up the database before upgrading; a downgrade must restore a compatible pre-upgrade backup. Audit queries remain restricted to system administrators. The internal list, filter-options, and detail endpoints are under `/api/v1/admin/audit`; the official API is unchanged. Lists return safe summaries and details are loaded on demand. No retention or export policy is added. After building, run `npm run test:audit-http` for isolated HTTP, permission, bilingual layout, and network-failure checks; use the Playwright configuration described above.
+
+## Machine announcements
+
+The machine information page has a separate announcement editor. System administrators and the machine's administrators can edit it; ordinary members have read-only access. Each machine stores one plain-text announcement of up to 2,000 characters. Multiline text is supported, line endings are normalized, leading and trailing whitespace is removed, and saving an empty value removes the announcement. Expanding a machine in the calendar displays the first line above its resource groups, with an ellipsis for overflow or additional lines; clicking it opens the full text with line breaks preserved. Live updates preserve both announcement drafts and calendar reservation drafts. Announcements do not send notifications or email.
+
+Schema version 22 adds `machines.announcement`, defaulting to an empty value for existing machines. The separate `PUT /api/v1/admin/machines/:id/announcement` endpoint accepts `announcement` and `expectedVersion`. Version checking, announcement and machine version updates, the `MACHINE_ANNOUNCEMENT_UPDATE` audit entry, and the schedule revision increment share one transaction. Saving other machine information does not overwrite the announcement, and the official API is unchanged. After building, run `npm run test:machine-announcement` for isolated browser checks of day/week views, truncation, themes and narrow screens, live text, draft preservation, conflict cancellation and overwrite, duplicate submissions, and access revocation. Use the Playwright configuration described above.

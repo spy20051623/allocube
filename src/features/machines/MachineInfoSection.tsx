@@ -25,6 +25,7 @@ import { useAppDialog } from "../../components/dialogs";
 import { SectionHeader } from "../../components/SectionHeader";
 import { MaintenanceModal, MachineStopModal } from "./UnavailabilityModals";
 import { MachineFormModal } from "./MachineFormModal";
+import { MachineAnnouncementSection } from "./MachineAnnouncement";
 
 function ExpandableMachineText({ value }: { value: string }) {
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -262,6 +263,8 @@ export function MachineInfoSection({
         </div>
       </section>
 
+      <MachineAnnouncementSection machine={detail} canManage={canManage} notify={notify}
+        onSaved={async () => { await Promise.all([load(), reloadMachines()]); }} />
       <section className="card panel-card machine-unavailability-panel maintenance-panel">
         <SectionHeader
           title={tr("维护管理")}

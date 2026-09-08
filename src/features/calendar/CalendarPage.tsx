@@ -23,7 +23,7 @@ import {
   CircleAlert
 } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { api } from "../../api";
 import { type Page } from "../../app-routing";
 import {
@@ -72,6 +72,7 @@ import {
 import { CalendarManualBookingModal } from "./ManualBookingModal";
 import { useCalendarController } from "./useCalendarController";
 import { CalendarZoomGuide } from "./CalendarZoomGuide";
+import { MachineAnnouncementRow, MachineAnnouncementViewer } from "../machines/MachineAnnouncement";
 
 export function CalendarPage({
   user,
@@ -91,6 +92,7 @@ export function CalendarPage({
   const zoomInButtonRef = useRef<HTMLButtonElement>(null);
   const zoomOutButtonRef = useRef<HTMLButtonElement>(null);
   const zoomControlRef = useRef<HTMLDivElement>(null);
+  const [announcementMachineId, setAnnouncementMachineId] = useState<string | null>(null);
   const {
     setMyReservationsOpen,
     serverClockReady,
@@ -190,6 +192,10 @@ export function CalendarPage({
     manualBookingOpen,
     appendDraft
   } = useCalendarController({ user, settings, notify, navigate, beijingTimeMode, onBeijingTimeModeChange });
+  const announcementMachine = timeline?.machines.find(machine => machine.id === announcementMachineId && machine.announcement);
+  useEffect(() => {
+    if (announcementMachineId && timeline && !announcementMachine) setAnnouncementMachineId(null);
+  }, [announcementMachineId, announcementMachine, timeline]);
 
   return (
     <div className="calendar-layout composer-open">
@@ -401,6 +407,7 @@ export function CalendarPage({
             (visibleHours === 6 ? zoomOutButtonRef : zoomInButtonRef).current?.focus();
           }} />
         )}
+        {announcementMachine && <MachineAnnouncementViewer machine={announcementMachine} onClose={() => setAnnouncementMachineId(null)} />}
         <div ref={timelineFrameRef} className="timeline-scroll-frame">
           {initialLoading && !timeline ? (
             <div className="timeline-loading calendar-panel-state">
@@ -483,6 +490,7 @@ export function CalendarPage({
                           aria-hidden={machineCollapsed}
                         >
                           <div className="machine-contents-inner">
+                            <MachineAnnouncementRow machine={machine} onOpen={() => setAnnouncementMachineId(machine.id)} />
                             {machineGroups.map((group) => {
                               const groupTarget: CalendarReservationTarget = {
                                 scope: "RESOURCE_GROUP",

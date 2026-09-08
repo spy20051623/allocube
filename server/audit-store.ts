@@ -33,7 +33,7 @@ function normalized(data: Payload): Payload {
 // Deliberately bounded per object family. Never serialize arbitrary old audit payloads.
 const familyFields: Record<string, string[]> = {
   reservation: ["startAt", "endAt", "scope", "status", "title", "purpose", "note", "reason", "action", "resultingSegments", "replacementBatchId", "replacedReservationIds", "newReservationIds", "replacesReservationId", "segmentCount"],
-  machine: ["name", "address", "hardwareNotes", "connectionGuide", "tags", "status", "reason", "managementNotesChanged", "userId"],
+  machine: ["name", "address", "hardwareNotes", "connectionGuide", "announcement", "tags", "status", "reason", "managementNotesChanged", "userId"],
   resource_group: ["name", "description", "tags", "allocations", "status", "reason", "sortOrder", "version"],
   resource_pool: ["name", "kind", "unit", "description", "sharingMode", "rangeStart", "rangeEnd", "capacity", "items", "status", "reason", "version"],
   user: ["username", "displayName", "employeeNumber", "email", "status", "reason", "reviewReason"],

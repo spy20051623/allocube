@@ -1,4 +1,11 @@
 {
+  "机器公告": "Machine announcement",
+  "修改机器公告": "Update machine announcement",
+  "编辑机器公告": "Edit machine announcement",
+  "机器公告已保存": "Machine announcement saved",
+  "暂无机器公告": "No machine announcement",
+  "查看 {{name}} 的机器公告：{{content}}": "Read the announcement for {{name}}: {{content}}",
+  "公告不能超过 {{count}} 个字符": "Announcements must not exceed {{count}} characters",
   "action.machine.new": "New",
   "action.machine.create": "Create",
   "action.maintenance.create": "Create",

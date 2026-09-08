@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { beforeAll, describe, expect, it } from "vitest";
-import { FINAL_SCHEMA_SQL, FINAL_SCHEMA_VERSION } from "../server/schema.js";
+import { SCHEMA_V21_SQL, FINAL_SCHEMA_VERSION } from "./helpers/schema-v21";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-api-migration-"));
 const databasePath = path.join(directory, "version-13.sqlite");
@@ -24,7 +24,7 @@ beforeAll(async () => {
     return schema.slice(0, sectionStart) + schema.slice(sectionEnd);
   };
   let version13Schema = removeSchemaSection(
-    FINAL_SCHEMA_SQL,
+    SCHEMA_V21_SQL,
     "  CREATE TABLE api_tokens (",
     "  CREATE TABLE auth_tokens ("
   );

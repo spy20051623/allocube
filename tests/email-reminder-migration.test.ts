@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { beforeAll, describe, expect, it } from "vitest";
-import { FINAL_SCHEMA_SQL, FINAL_SCHEMA_VERSION } from "../server/schema.js";
+import { SCHEMA_V21_SQL, FINAL_SCHEMA_VERSION } from "./helpers/schema-v21";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-email-v19-"));
 const databasePath = path.join(directory, "version-18.sqlite");
@@ -15,15 +15,15 @@ process.env.BOOTSTRAP_ADMIN_PASSWORD = "Admin12#$";
 let dbModule: typeof import("../server/db.js");
 
 beforeAll(async () => {
-  const tableStart = FINAL_SCHEMA_SQL.indexOf(
+  const tableStart = SCHEMA_V21_SQL.indexOf(
     "  CREATE TABLE admin_request_email_reminders ("
   );
-  const tableEnd = FINAL_SCHEMA_SQL.indexOf("  CREATE TABLE email_outbox (", tableStart);
+  const tableEnd = SCHEMA_V21_SQL.indexOf("  CREATE TABLE email_outbox (", tableStart);
   if (tableStart < 0 || tableEnd <= tableStart) {
     throw new Error("无法构造版本 18 数据库");
   }
   const version18Schema =
-    FINAL_SCHEMA_SQL.slice(0, tableStart) + FINAL_SCHEMA_SQL.slice(tableEnd);
+    SCHEMA_V21_SQL.slice(0, tableStart) + SCHEMA_V21_SQL.slice(tableEnd);
   const legacy = new Database(databasePath);
   legacy.pragma("foreign_keys = ON");
   legacy.exec(version18Schema.replace(REPORT_SCHEMA_SQL, ""));

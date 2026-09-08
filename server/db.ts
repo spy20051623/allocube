@@ -598,6 +598,13 @@ export async function initializeDatabase() {
     }).exclusive();
     schemaVersion = { version: 21 };
   }
+  if (schemaVersion.version === 21 && FINAL_SCHEMA_VERSION >= 22) {
+    db.transaction(() => {
+      db.exec("ALTER TABLE machines ADD COLUMN announcement TEXT NOT NULL DEFAULT ''");
+      db.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES(22, ?)").run(nowIso());
+    }).exclusive();
+    schemaVersion = { version: 22 };
+  }
   if (schemaVersion.version !== FINAL_SCHEMA_VERSION) {
     throw new Error(
       `数据库结构版本不匹配：当前 ${schemaVersion.version ?? 0}，需要 ${FINAL_SCHEMA_VERSION}。开发阶段请先重置数据库。`

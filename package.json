@@ -18,6 +18,7 @@
     "test:calendar-adjustment": "node scripts/test-calendar-adjustment.mjs",
     "test:calendar-boundaries": "node scripts/test-calendar-boundaries.mjs",
     "test:calendar-zoom-guide": "node scripts/test-calendar-zoom-guide.mjs",
+    "test:machine-announcement": "node scripts/test-machine-announcement.mjs",
     "test:edit-conflicts": "node scripts/test-edit-conflicts.mjs",
     "test:docs-loading": "node scripts/test-docs-loading.mjs",
     "test:browser-cache": "node scripts/test-browser-cache.mjs",

@@ -13,6 +13,7 @@ import type { AuditEntry, AuditValue } from "./shared/audit";
 import "./audit.css";
 
 const fieldLabels: Record<string, string> = {
+  announcement: "机器公告",
   startAt: "开始时间", endAt: "结束时间", scope: "占用范围", status: "状态", title: "标题", purpose: "用途", note: "备注", reason: "原因",
   action: "处理方式", resultingSegments: "调整后时段", replacementBatchId: "新占用批次", replacedReservationIds: "被替换占用", newReservationIds: "新占用", replacesReservationId: "替换的占用", segmentCount: "时段数量",
   allocations: "资源组成", sharingMode: "共享模式", rangeStart: "范围起点", rangeEnd: "范围终点", capacity: "容量", items: "资源设备", name: "名称", address: "地址", hardwareNotes: "硬件信息", connectionGuide: "连接说明", tags: "标签", managementNotesChanged: "管理备注已修改", userId: "关联用户",

@@ -155,17 +155,19 @@ describe("资源日历状态", () => {
     ).toBe(3);
   });
 
-  it("日视图默认展示十二小时并按当前显示时区选择窗口", () => {
+  it("日视图默认展示全天，缩放后按当前显示时区选择窗口", () => {
     setBeijingTimeMode(true);
     try {
       expect(
         defaultDayWindowStartMinutes(
-          new Date("2026-07-26T05:59:00.000Z").getTime()
+          new Date("2026-07-26T05:59:00.000Z").getTime(),
+          12
         )
       ).toBe(9 * 60);
       expect(
         defaultDayWindowStartMinutes(
-          new Date("2026-07-26T06:00:00.000Z").getTime()
+          new Date("2026-07-26T06:00:00.000Z").getTime(),
+          12
         )
       ).toBe(12 * 60);
       expect(
@@ -175,6 +177,7 @@ describe("资源日历状态", () => {
         )
       ).toBe(15 * 60);
       expect(defaultDayWindowStartMinutes(Date.now(), 24)).toBe(0);
+      expect(defaultDayWindowStartMinutes(Date.now())).toBe(0);
     } finally {
       setBeijingTimeMode(false);
     }

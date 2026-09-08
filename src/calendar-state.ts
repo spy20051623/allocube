@@ -47,6 +47,7 @@ export type CalendarDraftFieldIssues = {
 };
 
 export const DAY_ZOOM_LEVELS = [6, 12, 24] as const;
+export const DEFAULT_DAY_VISIBLE_HOURS = 24;
 
 export function timelineNearbyHitIndexes({
   items,
@@ -190,7 +191,7 @@ export function clampDayWindowStartMinutes(
 
 export function defaultDayWindowStartMinutes(
   now: number,
-  visibleHours = 12
+  visibleHours: number = DEFAULT_DAY_VISIBLE_HOURS
 ) {
   const hourPart = new Intl.DateTimeFormat("en-US", {
     ...(isBeijingTimeMode() ? { timeZone: "Asia/Shanghai" } : {}),

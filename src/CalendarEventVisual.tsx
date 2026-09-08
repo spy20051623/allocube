@@ -1,5 +1,6 @@
 import { CircleAlert, PowerOff, X } from "lucide-react";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
+import { intersectCalendarInterval, type CalendarViewRange } from "./calendar-interval";
 
 type CalendarEventKind =
   | "GENERAL_RESERVATION"
@@ -22,11 +23,9 @@ type CalendarDayEventModel = Omit<CalendarEventModel, "kind"> & {
   kind: CalendarEventKind | "ERASE_PREVIEW" | "CONFLICT_PREVIEW";
 };
 
-type CalendarRange = { from: string; to: string };
-
 type CalendarDayEventBlockProps = {
   event: CalendarDayEventModel;
-  range: CalendarRange;
+  range: CalendarViewRange;
   periodLabel?: string;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
 };
@@ -35,7 +34,7 @@ type CalendarWeekEventProps =
   | {
       event: CalendarEventModel;
       variant: "track";
-      range: CalendarRange;
+      range: CalendarViewRange;
     }
   | {
       event: CalendarEventModel;
@@ -83,27 +82,14 @@ function weekDetailMarkerClassName(event: CalendarEventModel) {
 function timelineRangeStyle(
   start: string,
   end: string,
-  range: CalendarRange
+  range: CalendarViewRange
 ): CSSProperties | null {
-  const from = new Date(range.from).getTime();
-  const to = new Date(range.to).getTime();
-  const startTime = new Date(start).getTime();
-  const endTime = new Date(end).getTime();
-  if (
-    !Number.isFinite(from) ||
-    !Number.isFinite(to) ||
-    !Number.isFinite(startTime) ||
-    !Number.isFinite(endTime) ||
-    to <= from ||
-    endTime <= startTime
-  ) {
-    return null;
-  }
-  const left = ((Math.max(from, startTime) - from) / (to - from)) * 100;
-  const right = ((Math.min(to, endTime) - from) / (to - from)) * 100;
+  const visible = intersectCalendarInterval({ startAt: start, endAt: end }, range);
+  if (!visible) return null;
+  const from = Date.parse(range.from), duration = Date.parse(range.to) - from;
   return {
-    left: `${left}%`,
-    width: `${Math.max(0, right - left)}%`
+    left: `${((visible.start - from) / duration) * 100}%`,
+    width: `${((visible.end - visible.start) / duration) * 100}%`
   };
 }
 
@@ -160,7 +146,7 @@ function TimelineBar({
 }: {
   start: string;
   end: string;
-  range: CalendarRange;
+  range: CalendarViewRange;
   className: string;
   children: ReactNode;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;

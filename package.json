@@ -16,6 +16,7 @@
     "db:reset": "node scripts/reset-db.mjs",
     "admin:reset-password": "node scripts/reset-admin-password.mjs",
     "test:calendar-adjustment": "node scripts/test-calendar-adjustment.mjs",
+    "test:calendar-boundaries": "node scripts/test-calendar-boundaries.mjs",
     "test:edit-conflicts": "node scripts/test-edit-conflicts.mjs",
     "test:docs-loading": "node scripts/test-docs-loading.mjs",
     "test:browser-cache": "node scripts/test-browser-cache.mjs",

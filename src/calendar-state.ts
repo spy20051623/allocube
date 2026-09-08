@@ -1,5 +1,6 @@
 import { tr } from "./i18n/index";
 import { isBeijingTimeMode } from "./date";
+import { intersectCalendarInterval } from "./calendar-interval";
 import type {
   ReservationPreviewItem,
   ReservationSegmentInput
@@ -84,11 +85,9 @@ export function timelineNearbyHitIndexes({
   }
 
   const projected = items.flatMap((item, index) => {
-    const start = Math.max(from, new Date(item.startAt).getTime());
-    const end = Math.min(to, new Date(item.endAt).getTime());
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
-      return [];
-    }
+    const visible = intersectCalendarInterval(item, { from: rangeStart, to: rangeEnd });
+    if (!visible) return [];
+    const { start, end } = visible;
     const left = ((start - from) / (to - from)) * trackWidth;
     const right = ((end - from) / (to - from)) * trackWidth;
     return [{ index, left, right, width: right - left }];

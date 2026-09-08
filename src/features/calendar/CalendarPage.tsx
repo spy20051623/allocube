@@ -1,4 +1,5 @@
 import { CalendarDateButton } from "../../CalendarDateButton";
+import { intersectCalendarInterval } from "../../calendar-interval";
 import { PageHeader } from "../../PageHeader";
 import { CalendarMyReservations } from "../../CalendarMyReservations";
 import type { OwnReservationDetail } from "../../shared/my-reservations";
@@ -611,9 +612,9 @@ export function CalendarPage({
                                         const dayEnd = chinaLocalToIso(
                                           `${addDays(day, 1)}T00:00`
                                         );
+                                        const dayRange = { from: dayStart, to: dayEnd };
                                         const dayReservations = reservations.filter(
-                                          (item) =>
-                                            item.startAt < dayEnd && item.endAt > dayStart
+                                          (item) => intersectCalendarInterval(item, dayRange) !== null
                                         );
                                         const dayUnavailability =
                                           timeline.unavailability.filter(
@@ -621,8 +622,7 @@ export function CalendarPage({
                                               item.machineId === machine.id &&
                                               (!item.resourceGroupId ||
                                                 item.resourceGroupId === group.id) &&
-                                              item.startAt < dayEnd &&
-                                              item.endAt > dayStart
+                                              intersectCalendarInterval(item, dayRange) !== null
                                           );
                                         return (
                                           <CalendarWeekDayCell
@@ -841,9 +841,7 @@ export function CalendarPage({
                                       )}
                                       {timelineDrafts
                                         .filter(
-                                          (draft) =>
-                                            draft.startAt < range.to &&
-                                            draft.endAt > range.from
+                                          (draft) => intersectCalendarInterval(draft, range) !== null
                                         )
                                         .map((draft, index) => {
                                           const event = draftCalendarEvent(

@@ -7,6 +7,7 @@ import { publicSecurityFilingValidationError } from "../../src/shared/public-sec
 import { requireSystemAdmin } from "../auth.js";
 import { getAdminSettings, db, incrementRegistrationConfigRevision } from "../db.js";
 import { normalizeAllowedEmailDomains } from "../../src/shared/email-domain-rules.js";
+import { capBookingAdvanceDays } from "../../src/shared/booking-policy.js";
 
 export function registerSettingsAdminRoutes(app: FastifyInstance) {
 
@@ -21,15 +22,10 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
     if (!auth) return;
     const body = z
       .object({
-        minBookingMinutes: z.number().int().min(1).max(1440),
-        maxBookingMinutes: z.number().int().min(1).max(10080),
-        advanceDays: z.number().int().min(1).max(365),
+        advanceDays: z.number().transform(capBookingAdvanceDays).pipe(z.number().int().min(1)),
         blockAdminBookings: z.boolean().optional(),
         expectedVersion: z.number().int().min(1),
         overwrite: z.boolean().optional().default(false)
-      })
-      .refine((value) => value.maxBookingMinutes >= value.minBookingMinutes, {
-        message: "最长时长不能小于最短时长"
       })
       .parse(request.body);
     const settings = updateAdminSettings(auth.user.id, body, updatedAt => {
@@ -38,30 +34,16 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
          ON CONFLICT(key) DO UPDATE SET
            value = excluded.value, updated_at = excluded.updated_at`
       );
-      upsert.run(
-        "min_booking_minutes",
-        String(body.minBookingMinutes),
-        updatedAt
-      );
-      upsert.run(
-        "max_booking_minutes",
-        String(body.maxBookingMinutes),
-        updatedAt
-      );
       upsert.run("advance_days", String(body.advanceDays), updatedAt);
-      // Older clients updating duration rules must not reset the administrator policy.
+      // Clients updating the booking window must not reset the administrator policy.
       if (body.blockAdminBookings !== undefined) {
         upsert.run("block_admin_bookings", body.blockAdminBookings ? "1" : "0", updatedAt);
       }
     }, (before, after) => ({
       action: "SETTINGS_UPDATE", entityId: "booking", before: {
-        minBookingMinutes: before.minBookingMinutes,
-        maxBookingMinutes: before.maxBookingMinutes,
         advanceDays: before.advanceDays,
         blockAdminBookings: before.blockAdminBookings
       }, after: {
-        minBookingMinutes: after.minBookingMinutes,
-        maxBookingMinutes: after.maxBookingMinutes,
         advanceDays: after.advanceDays,
         blockAdminBookings: after.blockAdminBookings
       }

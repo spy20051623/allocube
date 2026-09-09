@@ -48,7 +48,7 @@ Maintenance can be applied to the entire machine or specified resource groups, w
 - Trim the start or end of a reservation.
 - Split a reservation that spans the maintenance window into two segments.
 
-Remaining segments shorter than the system's minimum reservation duration will be discarded. Canceling maintenance does not automatically restore previously canceled or adjusted reservations.
+Canceling maintenance does not automatically restore previously canceled or adjusted reservations.
 
 ## Releasing reservations
 

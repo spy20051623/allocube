@@ -124,12 +124,8 @@ export function validateSegmentTimes(
   if (!Number.isFinite(current.getTime())) {
     throw new BusinessError("服务器时间无效");
   }
-  const duration = (end.getTime() - start.getTime()) / 60000;
-  if (duration < settings.minBookingMinutes) {
-    throw new BusinessError(`占用时间至少需要 ${settings.minBookingMinutes} 分钟`);
-  }
-  if (duration > settings.maxBookingMinutes) {
-    throw new BusinessError(`单次占用最长 ${settings.maxBookingMinutes} 分钟`);
+  if (end.getTime() <= start.getTime()) {
+    throw new BusinessError("结束时间必须晚于开始时间");
   }
   if (start.getTime() < current.getTime()) {
     throw new BusinessError("不能占用已经过去的时间");
@@ -203,7 +199,6 @@ function getBusyIntervals(
 function splitByBusy(
   segment: ReservationSegmentInput,
   busy: BusyInterval[],
-  minMinutes: number,
   serverMinute: string
 ) {
   const requestedStart = new Date(segment.startAt).getTime();
@@ -229,7 +224,7 @@ function splitByBusy(
   const result: ReservationSegmentInput[] = [];
   let cursor = requestedStart;
   for (const item of merged) {
-    if ((item.start - cursor) / 60000 >= minMinutes) {
+    if (item.start > cursor) {
       result.push({
         ...segment,
         startMode:
@@ -242,7 +237,7 @@ function splitByBusy(
     }
     cursor = Math.max(cursor, item.end);
   }
-  if ((requestedEnd - cursor) / 60000 >= minMinutes) {
+  if (requestedEnd > cursor) {
     result.push({
       ...segment,
       startMode:
@@ -261,7 +256,6 @@ export function previewSegments(
   excludeReservationId?: string | readonly string[],
   serverMinute = currentMinuteIso()
 ): ReservationPreviewItem[] {
-  const settings = getSettings();
   return rawSegments.map((raw) => {
     const segment = normalizeSegmentStart(
       segmentSchema.parse(raw),
@@ -331,7 +325,6 @@ export function previewSegments(
       splitSegments: splitByBusy(
         normalizedSegment,
         busy,
-        settings.minBookingMinutes,
         serverMinute
       )
     };
@@ -354,14 +347,13 @@ export function assertUserCanAccessSegments(userId: string, rawSegments: unknown
 
 /** Internal calendar flow: elapsed slots may disappear, but malformed inputs still fail. */
 export function previewAvailableSegments(rawSegments: unknown[], exclude?: string | readonly string[], minute = currentMinuteIso()) {
-  const minimum = getSettings().minBookingMinutes;
   return rawSegments.map(raw => {
     const parsed = segmentSchema.parse(raw);
     if (parsed.endAt <= parsed.startAt) throw new BusinessError("结束时间必须晚于开始时间");
     const input = normalizeSegmentStart(parsed, minute);
-    if ((Date.parse(input.endAt) - Date.parse(input.startAt)) / 60_000 < minimum) {
+    if (input.endAt <= input.startAt) {
       return { input, available: false, conflicts: [{ type: "RESOURCE_UNAVAILABLE" as const,
-        startAt: parsed.startAt, endAt: parsed.endAt, label: `占用时间至少需要 ${minimum} 分钟` }], splitSegments: [] };
+        startAt: parsed.startAt, endAt: parsed.endAt, label: "该占用已经结束或无法修改" }], splitSegments: [] };
     }
     return previewSegments([input], exclude, minute)[0];
   });

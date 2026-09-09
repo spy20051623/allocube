@@ -14,7 +14,7 @@ beforeAll(async () => {
 afterAll(() => fixture.close());
 
 const cases = [
-  ["/settings", { minBookingMinutes: 3, maxBookingMinutes: 600, advanceDays: 20 }],
+  ["/settings", { advanceDays: 20 }],
   ["/settings/site-profile", { siteOrigin: "https://settings.allocube.test", icpFilingNumber: "", publicSecurityFilingNumber: "" }],
   ["/settings/email-domains", { allowedEmailDomains: ["allocube.test"] }],
   ["/settings/registration-email", { allowRegistrationWithoutEmail: true }],
@@ -48,20 +48,35 @@ describe("系统设置显式覆盖", () => {
     if (smtp) expect(overwritten.body).not.toContain("SettingsMailSecret82!");
     else {
       // Overwriting one section must not reset other settings.
-      for (const key of ["siteOrigin", "minBookingMinutes", "allowedEmailDomains", "allowRegistrationWithoutEmail"]) {
+      for (const key of ["siteOrigin", "advanceDays", "allowedEmailDomains", "allowRegistrationWithoutEmail"]) {
         if (!(key in values)) expect(overwritten.json().settings[key]).toEqual(before[key]);
       }
     }
     expect((await app.inject({ method: "PATCH", url: `/api/v1/admin${endpoint}`, payload: { ...payload, overwrite: true } })).statusCode).toBe(401);
   });
 
-  it("显式覆盖仍校验字段并完整回滚", async () => {
+  it.each([0, -1, 1.5])("显式覆盖仍校验最远天数 %s 并完整回滚", async (advanceDays) => {
     const before = database.getAdminSettings();
     const response = await app.inject({ method: "PATCH", url: "/api/v1/admin/settings", headers: { cookie: adminCookie }, payload: {
-      minBookingMinutes: 120, maxBookingMinutes: 60, advanceDays: 20, expectedVersion: 1, overwrite: true
+      advanceDays, expectedVersion: 1, overwrite: true
     } });
     expect(response.statusCode).toBe(400);
     expect(database.getAdminSettings()).toEqual(before);
+  });
+
+  it.each([366, 3650, 3651, 999999, 1e100])("最远天数 %s 自动封顶并保存实际值到审计", async (advanceDays) => {
+    const before = database.getAdminSettings();
+    const response = await app.inject({
+      method: "PATCH", url: "/api/v1/admin/settings", headers: { cookie: adminCookie },
+      payload: { advanceDays, expectedVersion: before.version }
+    });
+    const expected = Math.min(advanceDays, 3650);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().settings.advanceDays).toBe(expected);
+    expect(database.getAdminSettings().advanceDays).toBe(expected);
+    expect(database.db.prepare("SELECT value FROM settings WHERE key='advance_days'").get()).toEqual({ value: String(expected) });
+    const audit = database.db.prepare("SELECT after_json FROM audit_logs WHERE action='SETTINGS_UPDATE' ORDER BY rowid DESC LIMIT 1").get() as { after_json: string };
+    expect(JSON.parse(audit.after_json).advanceDays).toBe(expected);
   });
 
   it("审计失败时同时回滚设置值、版本和注册配置修订", async () => {

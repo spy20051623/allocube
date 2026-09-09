@@ -12,7 +12,6 @@ const segment = (minutes = 60) => ({ resourceGroupId: groupId, scope: "RESOURCE_
 const write = (blocked: boolean, expectedVersion = context.database.getAdminSettings().version, overwrite = false, cookie = context.adminCookie) => {
   const settings = context.database.getAdminSettings();
   return context.app.inject({ method: "PATCH", url: "/api/v1/admin/settings", headers: { cookie }, payload: {
-    minBookingMinutes: settings.minBookingMinutes, maxBookingMinutes: settings.maxBookingMinutes,
     advanceDays: settings.advanceDays, blockAdminBookings: blocked, expectedVersion, overwrite
   } });
 };
@@ -49,7 +48,7 @@ it("defaults off; only system administrators can change it, with version checks 
   const audit = db.prepare("SELECT after_json FROM audit_logs WHERE action='SETTINGS_UPDATE' ORDER BY rowid DESC LIMIT 1").get() as { after_json: string };
   expect(JSON.parse(audit.after_json).blockAdminBookings).toBe(true);
   const oldClient = await context.app.inject({ method: "PATCH", url: "/api/v1/admin/settings", headers: { cookie: context.adminCookie }, payload: {
-    minBookingMinutes: 1, maxBookingMinutes: 1440, advanceDays: 30, expectedVersion: getAdminSettings().version
+    advanceDays: 30, expectedVersion: getAdminSettings().version
   } });
   expect(oldClient.statusCode).toBe(200);
   expect(getAdminSettings().blockAdminBookings).toBe(true);

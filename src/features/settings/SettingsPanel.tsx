@@ -1,12 +1,13 @@
 import { PageHeader } from "../../PageHeader";
 import { tr } from "../../i18n/index";
-import { RefreshCw, Clock3, Globe2, Mail, CircleAlert, ShieldCheck, X, Settings } from "lucide-react";
+import { RefreshCw, Clock3, CalendarDays, Globe2, Mail, CircleAlert, ShieldCheck, X, Settings } from "lucide-react";
 import { formatChina } from "../../date";
 import { SectionHeader } from "../../components/SectionHeader";
 import { Field, ChoiceField } from "../../components/forms";
 import { BusyButtonContent, ContextNotice } from "../../components/feedback";
 import { PasswordField } from "../../components/PasswordFields";
 import { useSettingsController } from "./useSettingsController";
+import { capBookingAdvanceDays, MAX_BOOKING_ADVANCE_DAYS } from "../../shared/booking-policy";
 
 export function SettingsPanel({
   notify
@@ -79,31 +80,38 @@ export function SettingsPanel({
       </div>}
       {(!adminSettings || !smtp) ? <div className="content-loading" role="status"><RefreshCw className="spin" />{tr("正在载入")}</div> :
         <fieldset className="settings-page" disabled={settingsWriting} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-          <section className="settings-card card" aria-labelledby="booking-settings-title">
+          <section className="settings-card booking-settings-card card" aria-labelledby="booking-settings-title">
             <SectionHeader
               id="booking-settings-title"
               title={tr("资源占用规则")}
               leadingIcon={Clock3}
               className="settings-intro"
             />
-            <div className="settings-fields">
-              <Field label={tr("最短占用时长（分钟）")}><input type="number" min={1} value={bookingForm.minBookingMinutes} onChange={(e) => setBookingForm({ ...bookingForm, minBookingMinutes: Number(e.target.value) })} /><small>{tr("自动拆分时，小于该值的时段会被丢弃。")}</small></Field>
-              <Field label={tr("单次最长时长（分钟）")}><input type="number" min={1} value={bookingForm.maxBookingMinutes} onChange={(e) => setBookingForm({ ...bookingForm, maxBookingMinutes: Number(e.target.value) })} /></Field>
-              <Field label={tr("最远可占用天数")}><input type="number" min={1} value={bookingForm.advanceDays} onChange={(e) => setBookingForm({ ...bookingForm, advanceDays: Number(e.target.value) })} /><small>{tr("以占用结束时间为准。")}</small></Field>
-            </div>
-            <div className="booking-admin-policy">
-              <span className="booking-admin-policy-icon" aria-hidden="true"><ShieldCheck size={18} /></span>
-              <div className="booking-admin-policy-copy">
-                <label id="admin-booking-policy-label" htmlFor="block-admin-bookings">{tr("禁止系统管理员提交占用")}</label>
-                <small id="admin-booking-policy-description">{tr("开启后请使用个人账号提交占用，系统管理员账号仍可管理和释放资源。")}</small>
+            <div className="booking-rule-fields">
+              <div className="settings-fields booking-window-policy">
+                <span className="booking-rule-icon" aria-hidden="true"><CalendarDays size={18} /></span>
+                <div className="booking-rule-copy">
+                  <label htmlFor="booking-advance-days">{tr("最远可占用天数")}</label>
+                  <small id="booking-advance-days-description">{tr("以占用结束时间为准。")}</small>
+                </div>
+                <input id="booking-advance-days" className="booking-days-input" type="number" min={1} max={MAX_BOOKING_ADVANCE_DAYS}
+                  aria-describedby="booking-advance-days-description" value={bookingForm.advanceDays}
+                  onChange={(e) => setBookingForm({ ...bookingForm, advanceDays: capBookingAdvanceDays(Number(e.target.value)) })} />
               </div>
-              <label className="settings-toggle-control">
-                <input id="block-admin-bookings" type="checkbox" role="switch" aria-labelledby="admin-booking-policy-label"
-                  aria-describedby="admin-booking-policy-description" checked={bookingForm.blockAdminBookings}
-                  disabled={settingsUncertain}
-                  onChange={event => setBookingForm({ ...bookingForm, blockAdminBookings: event.target.checked })} />
-                <i className="settings-toggle" aria-hidden="true"><i /></i>
-              </label>
+              <div className="booking-admin-policy">
+                <span className="booking-rule-icon" aria-hidden="true"><ShieldCheck size={18} /></span>
+                <div className="booking-rule-copy">
+                  <label id="admin-booking-policy-label" htmlFor="block-admin-bookings">{tr("禁止系统管理员提交占用")}</label>
+                  <small id="admin-booking-policy-description">{tr("开启后请使用个人账号提交占用，系统管理员账号仍可管理和释放资源。")}</small>
+                </div>
+                <label className="settings-toggle-control">
+                  <input id="block-admin-bookings" type="checkbox" role="switch" aria-labelledby="admin-booking-policy-label"
+                    aria-describedby="admin-booking-policy-description" checked={bookingForm.blockAdminBookings}
+                    disabled={settingsUncertain}
+                    onChange={event => setBookingForm({ ...bookingForm, blockAdminBookings: event.target.checked })} />
+                  <i className="settings-toggle" aria-hidden="true"><i /></i>
+                </label>
+              </div>
             </div>
             <div className="settings-card-footer">
               <ContextNotice className="settings-rule-note">

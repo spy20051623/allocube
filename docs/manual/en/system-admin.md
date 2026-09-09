@@ -39,7 +39,7 @@ Use maintenance for a known time window and disable a resource when it should re
 
 "Admin → Settings" includes:
 
--   Minimum and maximum reservation duration, plus the booking window in days.
+-   Booking window in days, based on the reservation end time.
 -   Site address, used for view and password reset links in emails.
 -   Whether registration allows leaving the email field blank, and the allowed email domains for registration.
 -   SMTP server, port, security mode, account, password, and sender.

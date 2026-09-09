@@ -33,7 +33,7 @@ Times display and accept input in the browser's local timezone by default. The L
 
 The calendar refreshes for changes affecting the machines and dates covered by its query. Reservations on other machines or dates do not refresh the current calendar. While "Reservations" is open, changes to your own records update its lists and counts. Resource configuration, maintenance, and permission changes refresh the relevant views.
 
-Switching to another browser tab keeps the connection open but pauses ordinary data refreshes. Returning synchronizes the page once. While disconnected, a visible page retries every 30 seconds and synchronizes again after reconnection. Background updates retain draft notes and automatically trim or split time slots to their latest availability, removing unavailable fragments and those shorter than the minimum duration. Each adjustment reports how many slots remain; no approval is required. Adjustment pauses while a time field is being edited and resumes after leaving it. Changed original reservations must still be checked again before submission. Revoked access or an invalid account immediately clears restricted content and revalidates the session.
+Switching to another browser tab keeps the connection open but pauses ordinary data refreshes. Returning synchronizes the page once. While disconnected, a visible page retries every 30 seconds and synchronizes again after reconnection. Background updates retain draft notes and automatically trim or split time slots to their latest availability, removing expired or unavailable fragments. Each adjustment reports how many slots remain; no approval is required. Adjustment pauses while a time field is being edited and resumes after leaving it. Changed original reservations must still be checked again before submission. Revoked access or an invalid account immediately clears restricted content and revalidates the session.
 
 ## Creating a reservation
 
@@ -43,9 +43,9 @@ Switching to another browser tab keeps the connection open but pauses ordinary d
 4. Review the automatically adjusted available slots and the notification of changes already made.
 5. Submit.
 
-Every slot in one submission must use the same scope: one or more resource groups, or the entire machine. In one transaction, the server rechecks permissions, time rules, and conflicts, automatically keeps available fragments that meet the minimum duration, and saves them together. Further adjustments are reported with the actual saved count. No remaining slots means nothing is created. Results exceeding 100 slots are rejected rather than truncated; reduce the selected slots. Permission, validation, or write failures roll back the transaction.
+Every slot in one submission must use the same scope: one or more resource groups, or the entire machine. In one transaction, the server rechecks permissions, time rules, and conflicts, automatically keeps all valid available fragments, and saves them together. Further adjustments are reported with the actual saved count. No remaining slots means nothing is created. Results exceeding 100 slots are rejected rather than truncated; reduce the selected slots. Permission, validation, or write failures roll back the transaction.
 
-Each reservation must follow the minimum duration, maximum duration, and booking window set by administrators.
+Reservation times use minute precision. The end must be after the start and within the booking window set by administrators, measured from the current time.
 
 ## Editing reservations
 

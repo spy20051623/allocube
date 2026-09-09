@@ -17,7 +17,6 @@ import {
   chinaLocalToIso,
   addDays,
   todayChina,
-  minuteDifference,
   clientUsesUtcPlus8
 } from "../../date";
 import {
@@ -664,8 +663,7 @@ export function useCalendarController({
             startAt: range.from,
             endAt: currentMinute
           }
-        ],
-        settings.minBookingMinutes
+        ]
       );
       return {
         target,
@@ -685,8 +683,7 @@ export function useCalendarController({
       busyRangesForTarget,
       currentTime,
       draftsByTarget,
-      range.from,
-      settings.minBookingMinutes
+      range.from
     ]
   );
 
@@ -845,8 +842,8 @@ export function useCalendarController({
       }
       const minute = currentMinuteStart(currentTime);
       const startAt = original.startAt < minute ? minute : original.startAt;
-      if (minuteDifference(startAt, original.endAt) < settings.minBookingMinutes) {
-        notify("error", tr("该占用剩余时间过短，无法进入编辑状态")); return;
+      if (original.endAt <= startAt) {
+        notify("error", tr("该占用已经结束或无法修改")); return;
       }
       if (!editingReservations.length && !drafts.length) {
         setReservationMode(original.scope);
@@ -903,13 +900,13 @@ export function useCalendarController({
     if (editingDraftTime || submittingRef.current) return;
     if (editingReservations.some(item => Date.parse(item.endAt) <= currentTime)) setEditingChanged(true);
     const minute = currentMinuteStart(currentTime);
-    const advanced = advanceCalendarDrafts(drafts, minute, settings.minBookingMinutes);
+    const advanced = advanceCalendarDrafts(drafts, minute);
     if (advanced.changed) {
       setDrafts(mergeCalendarDrafts(advanced.drafts, [], () => createClientId(), minute));
       setPreviewByDraft(new Map());
       if (drafts.length !== advanced.drafts.length || drafts.some((draft, index) => draft.startAt !== advanced.drafts[index]?.startAt || draft.endAt !== advanced.drafts[index]?.endAt)) announceAdjustment(advanced.drafts.length);
     }
-  }, [currentTime, editingReservations, editingDraftTime, drafts, settings.minBookingMinutes, announceAdjustment]);
+  }, [currentTime, editingReservations, editingDraftTime, drafts, announceAdjustment]);
 
   const clearReservationDetailsWithConfirmation = async () => {
     if (
@@ -979,11 +976,10 @@ export function useCalendarController({
     return true;
   };
 
-  // Expired/too-short slots need an authoritative adjustment too; incomplete input does not.
+  // Expired slots need an authoritative adjustment too; incomplete input does not.
   const previewBlocked = drafts.length > 100 || drafts.some(draft => {
     const start = Date.parse(draft.startAt), end = Date.parse(draft.endAt);
     return !Number.isFinite(start) || !Number.isFinite(end) || end <= start ||
-      end - Math.max(start, currentTime) > settings.maxBookingMinutes * 60_000 ||
       end > currentTime + settings.advanceDays * 86_400_000;
   });
   const fetchDraftPreview = useCallback(async (signal: AbortSignal) => {
@@ -1115,7 +1111,6 @@ export function useCalendarController({
           active.target,
           requested,
           () => "preview",
-          settings.minBookingMinutes,
           currentMinuteStart(currentTime)
         );
         setDragPreview({
@@ -1153,8 +1148,7 @@ export function useCalendarController({
       drafts,
       projectDraggedRange,
       range.days,
-      range.from,
-      settings.minBookingMinutes
+      range.from
     ]
   );
 
@@ -1196,7 +1190,6 @@ export function useCalendarController({
         active.target,
         dragged,
         () => createClientId(),
-        settings.minBookingMinutes,
         currentMinuteStart(currentTime)
       );
       if (!erased.changed) return;

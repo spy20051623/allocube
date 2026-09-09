@@ -77,6 +77,39 @@ beforeAll(async () => {
 });
 
 describe("资源占用事务与拆分", () => {
+  it.each([false, true])("长短占用不受旧配置限制，自动调整=%s", (autoAdjust) => {
+    const upsert = dbModule.db.prepare("INSERT INTO settings(key,value,updated_at) VALUES(?,?,?)");
+    upsert.run("min_booking_minutes", "60", dbModule.nowIso());
+    upsert.run("max_booking_minutes", "120", dbModule.nowIso());
+    let created: string[] = [];
+    try {
+      const result = scheduling.commitReservationBatch(userId, [
+        { resourceGroupId: firstGroupId, startAt: futureIso(20000), endAt: futureIso(20001) },
+        { resourceGroupId: firstGroupId, startAt: futureIso(20001), endAt: futureIso(31521) }
+      ], undefined, autoAdjust);
+      created = result.reservations.map(row => row.id);
+      expect(result.reservations).toHaveLength(2);
+      expect(result.reservations.map(row => (Date.parse(row.endAt) - Date.parse(row.startAt)) / 60_000)).toEqual([1, 8 * 1440]);
+      expect(dbModule.getSettings()).not.toHaveProperty("minBookingMinutes");
+      expect(dbModule.getSettings()).not.toHaveProperty("maxBookingMinutes");
+    } finally {
+      for (const id of created) dbModule.db.prepare("UPDATE reservations SET status='CANCELLED' WHERE id=?").run(id);
+      dbModule.db.prepare("DELETE FROM settings WHERE key IN ('min_booking_minutes','max_booking_minutes')").run();
+    }
+  });
+
+  it("保留正时长、分钟精度与最远结束时间边界", () => {
+    const minute = dbModule.currentMinuteIso();
+    const horizon = new Date(Date.parse(minute) + dbModule.getSettings().advanceDays * 86_400_000).toISOString();
+    const segment = { resourceGroupId: firstGroupId, startAt: minute, endAt: horizon };
+    expect(() => scheduling.validateSegmentTimes(segment, minute)).not.toThrow();
+    expect(() => scheduling.validateSegmentTimes({ ...segment, endAt: new Date(Date.parse(horizon) + 60_000).toISOString() }, minute)).toThrow("占用结束时间不能超过未来");
+    for (const offset of [0, -60_000]) {
+      expect(() => scheduling.validateSegmentTimes({ ...segment, endAt: new Date(Date.parse(minute) + offset).toISOString() }, minute)).toThrow("结束时间必须晚于开始时间");
+    }
+    expect(() => scheduling.segmentSchema.parse({ ...segment, endAt: new Date(Date.parse(minute) + 30_000).toISOString() })).toThrow("占用时间只能精确到分钟");
+  });
+
   it("立即开始和已经到达的预约均以服务器当前分钟为准", () => {
     const serverMinute = dbModule.currentMinuteIso();
     const pastStart = new Date(

@@ -79,10 +79,10 @@ try {
   const settings = async () => (await fixture.request("Administrator", "/admin/settings")).body;
   const externalSave = async value => {
     const old = await settings();
-    const result = await fixture.request("Administrator", "/admin/settings", "PATCH", { minBookingMinutes: value, maxBookingMinutes: old.maxBookingMinutes, advanceDays: old.advanceDays, expectedVersion: old.version });
+    const result = await fixture.request("Administrator", "/admin/settings", "PATCH", { advanceDays: value, expectedVersion: old.version });
     assert.equal(result.status, 200); return result;
   };
-  const validRules = { minBookingMinutes: 2, maxBookingMinutes: 1440, advanceDays: 30, expectedVersion: 1, overwrite: true };
+  const validRules = { advanceDays: 30, expectedVersion: 1, overwrite: true };
   assert.equal((await fixture.request("peer", "/admin/settings", "PATCH", validRules)).status, 403);
   const missingCsrf = await fetch(fixture.origin + "/api/v1/admin/settings", {
     method: "PATCH", headers: { origin: fixture.origin, cookie: fixture.accounts.Administrator.cookie, "content-type": "application/json" },
@@ -98,11 +98,13 @@ try {
   await page.goto(fixture.origin + "/admin/settings");
   await retryNotice.waitFor(); assert.equal(await rules.count(), 0);
   await rules.waitFor(); assert.equal(await rules.inputValue(), "11"); assert.equal(await staleNotice.count(), 0);
+  assert.equal(await page.locator(".settings-fields input[type=number]").count(), 1);
+  assert.equal(await page.getByRole("spinbutton", { name: /^最远可占用天数/ }).count(), 1);
   results.initialPartialFailureRetries = true;
 
   const slow = holdNextRead(); await sync(); await until(() => slow.started, "Slow read did not start");
   await rules.fill("12"); await save.click();
-  await until(async () => (await settings()).minBookingMinutes === 12 && !(await rules.isDisabled()), "Save did not finish");
+  await until(async () => (await settings()).advanceDays === 12 && !(await rules.isDisabled()), "Save did not finish");
   slow.release(); await pause(700); assert.equal(await rules.inputValue(), "12"); assert.equal(await staleNotice.count(), 0);
   results.lateReadCannotUndoSave = true;
 
@@ -118,7 +120,7 @@ try {
   await rules.fill("14"); loseSave = true; const uncertainWrites = writes; await save.click();
   await uncertainNotice.waitFor(); await pause(2500);
   assert.equal(writes, uncertainWrites + 1); assert(await save.isDisabled()); assert.equal(await rules.inputValue(), "14");
-  assert.equal((await settings()).minBookingMinutes, 14);
+  assert.equal((await settings()).advanceDays, 14);
   assert.equal(await page.getByRole("button", { name: "重新加载", exact: true }).count(), 0);
   await page.reload(); await rules.waitFor(); assert.equal(await rules.inputValue(), "14");
   results.committedWriteWithLostResponseNotReplayed = true;
@@ -137,15 +139,15 @@ try {
   await externalSave(16); await sync(); await pause(700);
   assert.equal(await rules.inputValue(), "15"); assert.equal(await staleNotice.count(), 0); assert(!(await save.isDisabled()));
   await save.click(); await conflict.waitFor();
-  assert.equal((await settings()).minBookingMinutes, 16); assert(await rules.isDisabled());
+  assert.equal((await settings()).advanceDays, 16); assert(await rules.isDisabled());
   await cancelOverwrite(); assert.equal(await rules.inputValue(), "15"); assert(!(await save.isDisabled()));
-  assert.equal((await settings()).minBookingMinutes, 16); assert.equal(await uncertainNotice.count(), 0);
+  assert.equal((await settings()).advanceDays, 16); assert.equal(await uncertainNotice.count(), 0);
   results.conflictCancelKeepsDraft = true;
 
   await save.click(); await conflict.waitFor();
   // Another update while confirmation is open is covered by the explicit overwrite choice.
   await externalSave(17); const beforeOverwrite = writes; await confirmOverwrite();
-  await until(async () => (await settings()).minBookingMinutes === 15 && !(await rules.isDisabled()), "Confirmed overwrite did not finish");
+  await until(async () => (await settings()).advanceDays === 15 && !(await rules.isDisabled()), "Confirmed overwrite did not finish");
   assert.equal(writes, beforeOverwrite + 1); assert.equal(await rules.inputValue(), "15");
   results.confirmedOverwriteSurvivesAnotherUpdate = true;
 
@@ -170,7 +172,7 @@ try {
   await rules.fill("19"); await externalSave(20); await save.click(); await conflict.waitFor();
   loseSave = true; const lostOverwriteWrites = writes; await confirmOverwrite(); await uncertainNotice.waitFor();
   await pause(2300); assert.equal(writes, lostOverwriteWrites + 1);
-  assert.equal((await settings()).minBookingMinutes, 19); assert.equal(await rules.inputValue(), "19");
+  assert.equal((await settings()).advanceDays, 19); assert.equal(await rules.inputValue(), "19");
   results.lostOverwriteResponseNotReplayed = true;
   await page.reload(); await rules.waitFor();
   await externalSave(16); await until(async () => await rules.inputValue() === "16", "Untouched form did not update automatically");
@@ -201,7 +203,7 @@ try {
   await page.locator(".admin-sidebar").getByRole("button", { name: "系统设置", exact: true }).click();
   await rules.waitFor(); await uncertainNotice.waitFor();
   assert(await save.isDisabled()); assert.equal(await conflict.count(), 0); assert.equal(writes, navigationWrites);
-  assert.equal((await settings()).minBookingMinutes, 23);
+  assert.equal((await settings()).advanceDays, 23);
   await page.reload(); await rules.waitFor();
   assert.equal(await uncertainNotice.count(), 0); assert.equal(await rules.inputValue(), "23");
   results.navigationDuringWriteRequiresManualVerification = true;
@@ -218,7 +220,7 @@ try {
   const bounds = await englishDialog.boundingBox();
   assert(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390);
   await englishDialog.getByRole("button", { name: "Cancel", exact: true }).click();
-  assert.equal(await englishRules.inputValue(), "21"); assert.equal((await settings()).minBookingMinutes, 22);
+  assert.equal(await englishRules.inputValue(), "21"); assert.equal((await settings()).advanceDays, 22);
   assert.equal(await englishPage.getByRole("button", { name: "Reload", exact: true }).count(), 0);
   results.englishNarrowConfirmationKeepsDraft = true;
   await englishContext.close();

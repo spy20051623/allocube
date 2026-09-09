@@ -385,15 +385,14 @@ describe("日历提交自动保留可用片段", () => {
     const result=await post([segment(-10,-1),segment(10800,10860)]);
     expect(result.statusCode,result.body).toBe(201);expect(result.json().adjusted).toBe(true);expect(result.json().reservations).toHaveLength(1);
   });
-  it("自动丢弃短于最短时长的可用碎片", async () => {
-    const minimum = database.getSettings().minBookingMinutes;
-    database.db.prepare("UPDATE settings SET value='5' WHERE key='min_booking_minutes'").run();
+  it("旧最短时长配置不再丢弃一分钟的可用碎片", async () => {
+    database.db.prepare("INSERT INTO settings(key,value,updated_at) VALUES('min_booking_minutes','5',?)").run(iso(0));
     try {
-      insert(14002,14008,{user:otherId});
+      insert(14001,14019,{user:otherId});
       const result=await post([segment(14000,14020)]);
       expect(result.statusCode,result.body).toBe(201);
-      expect(result.json().reservations.map((row:{startAt:string;endAt:string})=>[row.startAt,row.endAt])).toEqual([[iso(14008),iso(14020)]]);
-    } finally {database.db.prepare("UPDATE settings SET value=? WHERE key='min_booking_minutes'").run(String(minimum));}
+      expect(result.json().reservations.map((row:{startAt:string;endAt:string})=>[row.startAt,row.endAt])).toEqual([[iso(14000),iso(14001)],[iso(14019),iso(14020)]]);
+    } finally {database.db.prepare("DELETE FROM settings WHERE key='min_booking_minutes'").run();}
   });
   it("自动拆分不截断超过100条的结果", async () => {
     const segments=[];

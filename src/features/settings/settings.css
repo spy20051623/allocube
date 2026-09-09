@@ -79,11 +79,60 @@
   font-weight: 700;
 }
 
-.settings-fields {
-  padding: 18px 0;
+.booking-settings-card {
+  container: booking-settings / inline-size;
+  padding: 16px 20px;
+}
+
+.booking-rule-fields {
+  padding: 14px 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 12px;
+}
+
+.settings-fields {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+}
+
+.booking-settings-card .settings-rule-note {
+  flex: 1 1 260px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary, #64748b);
+  line-height: 1.6;
+}
+
+.booking-settings-card .settings-card-footer {
+  min-height: 47px;
+  padding-top: 12px;
+  flex-wrap: wrap;
+}
+
+.booking-settings-card .settings-card-footer .primary-button {
+  flex-shrink: 0;
+  min-width: 104px;
+  margin-left: auto;
+}
+
+.booking-settings-card .settings-card-footer .primary-button:disabled {
+  border: 1px solid var(--line);
+  background: var(--surface-raised, #f8fafc);
+  color: var(--text-disabled, #8994a5);
+  box-shadow: none;
+  opacity: 1;
+}
+
+@container booking-settings (max-width: 640px) {
+  .booking-rule-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
 }
 
 .email-domain-settings {
@@ -609,35 +658,36 @@
   text-align: center;
 }
 
+.booking-window-policy,
 .booking-admin-policy {
+  min-width: 0;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 18px;
-  padding: 14px 16px;
+  gap: 10px;
+  padding: 12px 14px;
   border: 1px solid var(--border-subtle, #e2e8f0);
   border-radius: 10px;
   background: var(--surface-raised, #f8fafc);
 }
 
-.booking-admin-policy-icon {
+.booking-rule-icon {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   color: var(--text-accent, var(--blue));
   background: var(--blue-soft);
 }
 
-.booking-admin-policy-copy {
+.booking-rule-copy {
   display: grid;
   gap: 4px;
   min-width: 0;
 }
 
-.booking-admin-policy-copy > label {
+.booking-rule-copy > label {
   color: var(--text-primary, #344054);
   font-size: 13px;
   font-weight: 600;
@@ -645,8 +695,13 @@
   cursor: pointer;
 }
 
-.booking-admin-policy small {
+.booking-rule-copy small {
   color: var(--text-secondary, #64748b);
   font-size: 12px;
   line-height: 1.6;
+}
+
+.booking-days-input {
+  width: 100px;
+  min-width: 0;
 }

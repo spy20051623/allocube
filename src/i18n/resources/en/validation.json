@@ -121,7 +121,6 @@
   "预览失败": "Preview failed",
   "占用编辑地址无效": "Reservation edit URL is invalid",
   "占用结束时间不能超过未来 {{v0}} 天": "Reservation end time cannot exceed {{v0}} days in the future",
-  "占用时间至少需要 {{v0}} 分钟": "Reservation time must be at least {{v0}} minutes",
   "整机占用和资源组占用不能同时提交": "Machine and group reservations cannot be submitted together",
   "正文最多包含 5 张图片": "Body can contain up to 5 images",
   "至少需要选择一项设备": "At least one device must be selected",

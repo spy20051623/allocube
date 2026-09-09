@@ -126,7 +126,7 @@ describe("国际化资源与语言解析", () => {
       expect(tr("已修复")).toBe("Fixed");
       expect(tr("标签")).toBe("Tags");
       expect(tr("资源占用规则")).toBe("Reservation rules");
-      expect(tr("最短占用时长（分钟）")).toBe("Minimum duration (min)");
+      expect(tr("最远可占用天数")).toBe("Booking window (days)");
       expect(tr("最远可占用天数")).toBe("Booking window (days)");
       expect(tr("站点地址")).toBe("Site URL");
       expect(tr("发送配置")).toBe("SMTP settings");

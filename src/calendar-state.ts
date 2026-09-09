@@ -36,8 +36,6 @@ export type TimelineNearbyHitResult = {
 };
 
 export type CalendarBookingRules = {
-  minBookingMinutes: number;
-  maxBookingMinutes: number;
   advanceDays: number;
 };
 
@@ -422,8 +420,7 @@ export function snappedTimelineInstant({
 
 export function subtractBusyTimeRanges(
   requested: CalendarTimeRange,
-  busyRanges: CalendarTimeRange[],
-  minMinutes: number
+  busyRanges: CalendarTimeRange[]
 ) {
   const requestedStart = new Date(requested.startAt).getTime();
   const requestedEnd = new Date(requested.endAt).getTime();
@@ -458,7 +455,7 @@ export function subtractBusyTimeRanges(
   const available: CalendarTimeRange[] = [];
   let cursor = requestedStart;
   for (const range of mergedBusy) {
-    if ((range.start - cursor) / 60_000 >= minMinutes) {
+    if (range.start > cursor) {
       available.push({
         startAt: new Date(cursor).toISOString(),
         endAt: new Date(range.start).toISOString()
@@ -466,7 +463,7 @@ export function subtractBusyTimeRanges(
     }
     cursor = Math.max(cursor, range.end);
   }
-  if ((requestedEnd - cursor) / 60_000 >= minMinutes) {
+  if (requestedEnd > cursor) {
     available.push({
       startAt: new Date(cursor).toISOString(),
       endAt: new Date(requestedEnd).toISOString()
@@ -511,7 +508,6 @@ export function eraseCalendarDraftRange(
   >,
   erasedRange: CalendarTimeRange,
   createId: () => string,
-  minMinutes = 1,
   immediateBoundary?: string
 ) {
   const erasedStart = new Date(erasedRange.startAt).getTime();
@@ -524,7 +520,6 @@ export function eraseCalendarDraftRange(
     return { drafts, changed: false };
   }
   const targetKey = reservationTargetKey(target);
-  const minimumDuration = Math.max(1, minMinutes) * 60_000;
   const boundaryTime = immediateBoundary
     ? new Date(immediateBoundary).getTime()
     : Number.NaN;
@@ -545,7 +540,7 @@ export function eraseCalendarDraftRange(
     const ranges = [
       { start, end: Math.min(end, erasedStart) },
       { start: Math.max(start, erasedEnd), end }
-    ].filter((range) => range.end - range.start >= minimumDuration);
+    ].filter((range) => range.end > range.start);
     return ranges.map((range, index) => ({
       ...draft,
       id: index === 0 ? draft.id : createId(),
@@ -619,8 +614,7 @@ export function mergeCalendarDrafts(
 
 export function advanceCalendarDrafts(
   drafts: CalendarDraft[],
-  boundary: string,
-  minMinutes: number
+  boundary: string
 ) {
   const boundaryTime = new Date(boundary).getTime();
   if (!Number.isFinite(boundaryTime)) {
@@ -637,10 +631,7 @@ export function advanceCalendarDrafts(
       changed = true;
       return [{ ...draft, startMode: "SCHEDULED" as const }];
     }
-    if (
-      end <= boundaryTime ||
-      (end - boundaryTime) / 60_000 < minMinutes
-    ) {
+    if (end <= boundaryTime) {
       changed = true;
       return [];
     }
@@ -771,16 +762,11 @@ export function calendarDraftFieldIssues(
     return { endAt: tr("结束时间必须晚于开始时间") };
   }
   const issues: CalendarDraftFieldIssues = {};
-  const minutes = (end - start) / 60_000;
   const currentMinute = Math.floor(now / 60_000) * 60_000;
   if (start < currentMinute) {
     issues.startAt = tr("不能占用已经过去的时间");
   }
-  if (minutes < rules.minBookingMinutes) {
-    issues.endAt = tr("占用时间至少需要 {{v0}} 分钟", { v0: rules.minBookingMinutes });
-  } else if (minutes > rules.maxBookingMinutes) {
-    issues.endAt = tr("单次占用最长 {{v0}} 分钟", { v0: rules.maxBookingMinutes });
-  } else if (end > now + rules.advanceDays * 24 * 60 * 60_000) {
+  if (end > now + rules.advanceDays * 24 * 60 * 60_000) {
     issues.endAt = tr("占用结束时间不能超过未来 {{v0}} 天", { v0: rules.advanceDays });
   }
   return issues;

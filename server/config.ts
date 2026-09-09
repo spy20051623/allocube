@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { firstPasswordError } from "../src/shared/identity-rules.js";
+import { capBookingAdvanceDays, MAX_BOOKING_ADVANCE_DAYS } from "../src/shared/booking-policy.js";
 
 function loadEnvFile() {
   const envPath = path.resolve(process.cwd(), ".env");
@@ -126,11 +127,13 @@ function integerBootstrapValue(
   key: string,
   fallback: number,
   min: number,
-  max: number
+  max: number,
+  normalize?: (value: number) => number
 ) {
   const raw = process.env[key];
   if (raw === undefined || raw === "") return fallback;
-  const value = Number(raw);
+  const parsed = Number(raw);
+  const value = normalize && Number.isFinite(parsed) ? normalize(parsed) : parsed;
   if (!Number.isInteger(value) || value < min || value > max) {
     throw new Error(`${key} 必须是 ${min}–${max} 之间的整数`);
   }
@@ -229,34 +232,15 @@ function loadBootstrapConfig() {
       .split(",")
       .map((item) => item.trim().toLowerCase())
       .filter(Boolean),
-    minBookingMinutes: integerBootstrapValue(
-      "BOOTSTRAP_MIN_BOOKING_MINUTES",
-      1,
-      1,
-      1440
-    ),
-    maxBookingMinutes: integerBootstrapValue(
-      "BOOTSTRAP_MAX_BOOKING_MINUTES",
-      1440,
-      1,
-      10080
-    ),
     advanceDays: integerBootstrapValue(
       "BOOTSTRAP_ADVANCE_DAYS",
       30,
       1,
-      365
+      MAX_BOOKING_ADVANCE_DAYS,
+      capBookingAdvanceDays
     ),
     smtp: smtpBootstrapSettings()
   };
-  if (
-    bootstrap.maxBookingMinutes <
-    bootstrap.minBookingMinutes
-  ) {
-    throw new Error(
-      "BOOTSTRAP_MAX_BOOKING_MINUTES 不能小于最短占用时间"
-    );
-  }
   return bootstrap;
 }
 

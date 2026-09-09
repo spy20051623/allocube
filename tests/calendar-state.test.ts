@@ -349,14 +349,13 @@ describe("资源日历状态", () => {
         [
           {
             startAt: "2026-07-27T02:00:00.000Z",
-            endAt: "2026-07-27T02:30:00.000Z"
+            endAt: "2026-07-27T02:59:00.000Z"
           },
           {
             startAt: "2026-07-27T03:00:00.000Z",
             endAt: "2026-07-27T04:00:00.000Z"
           }
-        ],
-        15
+        ]
       )
     ).toEqual([
       {
@@ -364,7 +363,7 @@ describe("资源日历状态", () => {
         endAt: "2026-07-27T02:00:00.000Z"
       },
       {
-        startAt: "2026-07-27T02:30:00.000Z",
+        startAt: "2026-07-27T02:59:00.000Z",
         endAt: "2026-07-27T03:00:00.000Z"
       },
       {
@@ -385,8 +384,7 @@ describe("资源日历状态", () => {
           startAt: "2026-07-27T10:00:00.000Z",
           endAt: "2026-07-27T12:00:00.000Z"
         },
-        [past],
-        1
+        [past]
       )
     ).toEqual([
       {
@@ -400,8 +398,7 @@ describe("资源日历状态", () => {
           startAt: "2026-07-27T09:00:00.000Z",
           endAt: "2026-07-27T10:00:00.000Z"
         },
-        [past],
-        1
+        [past]
       )
     ).toEqual([]);
   });
@@ -421,7 +418,14 @@ describe("资源日历状态", () => {
           resourceGroupId: "group-a",
           startMode: "IMMEDIATE",
           startAt: "2026-07-27T09:00:00.000Z",
-          endAt: "2026-07-27T10:20:00.000Z"
+          endAt: "2026-07-27T10:15:00.000Z"
+        },
+        {
+          id: "last-minute",
+          resourceGroupId: "group-b",
+          startMode: "IMMEDIATE",
+          startAt: "2026-07-27T10:00:00.000Z",
+          endAt: "2026-07-27T10:16:00.000Z"
         },
         {
           id: "future",
@@ -431,8 +435,7 @@ describe("资源日历状态", () => {
           endAt: "2026-07-27T14:00:00.000Z"
         }
       ],
-      "2026-07-27T10:15:00.000Z",
-      15
+      "2026-07-27T10:15:00.000Z"
     );
     expect(result).toEqual({
       changed: true,
@@ -443,6 +446,13 @@ describe("资源日历状态", () => {
           startMode: "IMMEDIATE",
           startAt: "2026-07-27T10:15:00.000Z",
           endAt: "2026-07-27T12:00:00.000Z"
+        },
+        {
+          id: "last-minute",
+          resourceGroupId: "group-b",
+          startMode: "IMMEDIATE",
+          startAt: "2026-07-27T10:15:00.000Z",
+          endAt: "2026-07-27T10:16:00.000Z"
         },
         {
           id: "future",
@@ -466,15 +476,13 @@ describe("资源日历状态", () => {
     expect(
       advanceCalendarDrafts(
         [draft],
-        "2026-07-27T10:14:00.000Z",
-        15
+        "2026-07-27T10:14:00.000Z"
       )
     ).toEqual({ changed: false, drafts: [draft] });
     expect(
       advanceCalendarDrafts(
         [draft],
-        "2026-07-27T10:15:00.000Z",
-        15
+        "2026-07-27T10:15:00.000Z"
       ).drafts[0]
     ).toMatchObject({
       startMode: "IMMEDIATE",
@@ -587,7 +595,6 @@ describe("资源日历状态", () => {
           endAt: "2026-07-27T04:00:00.000Z"
         },
         () => "split-id",
-        30,
         "2026-07-27T01:00:00.000Z"
       )
     ).toEqual({
@@ -759,6 +766,18 @@ describe("资源日历状态", () => {
     ]);
   });
 
+  it("短时与多日草稿仅受最远结束时间限制", () => {
+    const now = Date.parse("2026-07-26T00:00:00.000Z");
+    const draft = { id: "draft", resourceGroupId: "group-a", startAt: new Date(now).toISOString(), endAt: "" };
+    for (const minutes of [1, 8 * 1440, 30 * 1440]) {
+      expect(calendarDraftFieldIssues({ ...draft, endAt: new Date(now + minutes * 60_000).toISOString() }, { advanceDays: 30 }, now)).toEqual({});
+    }
+    expect(calendarDraftFieldIssues({ ...draft, endAt: new Date(now + 30 * 86_400_000 + 60_000).toISOString() }, { advanceDays: 30 }, now)).toEqual({ endAt: "占用结束时间不能超过未来 30 天" });
+    for (const offset of [0, -60_000]) {
+      expect(calendarDraftFieldIssues({ ...draft, endAt: new Date(now + offset).toISOString() }, { advanceDays: 30 }, now)).toEqual({ endAt: "结束时间必须晚于开始时间" });
+    }
+  });
+
   it("一次返回全部草稿静态问题", () => {
     const drafts: CalendarDraft[] = [
       {
@@ -771,22 +790,20 @@ describe("资源日历状态", () => {
         id: "draft-b",
         resourceGroupId: "group-a",
         startAt: "2026-07-27T01:05:00.000Z",
-        endAt: "2026-07-27T03:30:00.000Z"
+        endAt: "2026-08-27T03:30:00.000Z"
       }
     ];
     expect(
       calendarDraftIssues(
         drafts,
         {
-          minBookingMinutes: 15,
-          maxBookingMinutes: 120,
           advanceDays: 30
         },
-        new Date("2026-07-26T00:00:00.000Z").getTime()
+        new Date("2026-07-27T01:02:00.000Z").getTime()
       )
     ).toEqual([
-      "占用时间至少需要 15 分钟",
-      "单次占用最长 120 分钟",
+      "不能占用已经过去的时间",
+      "占用结束时间不能超过未来 30 天",
       "同一占用目标存在重叠的草稿时段"
     ]);
   });
@@ -798,18 +815,16 @@ describe("资源日历状态", () => {
           id: "draft-a",
           resourceGroupId: "group-a",
           startAt: "2026-07-26T00:00:00.000Z",
-          endAt: "2026-07-26T00:05:00.000Z"
+          endAt: "2026-08-27T00:05:00.000Z"
         },
         {
-          minBookingMinutes: 15,
-          maxBookingMinutes: 120,
           advanceDays: 30
         },
         new Date("2026-07-26T01:00:00.000Z").getTime()
       )
     ).toEqual({
       startAt: "不能占用已经过去的时间",
-      endAt: "占用时间至少需要 15 分钟"
+      endAt: "占用结束时间不能超过未来 30 天"
     });
   });
 
@@ -836,8 +851,6 @@ describe("资源日历状态", () => {
       calendarDraftIssues(
         drafts,
         {
-          minBookingMinutes: 1,
-          maxBookingMinutes: 1440,
           advanceDays: 30
         },
         new Date("2026-07-26T00:00:00.000Z").getTime()

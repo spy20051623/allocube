@@ -12,8 +12,6 @@ process.env.BOOTSTRAP_ADMIN_NAME = "首次管理员";
 process.env.BOOTSTRAP_ADMIN_PASSWORD = "Admin12#$";
 process.env.BOOTSTRAP_SITE_ORIGIN = "https://allocube.company.test";
 process.env.BOOTSTRAP_ALLOWED_EMAIL_DOMAINS = "company.test,example.test";
-process.env.BOOTSTRAP_MIN_BOOKING_MINUTES = "5";
-process.env.BOOTSTRAP_MAX_BOOKING_MINUTES = "720";
 process.env.BOOTSTRAP_ADVANCE_DAYS = "60";
 process.env.BOOTSTRAP_SMTP_ENABLED = "true";
 process.env.BOOTSTRAP_SMTP_HOST = "smtp.company.test";
@@ -37,9 +35,10 @@ beforeAll(async () => {
 
 describe("首次启动配置", () => {
   it("将引导配置一次性写入持久配置", () => {
+    expect(dbModule.getAdminSettings()).not.toHaveProperty("minBookingMinutes");
+    expect(dbModule.getAdminSettings()).not.toHaveProperty("maxBookingMinutes");
+    expect(dbModule.db.prepare("SELECT key FROM settings WHERE key IN ('min_booking_minutes','max_booking_minutes')").all()).toEqual([]);
     expect(dbModule.getAdminSettings()).toMatchObject({
-      minBookingMinutes: 5,
-      maxBookingMinutes: 720,
       advanceDays: 60,
       siteOrigin: "https://allocube.company.test",
       allowedEmailDomains: ["company.test", "example.test"],
@@ -97,18 +96,28 @@ describe("首次启动配置", () => {
     expect(stored.password).not.toContain("smtp-bootstrap-password");
   });
 
+  it.each([366, 3650, 3651, 1e100])("首次配置的最远天数 %s 自动封顶", (days) => {
+    const previous = process.env.BOOTSTRAP_ADVANCE_DAYS;
+    try {
+      process.env.BOOTSTRAP_ADVANCE_DAYS = String(days);
+      expect(configModule.getBootstrapConfig().advanceDays).toBe(Math.min(days, 3650));
+    } finally {
+      process.env.BOOTSTRAP_ADVANCE_DAYS = previous;
+    }
+  });
+
   it("初始化完成后再次启动不会重新采用引导配置", async () => {
     dbModule.db
       .prepare(
-        "UPDATE settings SET value = '17' WHERE key = 'min_booking_minutes'"
+        "UPDATE settings SET value = '17' WHERE key = 'advance_days'"
       )
       .run();
-    process.env.BOOTSTRAP_MIN_BOOKING_MINUTES = "不是数字";
+    process.env.BOOTSTRAP_ADVANCE_DAYS = "不是数字";
     process.env.BOOTSTRAP_SITE_ORIGIN = "https://ignored.company.test";
     process.env.BOOTSTRAP_SMTP_SECURITY = "INVALID";
     await dbModule.initializeDatabase();
     expect(dbModule.getAdminSettings()).toMatchObject({
-      minBookingMinutes: 17,
+      advanceDays: 17,
       siteOrigin: "https://allocube.company.test"
     });
   });

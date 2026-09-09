@@ -714,12 +714,6 @@ async function initializePersistentConfiguration() {
       "INSERT INTO settings(key, value, updated_at) VALUES(?, ?, ?)"
     );
     for (const [key, value] of Object.entries({
-      min_booking_minutes: String(
-        bootstrap.minBookingMinutes
-      ),
-      max_booking_minutes: String(
-        bootstrap.maxBookingMinutes
-      ),
       advance_days: String(bootstrap.advanceDays),
       timezone: "Asia/Shanghai",
       public_site_origin: siteOrigin,
@@ -781,8 +775,6 @@ function adoptExistingPersistentConfiguration() {
       "INSERT OR IGNORE INTO settings(key, value, updated_at) VALUES(?, ?, ?)"
     );
     const compatibilityDefaults: Record<string, string> = {
-      min_booking_minutes: "1",
-      max_booking_minutes: "1440",
       advance_days: "30",
       timezone: "Asia/Shanghai",
       public_site_origin: config.isProduction
@@ -825,8 +817,6 @@ function adoptExistingPersistentConfiguration() {
 
 function assertPersistentConfiguration() {
   const requiredSettingKeys = [
-    "min_booking_minutes",
-    "max_booking_minutes",
     "advance_days",
     "timezone",
     "public_site_origin",
@@ -947,8 +937,6 @@ export function incrementRegistrationConfigRevision(at = nowIso()) {
 export function getSettings() {
   return {
     blockAdminBookings: getSettingNumber("block_admin_bookings", 0) === 1,
-    minBookingMinutes: getSettingNumber("min_booking_minutes", 1),
-    maxBookingMinutes: getSettingNumber("max_booking_minutes", 1440),
     advanceDays: getSettingNumber("advance_days", 30),
     timezone: "Asia/Shanghai"
   };

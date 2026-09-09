@@ -48,8 +48,6 @@ export function useSettingsController({
     };
   }, []);
   const [bookingForm, setBookingForm] = useState({
-    minBookingMinutes: 1,
-    maxBookingMinutes: 1440,
     advanceDays: 30,
     blockAdminBookings: false
   });
@@ -109,8 +107,6 @@ export function useSettingsController({
     }
     setAdminSettings(value);
     setBookingForm({
-      minBookingMinutes: value.minBookingMinutes,
-      maxBookingMinutes: value.maxBookingMinutes,
       advanceDays: value.advanceDays,
       blockAdminBookings: value.blockAdminBookings
     });
@@ -134,7 +130,7 @@ export function useSettingsController({
       return true;
     };
     if (adopt("/admin/settings", bookingDirty)) {
-      setBookingForm({ minBookingMinutes: value.minBookingMinutes, maxBookingMinutes: value.maxBookingMinutes, advanceDays: value.advanceDays, blockAdminBookings: value.blockAdminBookings });
+      setBookingForm({ advanceDays: value.advanceDays, blockAdminBookings: value.blockAdminBookings });
     }
     if (adopt("/admin/settings/site-profile", siteProfileDirty)) {
       setSiteOrigin(value.siteOrigin); setIcpFilingNumber(value.icpFilingNumber);
@@ -273,8 +269,6 @@ export function useSettingsController({
       );
       applySavedAdminSettings(result.settings, "/admin/settings");
       setBookingForm({
-        minBookingMinutes: result.settings.minBookingMinutes,
-        maxBookingMinutes: result.settings.maxBookingMinutes,
         advanceDays: result.settings.advanceDays,
         blockAdminBookings: result.settings.blockAdminBookings
       });
@@ -383,9 +377,7 @@ export function useSettingsController({
     Boolean(smtp && smtp.enabled !== smtpForm.enabled);
   const bookingDirty = Boolean(
     adminSettings &&
-    (bookingForm.minBookingMinutes !== adminSettings.minBookingMinutes ||
-      bookingForm.maxBookingMinutes !== adminSettings.maxBookingMinutes ||
-      bookingForm.advanceDays !== adminSettings.advanceDays ||
+    (bookingForm.advanceDays !== adminSettings.advanceDays ||
       bookingForm.blockAdminBookings !== adminSettings.blockAdminBookings)
   );
   const siteProfileDirty = Boolean(

@@ -15,7 +15,7 @@ export function validateSettingsResponse(value: unknown, smtp = false) {
   const row = value as Record<string, unknown>;
   const strings = smtp ? ["host", "security", "username", "fromName", "fromAddress", "passwordStatus", "updatedAt"]
     : ["timezone", "siteOrigin", "icpFilingNumber", "publicSecurityFilingNumber"];
-  const numbers = smtp ? ["version", "port"] : ["version", "minBookingMinutes", "maxBookingMinutes", "advanceDays"];
+  const numbers = smtp ? ["version", "port"] : ["version", "advanceDays"];
   const booleans = smtp ? ["enabled", "hasPassword", "testable", "operational"] : ["allowRegistrationWithoutEmail", "blockAdminBookings"];
   if (!strings.every(key => typeof row[key] === "string") ||
     !numbers.every(key => Number.isInteger(row[key]) && Number(row[key]) > 0) ||

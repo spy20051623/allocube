@@ -90,13 +90,58 @@ it("rechecks the policy after API preflight and never commits a stale confirmati
   await write(false);
   const prepared = await open("prepare", { action: "CREATE", segments: [segment(360)] });
   expect(prepared.statusCode, prepared.body).toBe(200);
+  const { db } = context.database;
+  const existing = db.prepare("SELECT id FROM reservations WHERE user_id=? AND status='CONFIRMED' ORDER BY start_at DESC LIMIT 1").get(adminId) as { id: string };
+  const update = { action: "UPDATE", reservationId: existing.id, segment: segment(240) };
+  const preparedUpdate = await open("prepare", update);
+  expect(preparedUpdate.statusCode, preparedUpdate.body).toBe(200);
   await write(true);
   const revision = context.database.getScheduleRevision();
+  const feedback = { message: "System administrator accounts cannot submit reservations. Please use your personal account.", details: { rejectionCode: "ADMIN_BOOKING_DISABLED" } };
   const denied = await open("prepare", { action: "CREATE", segments: [segment(420)] });
   expect(denied.statusCode, denied.body).toBe(403);
+  expect(denied.json().error).toMatchObject({ code: "FORBIDDEN", ...feedback });
+  const deniedUpdate = await open("prepare", update);
+  expect(deniedUpdate.statusCode).toBe(403);
+  expect(deniedUpdate.json().error).toMatchObject({ code: "FORBIDDEN", ...feedback });
   const committed = await open("commit", { confirmationToken: prepared.json().data.confirmationToken });
   expect(committed.statusCode, committed.body).toBe(409);
+  expect(committed.json().error).toMatchObject({ code: "OPERATION_REJECTED", ...feedback });
+  const committedUpdate = await open("commit", { confirmationToken: preparedUpdate.json().data.confirmationToken });
+  expect(committedUpdate.statusCode).toBe(409);
+  expect(committedUpdate.json().error).toMatchObject({ code: "OPERATION_REJECTED", ...feedback });
   expect(context.database.getScheduleRevision()).toBe(revision);
+  await write(false);
+  // Consumed confirmations remain rejected with their original reason even after policy changes.
+  const replay = await open("commit", { confirmationToken: prepared.json().data.confirmationToken });
+  expect(replay.statusCode).toBe(409);
+  expect(replay.json().error).toMatchObject({ code: "OPERATION_REJECTED", ...feedback });
+  expect(context.database.getScheduleRevision()).toBe(revision);
+  expect((await open("prepare", { action: "CREATE", segments: [segment(420)] })).statusCode).toBe(200);
+});
+
+it("keeps successful API replays and release operations available when submissions are blocked", async () => {
+  await write(false);
+  const prepared = await open("prepare", { action: "CREATE", segments: [segment(600)] });
+  const confirmationToken = prepared.json().data.confirmationToken;
+  const created = await open("commit", { confirmationToken });
+  expect(created.statusCode, created.body).toBe(200);
+  const reservationId = created.json().data.reservations[0].id;
+  const immediate = await open("prepare", { action: "CREATE", segments: [segment(0)] });
+  const active = await open("commit", { confirmationToken: immediate.json().data.confirmationToken });
+  expect(active.statusCode, active.body).toBe(200);
+  await write(true);
+  const revision = context.database.getScheduleRevision();
+  const replay = await open("commit", { confirmationToken });
+  expect(replay.statusCode, replay.body).toBe(200);
+  expect(replay.json().data).toEqual(created.json().data);
+  expect(context.database.getScheduleRevision()).toBe(revision);
+  for (const [action, id] of [["CANCEL", reservationId], ["END", active.json().data.reservations[0].id]]) {
+    const release = await open("prepare", { action, reservationId: id });
+    expect(release.statusCode, release.body).toBe(200);
+    const result = await open("commit", { confirmationToken: release.json().data.confirmationToken });
+    expect(result.statusCode, result.body).toBe(200);
+  }
   await write(false);
 });
 

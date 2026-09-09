@@ -27,6 +27,7 @@ import {
 } from "./scheduling.js";
 import { SourceRateLimiter } from "./source-rate-limit.js";
 import { OPEN_API_DOCUMENT } from "./openapi-document.js";
+import { ADMIN_BOOKING_DISABLED_CODE } from "../src/shared/booking-policy.js";
 
 const OPEN_API_PREFIX = "/api/open/v1";
 const CONFIRMATION_PREFIX = "allocube_confirm_";
@@ -56,6 +57,15 @@ class OpenApiError extends Error {
   ) {
     super(message);
   }
+}
+
+function adminBookingPolicyError(rejectedConfirmation = false) {
+  return new OpenApiError(
+    rejectedConfirmation ? 409 : 403,
+    rejectedConfirmation ? "OPERATION_REJECTED" : "FORBIDDEN",
+    "System administrator accounts cannot submit reservations. Please use your personal account.",
+    { rejectionCode: ADMIN_BOOKING_DISABLED_CODE }
+  );
 }
 
 const limitSchema = z.coerce.number().int().min(1).max(200).optional().default(50);
@@ -304,7 +314,7 @@ function executePreparedOperation(
     if (operation.status === "REJECTED") {
       return {
         kind: "ERROR",
-        error: new OpenApiError(
+        error: operation.rejection_code === ADMIN_BOOKING_DISABLED_CODE ? adminBookingPolicyError(true) : new OpenApiError(
           409,
           "OPERATION_REJECTED",
           "This preflight has expired. Run the preflight again.",
@@ -389,14 +399,15 @@ function executePreparedOperation(
       if (!(error instanceof BusinessError) && !(error instanceof z.ZodError)) {
         throw error;
       }
+      const blockedByAdminPolicy = error instanceof BusinessError && error.code === ADMIN_BOOKING_DISABLED_CODE;
       db.prepare(
         `UPDATE prepared_api_operations
-         SET status = 'REJECTED', rejection_code = 'STATE_CHANGED'
+         SET status = 'REJECTED', rejection_code = ?
          WHERE id = ?`
-      ).run(operation.id);
+      ).run(blockedByAdminPolicy ? ADMIN_BOOKING_DISABLED_CODE : "STATE_CHANGED", operation.id);
       return {
         kind: "ERROR",
-        error: new OpenApiError(
+        error: blockedByAdminPolicy ? adminBookingPolicyError(true) : new OpenApiError(
           409,
           "OPERATION_REJECTED",
           "Resource or reservation status has changed. Run the preflight again.",
@@ -805,6 +816,9 @@ export function registerOpenApiRoutes(
     });
 
     openApp.setErrorHandler((error, request, reply) => {
+      if (error instanceof BusinessError && error.code === ADMIN_BOOKING_DISABLED_CODE) {
+        error = adminBookingPolicyError();
+      }
       let statusCode = 500;
       let code: OpenApiErrorCode = "INTERNAL_ERROR";
       let message = "Server processing failed";

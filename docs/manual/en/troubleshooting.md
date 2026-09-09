@@ -73,6 +73,8 @@ First read the `error.code`, `error.message`, and `error.requestId` from the res
 | `410` | Confirmation token has exceeded the 5-minute validity period | Re-run preflight and submit using a new token |
 | `429` | Exceeded overall request limits, or separate limits for preflight and submission | Read `Retry-After` and wait; reduce polling and concurrency frequency |
 
+When “Prevent system administrators from submitting reservations” is enabled, CREATE and UPDATE preflight requests by system administrators return `403 FORBIDDEN`. If the restriction is enabled after preflight, commit returns `409 OPERATION_REJECTED`. Both responses explain that a personal account is required and include `error.details.rejectionCode: "ADMIN_BOOKING_DISABLED"`. A rejected confirmation token stays rejected with the same reason on retries; use a personal account's token and prepare a new operation. Cancellation, early release, and idempotent replays of successful operations remain available.
+
 See the live OpenAPI reference in [Official API](/docs/api) for each endpoint's status codes and error cases.
 
 ## Initial production startup fails on the administrator password

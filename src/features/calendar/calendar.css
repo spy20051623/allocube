@@ -2637,3 +2637,10 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.drawer-actions .primary-button[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: .45;
+  border-color: var(--blue);
+  background: var(--blue);
+  transform: none;
+}

@@ -946,6 +946,7 @@ export function incrementRegistrationConfigRevision(at = nowIso()) {
 
 export function getSettings() {
   return {
+    blockAdminBookings: getSettingNumber("block_admin_bookings", 0) === 1,
     minBookingMinutes: getSettingNumber("min_booking_minutes", 1),
     maxBookingMinutes: getSettingNumber("max_booking_minutes", 1440),
     advanceDays: getSettingNumber("advance_days", 30),

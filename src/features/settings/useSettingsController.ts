@@ -50,7 +50,8 @@ export function useSettingsController({
   const [bookingForm, setBookingForm] = useState({
     minBookingMinutes: 1,
     maxBookingMinutes: 1440,
-    advanceDays: 30
+    advanceDays: 30,
+    blockAdminBookings: false
   });
   const [adminSettings, setAdminSettings] =
     useState<AdminSettingsPayload | null>(null);
@@ -110,7 +111,8 @@ export function useSettingsController({
     setBookingForm({
       minBookingMinutes: value.minBookingMinutes,
       maxBookingMinutes: value.maxBookingMinutes,
-      advanceDays: value.advanceDays
+      advanceDays: value.advanceDays,
+      blockAdminBookings: value.blockAdminBookings
     });
     setAllowedEmailDomains(value.allowedEmailDomains);
     setSiteOrigin(value.siteOrigin);
@@ -132,7 +134,7 @@ export function useSettingsController({
       return true;
     };
     if (adopt("/admin/settings", bookingDirty)) {
-      setBookingForm({ minBookingMinutes: value.minBookingMinutes, maxBookingMinutes: value.maxBookingMinutes, advanceDays: value.advanceDays });
+      setBookingForm({ minBookingMinutes: value.minBookingMinutes, maxBookingMinutes: value.maxBookingMinutes, advanceDays: value.advanceDays, blockAdminBookings: value.blockAdminBookings });
     }
     if (adopt("/admin/settings/site-profile", siteProfileDirty)) {
       setSiteOrigin(value.siteOrigin); setIcpFilingNumber(value.icpFilingNumber);
@@ -273,7 +275,8 @@ export function useSettingsController({
       setBookingForm({
         minBookingMinutes: result.settings.minBookingMinutes,
         maxBookingMinutes: result.settings.maxBookingMinutes,
-        advanceDays: result.settings.advanceDays
+        advanceDays: result.settings.advanceDays,
+        blockAdminBookings: result.settings.blockAdminBookings
       });
       notify("success", tr("全局占用规则已更新"));
     } catch (error) {
@@ -382,7 +385,8 @@ export function useSettingsController({
     adminSettings &&
     (bookingForm.minBookingMinutes !== adminSettings.minBookingMinutes ||
       bookingForm.maxBookingMinutes !== adminSettings.maxBookingMinutes ||
-      bookingForm.advanceDays !== adminSettings.advanceDays)
+      bookingForm.advanceDays !== adminSettings.advanceDays ||
+      bookingForm.blockAdminBookings !== adminSettings.blockAdminBookings)
   );
   const siteProfileDirty = Boolean(
     adminSettings &&

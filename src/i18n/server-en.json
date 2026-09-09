@@ -494,5 +494,6 @@
   "统计结束日期不能早于开始日期": "The end date must not precede the start date",
   "自动调整后没有可用时段，未创建占用": "No available time slots remain after automatic adjustment. No reservations were created.",
   "请使用批量编辑参数提交自动调整": "Use the batch editing parameters for automatic adjustment.",
-  "数据已更新，请确认是否继续修改": "Data has changed. Confirm whether to continue with your changes."
+  "数据已更新，请确认是否继续修改": "Data has changed. Confirm whether to continue with your changes.",
+  "系统管理员账号已禁止提交占用，请使用个人账号。": "System administrator accounts cannot submit reservations. Please use your personal account."
 }

@@ -16,7 +16,7 @@ export function validateSettingsResponse(value: unknown, smtp = false) {
   const strings = smtp ? ["host", "security", "username", "fromName", "fromAddress", "passwordStatus", "updatedAt"]
     : ["timezone", "siteOrigin", "icpFilingNumber", "publicSecurityFilingNumber"];
   const numbers = smtp ? ["version", "port"] : ["version", "minBookingMinutes", "maxBookingMinutes", "advanceDays"];
-  const booleans = smtp ? ["enabled", "hasPassword", "testable", "operational"] : ["allowRegistrationWithoutEmail"];
+  const booleans = smtp ? ["enabled", "hasPassword", "testable", "operational"] : ["allowRegistrationWithoutEmail", "blockAdminBookings"];
   if (!strings.every(key => typeof row[key] === "string") ||
     !numbers.every(key => Number.isInteger(row[key]) && Number(row[key]) > 0) ||
     !booleans.every(key => typeof row[key] === "boolean")) throw new Error("Invalid settings response");

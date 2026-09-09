@@ -354,5 +354,6 @@
   "已自动调整并提交 {{v0}} 条资源占用": "Automatically adjusted and submitted {{v0}} reservations",
   "暂时无法检查可用时段，正在重试。草稿已保留。": "Availability cannot be checked right now. Retrying; your drafts have been kept.",
   "暂时无法核对原占用，正在重试。草稿已保留。": "Original reservations cannot be checked right now. Retrying; your drafts have been kept.",
-  "一次最多提交 100 条占用": "Maximum of 100 reservations can be submitted at once"
+  "一次最多提交 100 条占用": "Maximum of 100 reservations can be submitted at once",
+  "系统管理员账号已禁止提交占用，请使用个人账号。": "System administrator accounts cannot submit reservations. Please use your personal account."
 }

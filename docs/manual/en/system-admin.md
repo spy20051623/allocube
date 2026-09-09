@@ -53,6 +53,8 @@ Settings synchronize changes from other pages or devices when there is no unsave
 
 Outside the calendar, machine details, resource configuration, announcements, and feedback use the same conflict handling: untouched forms synchronize, edited forms retain drafts, and stale submissions require overwrite confirmation. Confirmation applies the submitted data while preserving authorization, field, capacity, and workflow checks. Deleted objects, processed applications, and read-only feedback cannot be forced through. Approvals, enable/disable actions, and maintenance also require confirmation when their version or affected reservations have changed.
 
+The “Prevent system administrators from submitting reservations” switch under booking rules is off by default and takes effect after “Save rules”. When enabled, system administrators must use personal accounts to create, update, or resubmit reservations through the web app or official API. Regular users and machine administrators are unaffected. Existing reservations remain unchanged, and cancellation and early release remain available. Disable the switch and save to restore submission access.
+
 ## System announcements
 
 The "System maintenance" section publishes temporary notices for upgrades and similar events. Click "Edit" to enter up to 120 characters of single-line plain text. Saving displays it live at the top of the signed-in application, without a popup, notifications, or restrictions on operations. Save an empty value to remove it. Users can dismiss the current version with the close button on the right. Dismissal is remembered per user in that browser and synchronized across tabs; an administrator's next update appears again.

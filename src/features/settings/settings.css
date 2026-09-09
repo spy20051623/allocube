@@ -609,3 +609,44 @@
   text-align: center;
 }
 
+.booking-admin-policy {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 10px;
+  background: var(--surface-raised, #f8fafc);
+}
+
+.booking-admin-policy-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: var(--text-accent, var(--blue));
+  background: var(--blue-soft);
+}
+
+.booking-admin-policy-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.booking-admin-policy-copy > label {
+  color: var(--text-primary, #344054);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.booking-admin-policy small {
+  color: var(--text-secondary, #64748b);
+  font-size: 12px;
+  line-height: 1.6;
+}

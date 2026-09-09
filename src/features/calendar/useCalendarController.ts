@@ -1,3 +1,4 @@
+import { ADMIN_BOOKING_BLOCKED_MESSAGE, isAdminBookingBlocked } from "../../shared/booking-policy";
 import { useRealtimeRefresh } from "../../useRealtimeRefresh";
 import { withRequestDeadline } from "../../request-deadline";
 import type { OwnReservation, OwnReservationDetail } from "../../shared/my-reservations";
@@ -1032,7 +1033,9 @@ export function useCalendarController({
     return () => { previewRequestIdRef.current++; if (previewRetry.current) clearTimeout(previewRetry.current); };
   }, [refreshDraftPreview, timeline?.revision, submitting]);
 
+  const adminBookingBlocked = isAdminBookingBlocked(user.role, settings);
   const submitDrafts = async () => {
+    if (adminBookingBlocked) { notify("error", tr(ADMIN_BOOKING_BLOCKED_MESSAGE)); return; }
     if (!drafts.length || draftIssues.length || editingChanged || submissionUncertain || submittingRef.current) return;
     submittingRef.current = true; setSubmitting(true);
     previewRequestIdRef.current++;
@@ -1386,6 +1389,7 @@ export function useCalendarController({
     previewing,
     draftIssues,
     submitDrafts,
+    adminBookingBlocked,
     myReservationsOpen,
     setView,
     setDate,

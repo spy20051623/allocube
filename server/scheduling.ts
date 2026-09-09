@@ -1,3 +1,4 @@
+import { assertUserCanSubmitReservations } from "./reservation-policy.js";
 import { assertReservationState } from "./reservation-state.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -380,6 +381,7 @@ function segmentsAdjusted(before: ReservationSegmentInput[], after: ReservationS
 }
 
 export function previewReservationBatch(userId: string, rawSegments: unknown[]) {
+  assertUserCanSubmitReservations(userId);
   if (!rawSegments.length || rawSegments.length > 100) {
     throw new BusinessError("一次最多提交 100 条占用");
   }
@@ -434,6 +436,7 @@ export function previewReservationUpdate(
   reservationId: string,
   rawSegment: unknown
 ) {
+  assertUserCanSubmitReservations(userId);
   const segment = segmentSchema.parse(rawSegment);
   const existing = getOwnedConfirmedReservation(reservationId, userId);
   if (segment.resourceGroupId !== existing.resource_group_id) {
@@ -651,6 +654,7 @@ export function commitReservationBatch(
   validateSingleReservationScope(parsedSegments);
 
   return withImmediateTransaction(() => {
+    assertUserCanSubmitReservations(userId);
     const serverMinute = currentMinuteIso();
     let segments = parsedSegments.map((segment) =>
       normalizeSegmentStart(segment, serverMinute)
@@ -687,6 +691,7 @@ export function replaceReservationBatch(
   const parsedSegments = rawSegments.map((item) => segmentSchema.parse(item));
 
   const result = withImmediateTransaction(() => {
+    assertUserCanSubmitReservations(userId);
     const serverMinute = currentMinuteIso();
     const segments = parsedSegments.map((segment) =>
       normalizeSegmentStart(segment, serverMinute)
@@ -809,6 +814,7 @@ export function previewMultipleReplacement(userId: string, selection: unknown, s
 
 export function replaceMultipleReservations(userId: string, selection: unknown, rawSegments: unknown[], autoAdjust = false) {
   return withImmediateTransaction(() => {
+    assertUserCanSubmitReservations(userId);
     const prepared = prepareMultipleReplacement(userId, selection, rawSegments, autoAdjust);
     const { originals, items, now, minute } = prepared;
     const segments = autoAdjust ? availableSegments(items) : prepared.segments;
@@ -846,6 +852,7 @@ export function updateReservation(
 ) {
   const segment = segmentSchema.parse(rawSegment);
   const result = withImmediateTransaction(() => {
+    assertUserCanSubmitReservations(actorUserId);
     const existing = db
       .prepare("SELECT * FROM reservations WHERE id = ?")
       .get(reservationId) as Record<string, unknown> | undefined;

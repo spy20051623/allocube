@@ -1,3 +1,4 @@
+import { ADMIN_BOOKING_BLOCKED_MESSAGE } from "../../shared/booking-policy";
 import { CalendarDateButton } from "../../CalendarDateButton";
 import { intersectCalendarInterval } from "../../calendar-interval";
 import { PageHeader } from "../../PageHeader";
@@ -180,6 +181,7 @@ export function CalendarPage({
     previewing,
     draftIssues,
     submitDrafts,
+    adminBookingBlocked,
     myReservationsOpen,
     setView,
     setDate,
@@ -987,6 +989,7 @@ export function CalendarPage({
               </div>
             )}
           </div>
+          {adminBookingBlocked && <div className="context-notice warning" role="status">{tr(ADMIN_BOOKING_BLOCKED_MESSAGE)}</div>}
           {previewReadError && <div className="context-notice warning" role="status">{tr("暂时无法检查可用时段，正在重试。草稿已保留。")}</div>}
           {editingCheckError && <div className="context-notice warning" role="status">{tr("暂时无法核对原占用，正在重试。草稿已保留。")}</div>}
           {editingReservations.length > 0 && <div className="calendar-edit-sequence">
@@ -1136,7 +1139,7 @@ export function CalendarPage({
                 }
               />
               <div className="drawer-actions">
-                <button className="primary-button" disabled={submitting || previewing || !!draftIssues.length || editingChanged || submissionUncertain} onClick={() => void submitDrafts()}>
+                <button className="primary-button" disabled={adminBookingBlocked || submitting || previewing || !!draftIssues.length || editingChanged || submissionUncertain} onClick={() => void submitDrafts()}>
                   {submitting ? <RefreshCw size={16} className="spin" /> : <Check size={16} />}
                   {editingReservation ? tr("提交修改") : tr("提交占用")}
                 </button>

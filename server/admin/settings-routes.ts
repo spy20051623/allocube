@@ -24,6 +24,7 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
         minBookingMinutes: z.number().int().min(1).max(1440),
         maxBookingMinutes: z.number().int().min(1).max(10080),
         advanceDays: z.number().int().min(1).max(365),
+        blockAdminBookings: z.boolean().optional(),
         expectedVersion: z.number().int().min(1),
         overwrite: z.boolean().optional().default(false)
       })
@@ -48,15 +49,21 @@ export function registerSettingsAdminRoutes(app: FastifyInstance) {
         updatedAt
       );
       upsert.run("advance_days", String(body.advanceDays), updatedAt);
+      // Older clients updating duration rules must not reset the administrator policy.
+      if (body.blockAdminBookings !== undefined) {
+        upsert.run("block_admin_bookings", body.blockAdminBookings ? "1" : "0", updatedAt);
+      }
     }, (before, after) => ({
       action: "SETTINGS_UPDATE", entityId: "booking", before: {
         minBookingMinutes: before.minBookingMinutes,
         maxBookingMinutes: before.maxBookingMinutes,
-        advanceDays: before.advanceDays
+        advanceDays: before.advanceDays,
+        blockAdminBookings: before.blockAdminBookings
       }, after: {
         minBookingMinutes: after.minBookingMinutes,
         maxBookingMinutes: after.maxBookingMinutes,
-        advanceDays: after.advanceDays
+        advanceDays: after.advanceDays,
+        blockAdminBookings: after.blockAdminBookings
       }
     }));
     return { message: "占用规则已更新", settings };

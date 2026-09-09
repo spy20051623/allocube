@@ -20,7 +20,7 @@ const fieldLabels: Record<string, string> = {
   allocations: "资源组成", sharingMode: "共享模式", rangeStart: "范围起点", rangeEnd: "范围终点", capacity: "容量", items: "资源设备", name: "名称", address: "地址", hardwareNotes: "硬件信息", connectionGuide: "连接说明", tags: "标签", managementNotesChanged: "管理备注已修改", userId: "关联用户",
   description: "描述", sortOrder: "排序", version: "版本", kind: "类型", unit: "单位", username: "用户名", displayName: "姓名", employeeNumber: "工号", email: "邮箱",
   reviewReason: "审核原因", displayNameChanged: "姓名已修改", employeeNumberChanged: "工号已修改", requestedDisplayName: "申请姓名", requestedEmployeeNumber: "申请工号", targetType: "对象类型", reasonProvided: "已填写原因", impact: "影响数量",
-  minBookingMinutes: "最短占用分钟数", maxBookingMinutes: "最长占用分钟数", advanceDays: "可提前预约天数", siteName: "站点名称", siteDescription: "站点描述", siteOrigin: "站点地址",
+  blockAdminBookings: "禁止系统管理员提交占用", minBookingMinutes: "最短占用分钟数", maxBookingMinutes: "最长占用分钟数", advanceDays: "可提前预约天数", siteName: "站点名称", siteDescription: "站点描述", siteOrigin: "站点地址",
   icpFilingNumber: "ICP备案号", publicSecurityFilingNumber: "公安备案号", allowedEmailDomains: "注册邮箱白名单", allowRegistrationWithoutEmail: "允许无邮箱注册", requireRegistrationEmail: "注册需要邮箱",
   enabled: "启用", host: "邮件服务器", port: "端口", security: "连接安全", fromName: "发件人名称", fromAddress: "发件人地址", hasPassword: "已配置密码", passwordChanged: "密码已修改", passwordCleared: "密码已清除",
   bodyLength: "正文长度", active: "生效", accessLevel: "访问级别", expiresAt: "到期时间", number: "反馈编号", type: "类型", level: "级别", titleLength: "标题长度", changedFields: "修改字段", commentLength: "评论长度",

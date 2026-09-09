@@ -91,6 +91,20 @@ export function SettingsPanel({
               <Field label={tr("单次最长时长（分钟）")}><input type="number" min={1} value={bookingForm.maxBookingMinutes} onChange={(e) => setBookingForm({ ...bookingForm, maxBookingMinutes: Number(e.target.value) })} /></Field>
               <Field label={tr("最远可占用天数")}><input type="number" min={1} value={bookingForm.advanceDays} onChange={(e) => setBookingForm({ ...bookingForm, advanceDays: Number(e.target.value) })} /><small>{tr("以占用结束时间为准。")}</small></Field>
             </div>
+            <div className="booking-admin-policy">
+              <span className="booking-admin-policy-icon" aria-hidden="true"><ShieldCheck size={18} /></span>
+              <div className="booking-admin-policy-copy">
+                <label id="admin-booking-policy-label" htmlFor="block-admin-bookings">{tr("禁止系统管理员提交占用")}</label>
+                <small id="admin-booking-policy-description">{tr("开启后请使用个人账号提交占用，系统管理员账号仍可管理和释放资源。")}</small>
+              </div>
+              <label className="settings-toggle-control">
+                <input id="block-admin-bookings" type="checkbox" role="switch" aria-labelledby="admin-booking-policy-label"
+                  aria-describedby="admin-booking-policy-description" checked={bookingForm.blockAdminBookings}
+                  disabled={settingsUncertain}
+                  onChange={event => setBookingForm({ ...bookingForm, blockAdminBookings: event.target.checked })} />
+                <i className="settings-toggle" aria-hidden="true"><i /></i>
+              </label>
+            </div>
             <div className="settings-card-footer">
               <ContextNotice className="settings-rule-note">
                 {tr("保存后仅影响新的占用，不会改变已经确认的占用。")}</ContextNotice>

@@ -34,6 +34,7 @@ export type RegistrationConfigPayload = {
 };
 
 export type AdminSettingsPayload = {
+  blockAdminBookings: boolean;
   minBookingMinutes: number;
   maxBookingMinutes: number;
   advanceDays: number;

@@ -230,6 +230,7 @@ export interface DashboardBootstrap {
   csrfToken: string;
   serverNow: string;
   settings: {
+    blockAdminBookings: boolean;
     minBookingMinutes: number;
     maxBookingMinutes: number;
     advanceDays: number;

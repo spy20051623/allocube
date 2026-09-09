@@ -227,5 +227,8 @@
   "系统维护提示已更新": "Maintenance notice updated",
   "更新系统维护提示": "Update maintenance notice",
   "维护提示不能超过 120 字": "Maintenance notices cannot exceed 120 characters",
-  "关闭系统维护提示": "Dismiss maintenance notice"
+  "关闭系统维护提示": "Dismiss maintenance notice",
+  "禁止系统管理员提交占用": "Prevent system administrators from submitting reservations",
+  "开启后请使用个人账号提交占用，系统管理员账号仍可管理和释放资源。": "When enabled, use a personal account to submit reservations. System administrators can still manage and release resources.",
+  "系统管理员账号已禁止提交占用，请使用个人账号。": "System administrator accounts cannot submit reservations. Please use your personal account."
 }

@@ -13,6 +13,7 @@ import type { AuditEntry, AuditValue } from "./shared/audit";
 import "./audit.css";
 
 const fieldLabels: Record<string, string> = {
+  maintenanceText: "提示内容",
   announcement: "机器公告",
   startAt: "开始时间", endAt: "结束时间", scope: "占用范围", status: "状态", title: "标题", purpose: "用途", note: "备注", reason: "原因",
   action: "处理方式", resultingSegments: "调整后时段", replacementBatchId: "新占用批次", replacedReservationIds: "被替换占用", newReservationIds: "新占用", replacesReservationId: "替换的占用", segmentCount: "时段数量",
@@ -26,6 +27,7 @@ const fieldLabels: Record<string, string> = {
   fromDate: "起始日期", toDate: "截止日期", completedDays: "已完成天数", totalDays: "总天数", reasonCode: "原因代码"
 };
 const entityLabels: Record<string, string> = {
+  system_maintenance: "系统维护",
   reservation: "占用", resource_unavailability: "维护安排", machine_access_request: "使用权申请", profile_change_request: "资料修改申请",
   registration_tombstone: "注册申请", registration_email: "注册邮箱规则", primary: "占用规则", booking: "占用规则", site_profile: "站点信息", site_origin: "站点地址",
   icp_filing: "ICP备案号", public_security_filing: "公安备案号"

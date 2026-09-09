@@ -222,8 +222,8 @@ export function PasswordBanner({
 }) {
   return (
     <div className="password-banner">
-      <CircleAlert size={17} />
-      {tr("当前仍在使用初始或恢复密码，建议尽快修改。")}<button onClick={onModify}>{tr("现在修改")}</button>
+      <CircleAlert size={17} aria-hidden="true" />
+      <span className="password-banner-message">{tr("当前仍在使用初始或恢复密码，建议尽快修改。")}</span><button onClick={onModify}>{tr("现在修改")}</button>
       <button onClick={onDismiss}>{tr("本次稍后提醒")}</button>
     </div>
   );

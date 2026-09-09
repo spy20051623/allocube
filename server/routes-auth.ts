@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getSystemMaintenanceNotice } from "./system-maintenance.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
@@ -747,6 +748,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
         csrfToken,
         serverNow: nowIso(),
         settings: getSettings(),
+        maintenanceNotice: getSystemMaintenanceNotice(),
         managedMachineIds:
           user.status === "ACTIVE"
             ? getManagedMachineIds(user.id, user.role)
@@ -768,6 +770,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
       csrfToken: auth.csrfToken,
       serverNow: nowIso(),
       settings: getSettings(),
+      maintenanceNotice: getSystemMaintenanceNotice(),
       managedMachineIds:
         auth.user.status === "ACTIVE"
           ? getManagedMachineIds(auth.user.id, auth.user.role)

@@ -21,6 +21,7 @@ import { ResourceCatalogPage } from "./features/catalog/ResourceCatalogPage";
 import { AccountProfilePage } from "./features/account/AccountProfilePage";
 import { NotificationsPage } from "./features/notifications/NotificationsPage";
 import { AnnouncementListPage, AnnouncementCenter } from "./features/announcements/AnnouncementPages";
+import { SystemMaintenanceBanner, useSystemMaintenanceBanner } from "./features/announcements/SystemMaintenanceBanner";
 import { FeedbackPage } from "./features/feedback/FeedbackPages";
 import { AdminPage } from "./features/admin/AdminPage";
 import { useSession } from "./app/useSession";
@@ -36,6 +37,7 @@ export function App() {
     [routeLocation.pathname]
   );
   const { bootstrap, setBootstrap, loading, sessionReadError, loadSession, acceptAuthenticatedSession } = useSession(Boolean(docsRoute));
+  const maintenanceBanner = useSystemMaintenanceBanner(bootstrap?.user.id, bootstrap?.maintenanceNotice);
   const { toast, notify } = useToast();
   useNumberInputWheel();
   const [passwordReminderDismissed, setPasswordReminderDismissed] = useState(false);
@@ -220,7 +222,7 @@ export function App() {
   return (
     <ServerClockProvider initialServerNow={bootstrap.serverNow}>
       <DialogProvider>
-        <div className={`app-frame${showPasswordReminder ? " has-password-banner" : ""}${visiblePage === "admin" && adminTab === "feedback" && currentRoute?.feedbackId ? " feedback-admin-detail-frame" : ""}`}>
+        <div className={`app-frame${showPasswordReminder ? " has-password-banner" : ""}${maintenanceBanner.visible ? " has-maintenance-banner" : ""}${visiblePage === "admin" && adminTab === "feedback" && currentRoute?.feedbackId ? " feedback-admin-detail-frame" : ""}`}>
           <Topbar
             user={bootstrap.user}
             restricted={!activeUser}
@@ -231,6 +233,7 @@ export function App() {
             navigate={navigate}
             onLogout={() => void logout()}
           />
+          {maintenanceBanner.visible && <SystemMaintenanceBanner text={bootstrap.maintenanceNotice.text} onDismiss={maintenanceBanner.dismiss} />}
           {showPasswordReminder && (
             <PasswordBanner
               onModify={() => navigate("profile")}

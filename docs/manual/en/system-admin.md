@@ -55,6 +55,8 @@ Outside the calendar, machine details, resource configuration, announcements, an
 
 ## System announcements
 
+The "System maintenance" section publishes temporary notices for upgrades and similar events. Click "Edit" to enter up to 120 characters of single-line plain text. Saving displays it live at the top of the signed-in application, without a popup, notifications, or restrictions on operations. Save an empty value to remove it. Users can dismiss the current version with the close button on the right. Dismissal is remembered per user in that browser and synchronized across tabs; an administrator's next update appears again.
+
 Announcements display important messages to everyone who can log in. Under "Admin → Announcements", you can create, edit, preview, publish, and unpublish them. The default list shows published announcements; enable "Show archived" to view and republish older ones.
 
 Announcement titles have a maximum of 120 characters, and the body has a maximum of 10,000 characters. The body supports common Markdown, including paragraphs, lists, blockquotes, tables, code, and links; raw HTML and images will not be rendered.

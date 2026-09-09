@@ -218,5 +218,14 @@
   "共享": "Shared",
   "独占": "Exclusive",
   "注册邮箱规则": "Registration email policy",
-  "不限": "Any date"
+  "不限": "Any date",
+  "系统维护": "System maintenance",
+  "提示内容": "Notice text",
+  "暂无系统维护提示": "No system maintenance notice",
+  "维护提示加载失败": "Failed to load maintenance notice",
+  "编辑系统维护提示": "Edit maintenance notice",
+  "系统维护提示已更新": "Maintenance notice updated",
+  "更新系统维护提示": "Update maintenance notice",
+  "维护提示不能超过 120 字": "Maintenance notices cannot exceed 120 characters",
+  "关闭系统维护提示": "Dismiss maintenance notice"
 }

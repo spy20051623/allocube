@@ -1,14 +1,51 @@
 .app-frame {
   --app-topbar-height: 64px;
-  --app-banner-height: 0px;
+  --app-password-banner-height: 0px;
+  --app-maintenance-banner-height: 0px;
+  --app-banner-height: calc(var(--app-password-banner-height) + var(--app-maintenance-banner-height));
   --app-header-height: calc(var(--app-topbar-height) + var(--app-banner-height));
   min-height: 100vh;
   min-height: 100dvh;
 }
 
 .app-frame.has-password-banner {
-  --app-banner-height: 36px;
+  --app-password-banner-height: 36px;
 }
+
+.app-frame.has-maintenance-banner { --app-maintenance-banner-height: 36px; }
+
+.system-maintenance-banner {
+  position: sticky;
+  z-index: 29;
+  top: var(--app-topbar-height);
+  height: var(--app-maintenance-banner-height);
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 28px;
+  border-bottom: 1px solid var(--border-warning, #edd2b4);
+  color: var(--text-warning, #885021);
+  background: var(--surface-warning, #fff5e9);
+  font-size: 12px;
+}
+.system-maintenance-banner-copy { grid-column: 2; justify-self: center; display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.system-maintenance-banner-copy > svg { flex-shrink: 0; }
+.system-maintenance-banner-copy > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: center; }
+.system-maintenance-banner > button {
+  display: grid;
+  place-items: center;
+  grid-column: 3;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.system-maintenance-banner > button:hover { background: var(--surface-warning-hover, #fae9d2); }
 
 .topbar {
   position: sticky;
@@ -259,8 +296,8 @@
 .password-banner {
   position: sticky;
   z-index: 29;
-  top: var(--app-topbar-height);
-  height: var(--app-banner-height);
+  top: calc(var(--app-topbar-height) + var(--app-maintenance-banner-height));
+  height: var(--app-password-banner-height);
   padding: 7px 28px;
   display: flex;
   justify-content: center;
@@ -280,6 +317,7 @@
   font-weight: 700;
   cursor: pointer;
 }
+.password-banner > svg { flex-shrink: 0; }
 
 .app-content {
   min-height: calc(100vh - var(--app-header-height));

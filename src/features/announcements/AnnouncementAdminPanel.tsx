@@ -15,6 +15,7 @@ import { type SystemAnnouncement, type AnnouncementEditorState } from "./types";
 import { EmptyState } from "../../components/feedback";
 import { validationDetailFromApi } from "../../api-errors";
 import { Field } from "../../components/forms";
+import { SystemMaintenancePanel } from "./SystemMaintenancePanel";
 
 export function AnnouncementAdminPanel({
   notify
@@ -106,6 +107,7 @@ export function AnnouncementAdminPanel({
           </div>
         }
       />
+      <SystemMaintenancePanel notify={notify} />
       {!loaded ? (
         <div className="card announcement-admin-empty">{tr("正在加载系统公告…")}</div>
       ) : loadError ? (

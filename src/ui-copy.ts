@@ -135,6 +135,7 @@ export function auditActionLabel(action: string) {
       API_TOKEN_CREATE: tr("创建个人访问令牌"),
       API_TOKEN_REVOKE: tr("吊销个人访问令牌"),
       API_TOKEN_REVOKE_ALL: tr("吊销全部个人访问令牌"),
+      SYSTEM_MAINTENANCE_UPDATE: tr("更新系统维护提示"),
       ANNOUNCEMENT_CREATE: tr("创建系统公告"),
       ANNOUNCEMENT_UPDATE: tr("编辑系统公告"),
       ANNOUNCEMENT_REACTIVATE: tr("重新启用系统公告"),

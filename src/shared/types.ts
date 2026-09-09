@@ -1,3 +1,5 @@
+import type { SystemMaintenanceNotice } from "./system-maintenance.js";
+
 export type UserRole = "SYSTEM_ADMIN" | "USER";
 export type UserStatus =
   | "PENDING_APPROVAL"
@@ -223,6 +225,7 @@ export interface NotificationItem {
 }
 
 export interface DashboardBootstrap {
+  maintenanceNotice: SystemMaintenanceNotice;
   user: AuthUser;
   csrfToken: string;
   serverNow: string;

@@ -60,6 +60,10 @@
 .announcement-subheading { display: block; margin: 16px 0 7px; color: var(--ink); font-size: 15px; }
 
 .announcement-management-page { min-width: 0; }
+.system-maintenance-panel { margin-bottom: 14px; }
+.system-maintenance-preview { margin: 0; padding: 12px 14px; border-radius: 8px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; color: var(--text-warning, #885021); background: var(--surface-warning, #fff5e9); }
+.system-maintenance-preview.empty { color: var(--muted); background: var(--surface-raised, #f7f9fc); }
+.system-maintenance-load-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); }
 .announcement-viewer-page { max-width: 980px; }
 .announcement-load-error {
   padding: 24px;

@@ -360,7 +360,8 @@
   .auth-card { padding: 28px 22px; }
 
   .app-frame { --app-topbar-height: 110px; }
-  .app-frame.has-password-banner { --app-banner-height: 70px; }
+  .app-frame.has-password-banner { --app-password-banner-height: 70px; }
+  .system-maintenance-banner { padding-inline: 12px; }
   .topbar {
     height: var(--app-topbar-height);
     padding: 8px 12px 0;
@@ -385,13 +386,14 @@
   .topbar-user-copy { display: none; }
   .topbar-user-menu { width: min(240px, calc(100vw - 24px)); }
   .password-banner {
-    height: var(--app-banner-height);
+    height: var(--app-password-banner-height);
     padding: 7px 12px;
     flex-wrap: wrap;
     align-content: center;
     line-height: 1.35;
     text-align: center;
   }
+  .password-banner-message { flex: 0 1 calc(100% - 25px); text-align: left; }
   .calendar-main { padding: 14px 10px; }
   .calendar-main > .page-header { margin-bottom: 12px; flex-wrap: wrap; }
   .calendar-wheel-hint { display: none; }

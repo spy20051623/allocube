@@ -1,4 +1,5 @@
 import { overwriteRequested } from "./edit-conflict.js";
+import { registerSystemMaintenanceRoutes } from "./system-maintenance.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -84,6 +85,7 @@ export function registerAnnouncementRoutes(
   app: FastifyInstance,
   publishAnnouncementChange: () => void
 ) {
+  registerSystemMaintenanceRoutes(app);
   app.get("/api/v1/announcements", async (request, reply) => {
     const auth = requireAuth(request, reply);
     if (!auth) return;

@@ -40,7 +40,7 @@ const familyFields: Record<string, string[]> = {
   profile_change_request: ["displayNameChanged", "employeeNumberChanged", "reasonProvided", "status", "reason", "reviewReason", "requestedDisplayName", "requestedEmployeeNumber"],
   machine_access_request: ["status", "reason", "userId"],
   resource_unavailability: ["targetType", "startAt", "endAt", "reason", "reasonProvided", "status", "kind", "impact"],
-  settings: ["minBookingMinutes", "maxBookingMinutes", "advanceDays", "siteName", "siteDescription", "siteOrigin", "icpFilingNumber", "publicSecurityFilingNumber", "allowedEmailDomains", "allowRegistrationWithoutEmail", "requireRegistrationEmail", "version"],
+  settings: ["maintenanceText", "minBookingMinutes", "maxBookingMinutes", "advanceDays", "siteName", "siteDescription", "siteOrigin", "icpFilingNumber", "publicSecurityFilingNumber", "allowedEmailDomains", "allowRegistrationWithoutEmail", "requireRegistrationEmail", "version"],
   smtp_settings: ["enabled", "host", "port", "security", "username", "fromName", "fromAddress", "hasPassword", "passwordChanged", "passwordCleared"],
   announcement: ["title", "bodyLength", "status", "active"],
   api_token: ["name", "accessLevel", "expiresAt"],

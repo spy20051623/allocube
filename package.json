@@ -19,6 +19,7 @@
     "test:calendar-boundaries": "node scripts/test-calendar-boundaries.mjs",
     "test:calendar-zoom-guide": "node scripts/test-calendar-zoom-guide.mjs",
     "test:machine-announcement": "node scripts/test-machine-announcement.mjs",
+    "test:system-maintenance": "node scripts/test-system-maintenance.mjs",
     "test:edit-conflicts": "node scripts/test-edit-conflicts.mjs",
     "test:docs-loading": "node scripts/test-docs-loading.mjs",
     "test:browser-cache": "node scripts/test-browser-cache.mjs",

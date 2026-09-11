@@ -205,6 +205,9 @@ export function EmailEditModal({
   onSaved: () => Promise<void>;
 }) {
   const [step, setStep] = useState<"EDIT" | "CONFIRM_CLEAR">("EDIT");
+  const [oldChallengeId, setOldChallengeId] = useState("");
+  const [oldCode, setOldCode] = useState("");
+  const [oldSending, setOldSending] = useState(false);
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [code, setCode] = useState("");
@@ -327,6 +330,7 @@ export function EmailEditModal({
         body: jsonBody({
           email: clearing ? null : normalizedEmail,
           challengeId: clearing ? null : challengeId,
+          ...(registrationConfig?.emailEnabled && currentEmail ? { oldChallengeId: oldChallengeId || undefined, oldCode: oldCode || undefined } : {}),
           code: clearing ? null : code,
           clearEmailConfirmed: clearing,
           expectedConfigRevision: registrationConfig.revision,
@@ -476,6 +480,20 @@ export function EmailEditModal({
               <span>{tr("当前邮箱")}</span>
               <input readOnly value={currentEmail} />
             </label>
+          )}
+          {currentEmail && emailEnabled && (
+            <div className="verification-row">
+              <label className="field"><span>{tr("旧邮箱验证码")}</span>
+                <input inputMode="numeric" maxLength={6} value={oldCode} onChange={event => setOldCode(event.target.value.replace(/\D/g, ""))} />
+                <small>{tr("旧邮箱不可用时，请联系管理员恢复。")}</small>
+              </label>
+              <button type="button" className="secondary-button verification-button" disabled={oldSending} onClick={async () => {
+                setOldSending(true);
+                try { const result = await api<{ challengeId: string }>("/auth/old-email-code", { method: "POST", body: jsonBody({}) }); setOldChallengeId(result.challengeId); notify("success", tr("验证码已发送至旧邮箱")); }
+                catch (error) { notify("error", error instanceof Error ? error.message : tr("发送失败")); }
+                finally { setOldSending(false); }
+              }}>{tr("验证旧邮箱")}</button>
+            </div>
           )}
           {registrationConfig && !emailEnabled && (
             currentEmail ? (

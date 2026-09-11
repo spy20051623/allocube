@@ -23,6 +23,24 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 describe("audit queries", () => {
+  it("shows key operation metadata without exposing keys, proofs or unrelated identity fields", () => {
+    for (const action of ["SSH_KEY_ADD", "SSH_KEY_REMOVE", "SSH_KEY_ACTIVATE", "SSH_KEY_DEACTIVATE"]) {
+      const personal = action === "SSH_KEY_ADD" || action === "SSH_KEY_REMOVE";
+      const metadata = { ...(personal ? { name: "Laptop" } : {}), keyId: "key", fingerprint: "SHA256:public-fingerprint" };
+      const detail = store.detail(audit(action, personal ? "user" : "machine", personal ? "u" : "m", undefined,
+        { ...metadata, publicKey: "SECRET_KEY", privateKey: "SECRET_PRIVATE", code: "SECRET_CODE", email: "SECRET_EMAIL" }));
+      expect(detail.fields).toEqual(Object.entries(metadata).map(([key, after]) => ({ key, after })));
+      expect(detail.unavailable).toBe(false);
+      expect(JSON.stringify(detail)).not.toContain("SECRET");
+    }
+    // Old records only have a fingerprint; they must still become readable.
+    expect(store.detail(audit("SSH_KEY_REMOVE", "user", "u", undefined, { fingerprint: "SHA256:old" })).fields)
+      .toEqual([{ key: "fingerprint", after: "SHA256:old" }]);
+    expect(store.detail(audit("USER_LOGIN", "user", "u", undefined, { keyId: "SECRET", fingerprint: "SECRET" })).fields).toEqual([]);
+    const removed = audit("SSH_KEY_ADD", "user", "u", undefined, { name: "SECRET", fingerprint: "SECRET" });
+    db.prepare("INSERT INTO deleted_user_tombstones VALUES('u',?,'u','{}')").run(date);
+    expect(store.detail(removed).fields).toEqual([]);
+  });
   it("pages beyond 300 with equal timestamps and a fixed insertion boundary, including returning to page one", () => {
     const ids: string[] = [];
     db.transaction(() => { for (let i=0;i<367;i++) ids.push(audit()); })();

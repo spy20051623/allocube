@@ -13,6 +13,7 @@ import type { AuditEntry, AuditValue } from "./shared/audit";
 import "./audit.css";
 
 const fieldLabels: Record<string, string> = {
+  terminalId: "终端标识", callbackUrl: "终端回调地址", operationId: "操作标识", removeHome: "删除主目录", account: "机器账户", target: "目标账户", result: "执行结果", occurredAt: "执行时间", fingerprint: "公钥指纹", keyId: "公钥标识",
   maintenanceText: "提示内容",
   announcement: "机器公告",
   startAt: "开始时间", endAt: "结束时间", scope: "占用范围", status: "状态", title: "标题", purpose: "用途", note: "备注", reason: "原因",

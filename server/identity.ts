@@ -13,6 +13,7 @@ import {
 } from "./db.js";
 
 export const EMAIL_CODE_MINUTES = 10;
+export type EmailChallengePurpose = "REGISTER" | "EMAIL_CHANGE" | "EMAIL_OLD" | "TERMINAL" | "SSH_KEY";
 
 export class IdentityError extends Error {
   constructor(
@@ -62,7 +63,7 @@ function codeDigest(challengeId: string, code: string) {
 
 export function createEmailChallenge(
   email: string,
-  purpose: "REGISTER" | "EMAIL_CHANGE",
+  purpose: EmailChallengePurpose,
   userId: string | null
 ) {
   const normalizedEmail = normalizeEmail(email);
@@ -80,7 +81,7 @@ export function createEmailChallenge(
 
 export function assertEmailChallengeCanBeSent(
   email: string,
-  purpose: "REGISTER" | "EMAIL_CHANGE",
+  purpose: EmailChallengePurpose,
   userId: string | null
 ) {
   const recent = db
@@ -102,7 +103,7 @@ export function verifyEmailChallenge(
   challengeId: string,
   email: string,
   code: string,
-  purpose: "REGISTER" | "EMAIL_CHANGE",
+  purpose: EmailChallengePurpose,
   userId: string | null
 ) {
   const row = db

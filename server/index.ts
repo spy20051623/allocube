@@ -36,6 +36,8 @@ import {
 import { registerAdminRoutes } from "./routes-admin.js";
 import { registerAnnouncementRoutes } from "./announcements.js";
 import { registerAuthRoutes } from "./routes-auth.js";
+import { isTerminalProtocolPath, registerTerminalRoutes } from "./terminal.js";
+import { registerTerminalDownloads } from "./terminal-downloads.js";
 import { registerScheduleRoutes } from "./routes-schedule.js";
 import { registerOpenApiRoutes } from "./open-api.js";
 import { cleanupFeedbackAttachments, registerFeedbackRoutes } from "./feedback.js";
@@ -234,6 +236,8 @@ app.addHook("onRequest", async (request, reply) => {
   if (!request.url.startsWith("/api/")) return;
   if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
   if (request.url.split("?")[0].startsWith("/api/open/v1/")) return;
+  // Only the enumerated terminal protocol routes use their own HTTPS/client/CSRF guards.
+  if (isTerminalProtocolPath(request.url.split("?")[0])) return;
   if (request.headers["sec-fetch-site"] === "cross-site") {
     return reply.code(403).send({ error: "请求来源不受信任" });
   }
@@ -343,6 +347,8 @@ function publishFeedbackChange() {
 }
 
 registerAuthRoutes(app);
+registerTerminalRoutes(app, publishRevision);
+registerTerminalDownloads(app);
 registerApiTokenManagementRoutes(app);
 registerScheduleRoutes(app, publishRevision);
 registerAdminRoutes(app, publishRevision);

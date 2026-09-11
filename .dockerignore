@@ -11,3 +11,5 @@ instance-secrets.json
 .env*
 .git
 *.log
+.codex-tmp
+terminal/dist

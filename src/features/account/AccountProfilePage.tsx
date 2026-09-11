@@ -10,6 +10,7 @@ import type { DashboardBootstrap, AuthUser } from "../../shared/types";
 import { userStatusLabel } from "../../ui-copy";
 import { type RegistrationConfigPayload } from "../../shared/settings";
 import { ApiTokenSection } from "./ApiTokenSection";
+import { SshKeySection } from "./SshKeySection";
 import { UsernameEditModal, IdentityEditModal, EmailEditModal } from "./ProfileEditModals";
 import { PasswordChangeModal } from "./PasswordChangeModal";
 
@@ -322,6 +323,7 @@ export function AccountProfilePage({
             </div>
           </div>
 
+          <SshKeySection notify={notify} onBindEmail={() => setEmailOpen(true)} />
           <ApiTokenSection notify={notify} />
 
           {registrationConfig?.emailEnabled && user.email && (

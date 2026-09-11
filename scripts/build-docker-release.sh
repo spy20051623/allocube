@@ -7,10 +7,11 @@ image_repository=${ALLOCUBE_IMAGE_REPOSITORY:-allocube}
 cache_repository=${ALLOCUBE_BUILD_CACHE_REPOSITORY:-allocube-build-cache}
 cache_directory=${ALLOCUBE_BUILD_CACHE_DIR:-/opt/allocube-build-cache}
 base_image=${ALLOCUBE_BASE_IMAGE:-node:22-bookworm-slim}
+terminal_go_image=${ALLOCUBE_TERMINAL_GO_IMAGE:-golang:1.26.8-bookworm}
 debian_mirror=${DEBIAN_MIRROR:-http://mirrors.aliyun.com/debian}
 debian_security_mirror=${DEBIAN_SECURITY_MIRROR:-http://mirrors.aliyun.com/debian-security}
 
-for dependency_input in package.json package-lock.json Dockerfile; do
+for dependency_input in package.json package-lock.json Dockerfile terminal/go.mod terminal/go.sum; do
   if [ ! -f "$build_context/$dependency_input" ]; then
     echo "missing $dependency_input in build context: $build_context" >&2
     exit 1
@@ -20,14 +21,15 @@ done
 lock_hash=$(sha256sum "$build_context/package-lock.json" | awk '{print substr($1, 1, 16)}')
 dependency_hash=$(
   {
-    for dependency_input in package.json package-lock.json Dockerfile; do
+    for dependency_input in package.json package-lock.json Dockerfile terminal/go.mod terminal/go.sum; do
       sha256sum "$build_context/$dependency_input" | awk '{print $1}'
     done
-    printf '%s\n' "$base_image" "$debian_mirror" "$debian_security_mirror"
+    printf '%s\n' "$base_image" "$terminal_go_image" "$debian_mirror" "$debian_security_mirror"
   } | sha256sum | awk '{print substr($1, 1, 16)}'
 )
 current_cache="$cache_repository:current"
 dependency_cache="$cache_repository:deps-$dependency_hash"
+terminal_cache="$cache_repository:terminal-deps-$dependency_hash"
 release_cache="$cache_repository:$release_id"
 cache_archive="$cache_directory/deps-$dependency_hash.tar"
 cache_archive_manifest="$cache_archive.manifest"
@@ -38,7 +40,9 @@ mkdir -p "$cache_directory"
 
 refresh_archive=0
 if ! docker image inspect "$dependency_cache" >/dev/null 2>&1 \
-  || ! docker image inspect "$base_image" >/dev/null 2>&1; then
+  || ! docker image inspect "$base_image" >/dev/null 2>&1 \
+  || ! docker image inspect "$terminal_go_image" >/dev/null 2>&1 \
+  || ! docker image inspect "$terminal_cache" >/dev/null 2>&1; then
   if [ -f "$cache_archive" ]; then
     echo "restoring dependency cache from $cache_archive"
     if ! docker load --input "$cache_archive"; then
@@ -50,7 +54,9 @@ fi
 
 cache_hit=0
 if docker image inspect "$dependency_cache" >/dev/null 2>&1 \
-  && docker image inspect "$base_image" >/dev/null 2>&1; then
+  && docker image inspect "$base_image" >/dev/null 2>&1 \
+  && docker image inspect "$terminal_go_image" >/dev/null 2>&1 \
+  && docker image inspect "$terminal_cache" >/dev/null 2>&1; then
   cache_hit=1
   docker tag "$dependency_cache" "$current_cache"
 fi
@@ -74,10 +80,16 @@ elif docker image inspect "$current_cache" >/dev/null 2>&1; then
   cache_arguments="--cache-from=$current_cache"
 fi
 
+if [ "$cache_hit" = "0" ]; then
+  docker build --pull=false --build-arg "TERMINAL_GO_IMAGE=$terminal_go_image" \
+    --target terminal-deps --tag "$terminal_cache" "$build_context"
+fi
+
 if [ "$cache_hit" = "1" ]; then
   echo "dependency cache hit: $cache_archive"
   docker build --pull=false --network=none \
     $cache_arguments \
+    --cache-from "$terminal_cache" --build-arg "TERMINAL_GO_IMAGE=$terminal_go_image" \
     --build-arg "DEBIAN_MIRROR=$debian_mirror" \
     --build-arg "DEBIAN_SECURITY_MIRROR=$debian_security_mirror" \
     --target build \
@@ -87,6 +99,7 @@ else
   echo "dependency cache miss: downloading missing dependencies and saving $cache_archive"
   docker build --pull=false \
     $cache_arguments \
+    --cache-from "$terminal_cache" --build-arg "TERMINAL_GO_IMAGE=$terminal_go_image" \
     --build-arg "DEBIAN_MIRROR=$debian_mirror" \
     --build-arg "DEBIAN_SECURITY_MIRROR=$debian_security_mirror" \
     --target build \
@@ -97,8 +110,10 @@ fi
 docker tag "$release_cache" "$current_cache"
 docker tag "$release_cache" "$dependency_cache"
 
-archive_manifest=$(printf '%s\n%s\n' \
+archive_manifest=$(printf '%s\n%s\n%s\n%s\n' \
   "$dependency_cache=$(docker image inspect "$dependency_cache" --format '{{.Id}}')" \
+  "$terminal_cache=$(docker image inspect "$terminal_cache" --format '{{.Id}}')" \
+  "$terminal_go_image=$(docker image inspect "$terminal_go_image" --format '{{.Id}}')" \
   "$base_image=$(docker image inspect "$base_image" --format '{{.Id}}')")
 stored_archive_manifest=""
 if [ -f "$cache_archive_manifest" ]; then
@@ -109,7 +124,7 @@ if [ "$refresh_archive" = "1" ] || [ ! -f "$cache_archive" ] \
   || [ "$stored_archive_manifest" != "$archive_manifest" ]; then
   temporary_archive="$cache_archive.tmp"
   temporary_manifest="$cache_archive_manifest.tmp"
-  docker save --output "$temporary_archive" "$dependency_cache" "$base_image"
+  docker save --output "$temporary_archive" "$dependency_cache" "$base_image" "$terminal_cache" "$terminal_go_image"
   printf '%s\n' "$archive_manifest" >"$temporary_manifest"
   mv "$temporary_archive" "$cache_archive"
   mv "$temporary_manifest" "$cache_archive_manifest"
@@ -117,6 +132,7 @@ fi
 
 docker build --pull=false --network=none \
   --cache-from "$release_cache" \
+  --cache-from "$terminal_cache" --build-arg "TERMINAL_GO_IMAGE=$terminal_go_image" \
   --build-arg "DEBIAN_MIRROR=$debian_mirror" \
   --build-arg "DEBIAN_SECURITY_MIRROR=$debian_security_mirror" \
   --tag "$image_repository:$release_id" \

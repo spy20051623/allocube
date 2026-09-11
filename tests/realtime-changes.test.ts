@@ -30,6 +30,26 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); db.close(); });
 
 describe("按提交结果定向发布实时事件", () => {
+  it("终端登记、停用和联系时间只通知有权访问或管理该机器的用户", () => {
+    db.prepare("DELETE FROM machine_access_memberships WHERE user_id='b'").run();
+    db.prepare("INSERT INTO machine_admins VALUES('m1','b','admin',?)").run(date);
+    drain();
+    db.prepare("INSERT INTO machine_terminals(id,machine_id,callback_url,created_at) VALUES('terminal1','m1','',?)").run(date);
+    for (const operation of [
+      () => {},
+      () => db.prepare("UPDATE machine_terminals SET public_key='private fixture key',last_seen_at=? WHERE id='terminal1'").run(date),
+      () => db.prepare("UPDATE machine_terminals SET enabled=0 WHERE id='terminal1'").run(),
+      () => db.prepare("UPDATE machine_terminals SET last_seen_at='2026-09-07' WHERE id='terminal1'").run(),
+      () => db.prepare("DELETE FROM machine_terminals WHERE id='terminal1'").run(),
+    ]) {
+      operation();
+      const result = drain();
+      expect([...result.keys()]).toEqual(["a", "b", "admin"]);
+      for (const change of result.values()) expect(change.scopes).toEqual([{ topic: "terminal", machineId: "m1" }]);
+      expect(JSON.stringify([...result.values()])).not.toContain("fixture key");
+    }
+    expect(affectsRealtime(changes.full(5), "terminal", { machineId: "m1" })).toBe(true);
+  });
   it("占用只通知可访问机器的用户，本人列表不刷新其他用户", () => {
     reservation(); const result = drain();
     expect([...result.keys()]).toEqual(["a", "b", "admin"]);

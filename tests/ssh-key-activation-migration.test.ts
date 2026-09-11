@@ -1,0 +1,25 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import Database from "better-sqlite3";
+import { afterAll, expect, it } from "vitest";
+import { FINAL_SCHEMA_SQL } from "../server/schema";
+import { SSH_KEY_ACTIVATION_SCHEMA_SQL } from "../server/ssh-key-schema";
+const directory=fs.mkdtempSync(path.join(os.tmpdir(),"allocube-key-activation-"));
+process.env.NODE_ENV="test";process.env.DATABASE_PATH=path.join(directory,"v24.sqlite");process.env.BOOTSTRAP_ADMIN_PASSWORD="Migration24!password";
+let module:typeof import("../server/db");
+afterAll(()=>{module?.db.close();fs.rmSync(directory,{recursive:true,force:true})});
+it("upgrades v24 with keys and email challenges intact, without silently activating keys",async()=>{
+ const legacy=new Database(process.env.DATABASE_PATH!);legacy.exec(FINAL_SCHEMA_SQL.replace(SSH_KEY_ACTIVATION_SCHEMA_SQL,"").replace(", 'SSH_KEY'",""));
+ const now=new Date().toISOString(),future=new Date(Date.now()+600000).toISOString();
+ legacy.prepare("INSERT INTO schema_migrations VALUES(24,?)").run(now);
+ legacy.prepare("INSERT INTO users(id,username,username_normalized,display_name,password_hash,role,status,created_at,updated_at) VALUES('retained','retained','retained','Retained','hash','SYSTEM_ADMIN','ACTIVE',?,?)").run(now,now);
+ legacy.prepare("INSERT INTO user_ssh_keys VALUES('key','retained','Laptop','public-key','fingerprint',?)").run(now);
+ legacy.prepare("INSERT INTO email_verification_challenges(id,email,purpose,user_id,code_hash,expires_at,last_sent_at,created_at) VALUES('old','old@example.com','EMAIL_OLD','retained','hash',?,?,?)").run(future,now,now);
+ legacy.close();module=await import("../server/db");await module.initializeDatabase();await module.initializeDatabase();
+ expect(module.db.prepare("SELECT name,public_key FROM user_ssh_keys WHERE id='key'").get()).toEqual({name:"Laptop",public_key:"public-key"});
+ expect(module.db.prepare("SELECT purpose FROM email_verification_challenges WHERE id='old'").get()).toEqual({purpose:"EMAIL_OLD"});
+ expect(module.db.prepare("SELECT COUNT(*) AS n FROM machine_ssh_keys").get()).toEqual({n:0});
+ expect(module.db.prepare("SELECT COUNT(*) AS n FROM schema_migrations WHERE version=25").get()).toEqual({n:1});
+ expect(module.db.pragma("foreign_key_check")).toEqual([]);
+});

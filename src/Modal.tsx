@@ -8,6 +8,7 @@ export function Modal({
   wide,
   large,
   className,
+  headerActions,
   children
 }: {
   title: string;
@@ -15,6 +16,7 @@ export function Modal({
   wide?: boolean;
   large?: boolean;
   className?: string;
+  headerActions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const headingId = useId();
@@ -85,6 +87,7 @@ export function Modal({
       >
         <header>
           <h2 id={headingId}>{title}</h2>
+          {headerActions && <div className="modal-header-actions">{headerActions}</div>}
           <button type="button" className="icon-button" aria-label={tr("关闭")} onClick={onClose}>
             <X size={18} />
           </button>

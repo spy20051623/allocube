@@ -18,6 +18,13 @@ process.env.SESSION_SECRET = "identity-test-session-secret-at-least-32-character
 let app: ReturnType<typeof Fastify>;
 let dbModule: typeof import("../server/db.js");
 
+async function oldEmailProof(cookieValue: string) {
+  const response = await app.inject({ method: "POST", url: "/api/v1/auth/old-email-code", headers: { cookie: cookieValue }, payload: {} });
+  expect(response.statusCode).toBe(200);
+  const mail = dbModule.db.prepare("SELECT html FROM email_outbox WHERE subject='Allocube 修改邮箱身份验证' ORDER BY created_at DESC LIMIT 1").get() as { html: string };
+  return { oldChallengeId: response.json().challengeId, oldCode: mail.html.match(/<strong>(\d{6})<\/strong>/)![1] };
+}
+
 beforeAll(async () => {
   dbModule = await import("../server/db.js");
   const { registerAuthRoutes } = await import("../server/routes-auth.js");
@@ -1750,6 +1757,7 @@ describe("用户身份与审批生命周期", () => {
       payload: {
         email: "changed@example.com",
         challengeId: response.json().challengeId,
+        ...await oldEmailProof(userCookie),
         code,
         expectedConfigRevision: config.revision
       }
@@ -1798,6 +1806,7 @@ describe("用户身份与审批生命周期", () => {
       payload: {
         email: null,
         currentPassword: "Registration123!",
+        ...await oldEmailProof(userCookie),
         clearEmailConfirmed: true,
         expectedConfigRevision: config.revision
       }
@@ -1994,6 +2003,7 @@ describe("用户身份与审批生命周期", () => {
       payload: {
         email: "latest-revision@example.com",
         challengeId: emailCode.json().challengeId,
+        ...await oldEmailProof(userCookie),
         code,
         expectedConfigRevision: config.revision
       }

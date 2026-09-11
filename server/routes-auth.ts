@@ -1243,6 +1243,19 @@ export function registerAuthRoutes(app: FastifyInstance) {
     return { message: "资料修改已撤回" };
   });
 
+  app.post("/api/v1/auth/old-email-code", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const auth = requireSession(request, reply);
+    if (!auth) return;
+    if (!getSmtpSettingsRow().enabled || !auth.user.email) return reply.code(409).send({ error: "当前不需要旧邮箱验证" });
+    if (!isMailServiceAvailable()) return reply.code(503).send({ error: "邮件服务暂不可用，请联系管理员" });
+    assertEmailChallengeCanBeSent(auth.user.email, "EMAIL_OLD", auth.user.id);
+    const challenge = createEmailChallenge(auth.user.email, "EMAIL_OLD", auth.user.id);
+    if (!queueEmail(auth.user.email, "Allocube 修改邮箱身份验证", `<p>你正在修改或清空 Allocube 邮箱。验证码：<strong>${challenge.code}</strong>，10 分钟内有效。</p>`, auth.user.id, challenge.expiresAt)) {
+      return reply.code(503).send({ error: "邮件服务暂不可用，请联系管理员" });
+    }
+    return { challengeId: challenge.id, expiresAt: challenge.expiresAt };
+  });
+
   app.post(
     "/api/v1/auth/email-change-code",
     { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } },
@@ -1312,6 +1325,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
           code: z.string().nullable().optional(),
           currentPassword: z.string().max(256).optional(),
           clearEmailConfirmed: z.boolean().optional().default(false),
+          oldChallengeId: z.string().uuid().optional(),
+          oldCode: z.string().regex(/^\d{6}$/).optional(),
           expectedConfigRevision: z.number().int().min(1)
         })
         .parse(request.body);
@@ -1409,6 +1424,11 @@ export function registerAuthRoutes(app: FastifyInstance) {
         });
       }
       try {
+        const requireOldProof = configAtSubmit.emailEnabled && Boolean(current.email);
+        if (requireOldProof) {
+          if (!rawBody.oldChallengeId || !rawBody.oldCode) throw new IdentityError("请验证旧邮箱；旧邮箱不可用时请联系管理员恢复", 403);
+          verifyEmailChallenge(rawBody.oldChallengeId, current.email!, rawBody.oldCode, "EMAIL_OLD", auth.user.id);
+        }
         if (targetEmail) {
           validateEmailDomain(targetEmail);
           ensureEmailAvailable(targetEmail, auth.user.id);
@@ -1448,6 +1468,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
             );
           }
           const now = nowIso();
+          if (requireOldProof) consumeEmailChallenge(rawBody.oldChallengeId!);
           if (current.email) {
             db.prepare(
               `INSERT INTO email_history(

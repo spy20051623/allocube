@@ -39,6 +39,14 @@
   font-size: 18px;
 }
 
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
 .calendar-manual-form {
   gap: 14px;
 }
@@ -194,20 +202,46 @@
   }
 }
 
-.verification-row {
+.verification-row,
+.verification-input-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 160px;
   gap: 10px;
   align-items: start;
 }
 
 .verification-button {
-  width: 112px;
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
+  flex: 0 0 160px;
+  padding-inline: 12px;
   height: 39px;
   min-height: 39px;
   margin-top: 24px;
   justify-content: center;
   white-space: nowrap;
+}
+
+.verification-input-row > input {
+  min-width: 0;
+}
+
+.verification-input-row > .verification-button {
+  margin-top: 0;
+}
+
+@media (max-width: 420px) {
+  .verification-row,
+  .verification-input-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .verification-row > .verification-button,
+  .verification-input-row > .verification-button {
+    margin-top: 0;
+    justify-self: end;
+  }
 }
 
 .auth-two-fields {

@@ -1,4 +1,5 @@
 import { EditCancelled } from "../../edit-conflict";
+import { TerminalMachinePanel } from "../terminal/TerminalMachinePanel";
 import { useRealtimeRefresh } from "../../useRealtimeRefresh";
 import { useServerClock } from "../../ServerClock";
 import { tr } from "../../i18n/index";
@@ -383,6 +384,7 @@ export function MachineInfoSection({
           )}
         </div>
       </section>
+      <TerminalMachinePanel key={machine.id} machineId={machine.id} canManage={canManage} notify={notify} />
       {maintenanceOpen && maintenanceInitialTime !== null && canManage && (
         <MaintenanceModal
           machine={detail}

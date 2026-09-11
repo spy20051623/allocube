@@ -21,6 +21,7 @@ export class RealtimeChanges {
     };
     watch("reservations", "schedule", "ROW.machine_id", "ROW.user_id", "ROW.start_at", "ROW.end_at");
     watch("machines", "resource", "ROW.id");
+    watch("machine_terminals", "terminal", "ROW.machine_id", "NULL", "NULL", "NULL", "public_key,enabled,last_seen_at");
     watch("resource_groups", "resource", "ROW.machine_id");
     watch("resource_pools", "resource", "ROW.machine_id");
     watch("resource_pool_items", "resource", "(SELECT machine_id FROM resource_pools WHERE id=ROW.pool_id)");
@@ -51,7 +52,7 @@ export class RealtimeChanges {
 
   full(revision: number): RealtimeChange {
     return { version: 2, eventId: `${this.boot}:${++this.sequence}`, revision,
-      scopes: ["session", "notifications", "catalog", "timeline", "ownReservations", "machines", "machine", "groups", "access", "users", "settings"].map(topic => ({ topic: topic as RealtimeTopic })) };
+      scopes: ["session", "notifications", "catalog", "timeline", "ownReservations", "machines", "machine", "terminal", "groups", "access", "users", "settings"].map(topic => ({ topic: topic as RealtimeTopic })) };
   }
 
   drain(sessionIds: string[], revision: number | (() => number)): Map<string, RealtimeChange> {
@@ -96,7 +97,9 @@ export class RealtimeChanges {
       };
       for (const row of rows) {
         const machine = row.machine_id ?? undefined;
-        if (row.kind === "schedule") {
+        if (row.kind === "terminal") {
+          if (machine && (allowed.has(machine) || managed.has(machine))) add("terminal", machine);
+        } else if (row.kind === "schedule") {
           if (row.user_id === own) add("ownReservations");
           if (machine && allowed.has(machine)) add("timeline", machine, row.from_at, row.to_at);
         } else if (row.kind === "resource" || row.kind === "maintenance") {

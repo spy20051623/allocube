@@ -198,12 +198,12 @@ export function LoginPage({
   );
 }
 
-type LoginFormValidationState = {
+export type LoginFormValidationState = {
   focused: LoginField | null;
   errors: LoginFieldErrors;
 };
 
-const emptyLoginValidationState: LoginFormValidationState = {
+export const emptyLoginValidationState: LoginFormValidationState = {
   focused: null,
   errors: {}
 };
@@ -235,7 +235,7 @@ function clearLoginFieldError(
   });
 }
 
-function LoginCredentialForm({
+export function LoginCredentialForm({
   identifierType,
   identifier,
   password,

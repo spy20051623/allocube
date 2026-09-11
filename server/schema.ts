@@ -1,7 +1,9 @@
 import { AUDIT_INDEX_SQL } from "./audit-schema.js";
 import { REPORT_SCHEMA_SQL } from "./report-schema.js";
+import { SSH_KEY_SCHEMA_SQL, SSH_KEY_ACTIVATION_SCHEMA_SQL } from "./ssh-key-schema.js";
+import { TERMINAL_SCHEMA_SQL } from "./terminal-schema.js";
 
-export const FINAL_SCHEMA_VERSION = 22;
+export const FINAL_SCHEMA_VERSION = 25;
 
 export const FINAL_SCHEMA_SQL = `
   ${REPORT_SCHEMA_SQL}
@@ -100,7 +102,7 @@ export const FINAL_SCHEMA_SQL = `
   CREATE TABLE email_verification_challenges (
     id TEXT PRIMARY KEY,
     email TEXT NOT NULL COLLATE NOCASE,
-    purpose TEXT NOT NULL CHECK(purpose IN ('REGISTER', 'EMAIL_CHANGE')),
+    purpose TEXT NOT NULL CHECK(purpose IN ('REGISTER', 'EMAIL_CHANGE', 'EMAIL_OLD', 'TERMINAL', 'SSH_KEY')),
     user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     code_hash TEXT NOT NULL,
     attempts INTEGER NOT NULL DEFAULT 0,
@@ -644,4 +646,7 @@ export const FINAL_SCHEMA_SQL = `
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+  ${TERMINAL_SCHEMA_SQL}
+  ${SSH_KEY_SCHEMA_SQL}
+  ${SSH_KEY_ACTIVATION_SCHEMA_SQL}
 `;

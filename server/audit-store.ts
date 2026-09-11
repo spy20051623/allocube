@@ -33,20 +33,28 @@ function normalized(data: Payload): Payload {
 // Deliberately bounded per object family. Never serialize arbitrary old audit payloads.
 const familyFields: Record<string, string[]> = {
   reservation: ["startAt", "endAt", "scope", "status", "title", "purpose", "note", "reason", "action", "resultingSegments", "replacementBatchId", "replacedReservationIds", "newReservationIds", "replacesReservationId", "segmentCount"],
-  machine: ["name", "address", "hardwareNotes", "connectionGuide", "announcement", "tags", "status", "reason", "managementNotesChanged", "userId"],
+  machine: ["name", "address", "hardwareNotes", "connectionGuide", "announcement", "tags", "status", "reason", "managementNotesChanged", "userId", "terminalId", "callbackUrl", "operationId", "account", "target", "result", "occurredAt"],
   resource_group: ["name", "description", "tags", "allocations", "status", "reason", "sortOrder", "version"],
   resource_pool: ["name", "kind", "unit", "description", "sharingMode", "rangeStart", "rangeEnd", "capacity", "items", "status", "reason", "version"],
   user: ["username", "displayName", "employeeNumber", "email", "status", "reason", "reviewReason"],
   profile_change_request: ["displayNameChanged", "employeeNumberChanged", "reasonProvided", "status", "reason", "reviewReason", "requestedDisplayName", "requestedEmployeeNumber"],
   machine_access_request: ["status", "reason", "userId"],
   resource_unavailability: ["targetType", "startAt", "endAt", "reason", "reasonProvided", "status", "kind", "impact"],
-  settings: ["blockAdminBookings", "maintenanceText", "minBookingMinutes", "maxBookingMinutes", "advanceDays", "siteName", "siteDescription", "siteOrigin", "icpFilingNumber", "publicSecurityFilingNumber", "allowedEmailDomains", "allowRegistrationWithoutEmail", "requireRegistrationEmail", "version"],
+  settings: ["blockAdminBookings", "maintenanceText", "minBookingMinutes", "maxBookingMinutes", "advanceDays", "siteName", "siteDescription", "siteOrigin", "icpFilingNumber", "publicSecurityFilingNumber", "allowedEmailDomains", "allowRegistrationWithoutEmail", "requireRegistrationEmail", "version", "fingerprint"],
   smtp_settings: ["enabled", "host", "port", "security", "username", "fromName", "fromAddress", "hasPassword", "passwordChanged", "passwordCleared"],
   announcement: ["title", "bodyLength", "status", "active"],
   api_token: ["name", "accessLevel", "expiresAt"],
   feedback: ["number", "type", "status", "level", "titleLength", "bodyLength", "changedFields", "commentLength"],
   REPORT: ["reason", "fromDate", "toDate", "completedDays", "totalDays", "status"],
   registration_tombstone: ["reasonCode"]
+};
+
+// Key metadata is allowed only for key operations on the matching entity family.
+const sshKeyAuditFields: Record<string, { type: string; fields: string[] }> = {
+  SSH_KEY_ADD: { type: "user", fields: ["name", "keyId", "fingerprint"] },
+  SSH_KEY_REMOVE: { type: "user", fields: ["name", "keyId", "fingerprint"] },
+  SSH_KEY_ACTIVATE: { type: "machine", fields: ["keyId", "fingerprint"] },
+  SSH_KEY_DEACTIVATE: { type: "machine", fields: ["keyId", "fingerprint"] },
 };
 
 export class AuditStore {
@@ -216,7 +224,9 @@ export class AuditStore {
         if (Array.isArray(value) && value.every(v => typeof v === "string")) return value.slice(0, 100).map(v => v.slice(0, 1000));
         return undefined;
       };
-      if (!removed) for (const key of familyFields[type] ?? []) {
+      const keyAudit = sshKeyAuditFields[str(row.action)];
+      const allowedFields = keyAudit?.type === type ? keyAudit.fields : familyFields[type] ?? [];
+      if (!removed) for (const key of allowedFields) {
         // "Changed" flags describe this operation, not the previous value of a setting.
         const changeFlag = key.endsWith("Changed");
         const oldValue = changeFlag ? undefined : safeValue(key, b[key]);

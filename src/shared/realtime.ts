@@ -1,4 +1,4 @@
-export const realtimeTopics = ["session", "notifications", "catalog", "timeline", "ownReservations", "machines", "machine", "groups", "access", "users", "settings"] as const;
+export const realtimeTopics = ["session", "notifications", "catalog", "timeline", "ownReservations", "machines", "machine", "terminal", "groups", "access", "users", "settings"] as const;
 export type RealtimeTopic = typeof realtimeTopics[number];
 export interface RealtimeScope { topic: RealtimeTopic; machineId?: string; from?: string; to?: string }
 export interface RealtimeChange {

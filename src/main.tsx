@@ -5,10 +5,10 @@ import { initializeI18n } from "./i18n";
 import "./styles.css";
 
 await initializeI18n();
-const { router } = await import("./router");
+const content = React.createElement(RouterProvider, {
+  router: (await import("./router")).router,
+});
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <RouterProvider router={router} />
-  </React.StrictMode>
+  <React.StrictMode>{content}</React.StrictMode>,
 );

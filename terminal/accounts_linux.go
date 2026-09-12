@@ -39,7 +39,10 @@ var employeePattern = regexp.MustCompile(`^(\d{8}|wx\d{6,7})$`)
 func ownName(name, employee string) bool {
 	return employeePattern.MatchString(employee) && len(name) == len(employee)+1 && name[0] >= 'a' && name[0] <= 'z' && name[1:] == employee
 }
-func localAccounts() ([]Account, error) {
+
+var localAccounts = readLocalAccounts
+
+func readLocalAccounts() ([]Account, error) {
 	data, err := os.ReadFile("/etc/passwd")
 	if err != nil {
 		return nil, err

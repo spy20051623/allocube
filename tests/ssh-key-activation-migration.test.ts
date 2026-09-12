@@ -1,3 +1,4 @@
+import { TERMINAL_HELP_SCHEMA_SQL } from "../server/terminal-help-schema";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,7 +11,7 @@ process.env.NODE_ENV="test";process.env.DATABASE_PATH=path.join(directory,"v24.s
 let module:typeof import("../server/db");
 afterAll(()=>{module?.db.close();fs.rmSync(directory,{recursive:true,force:true})});
 it("upgrades v24 with keys and email challenges intact, without silently activating keys",async()=>{
- const legacy=new Database(process.env.DATABASE_PATH!);legacy.exec(FINAL_SCHEMA_SQL.replace(SSH_KEY_ACTIVATION_SCHEMA_SQL,"").replace(", 'SSH_KEY'",""));
+ const legacy=new Database(process.env.DATABASE_PATH!);legacy.exec(FINAL_SCHEMA_SQL.replace(TERMINAL_HELP_SCHEMA_SQL, "").replace(SSH_KEY_ACTIVATION_SCHEMA_SQL,"").replace(", 'SSH_KEY'",""));
  const now=new Date().toISOString(),future=new Date(Date.now()+600000).toISOString();
  legacy.prepare("INSERT INTO schema_migrations VALUES(24,?)").run(now);
  legacy.prepare("INSERT INTO users(id,username,username_normalized,display_name,password_hash,role,status,created_at,updated_at) VALUES('retained','retained','retained','Retained','hash','SYSTEM_ADMIN','ACTIVE',?,?)").run(now,now);

@@ -64,7 +64,9 @@ func selectedTargets(c Config, accounts []Account) ([]Account, error) {
 	}
 	return targets, nil
 }
-func prepareSSHPlan(c Config) (plan *SSHPlan, err error) {
+func prepareSSHPlan(c Config) (*SSHPlan, error) { return prepareSSHPlanFor(c, nil) }
+
+func prepareSSHPlanFor(c Config, only []Account) (plan *SSHPlan, err error) {
 	services, err := discoverSSHServices()
 	if err != nil {
 		return nil, err
@@ -80,6 +82,9 @@ func prepareSSHPlan(c Config) (plan *SSHPlan, err error) {
 	}
 	if plan.Targets, err = selectedTargets(c, plan.Accounts); err != nil {
 		return nil, err
+	}
+	if only != nil {
+		plan.Targets = only
 	}
 	targets := map[string]bool{}
 	for _, a := range plan.Targets {

@@ -24,12 +24,13 @@ func run() error {
 	path := flags.String("config", "/etc/allocube-terminal/config.json", "root-owned configuration")
 	caFile := flags.String("ca-file", "", "platform CA certificate for init/setup; saved in configuration")
 	verbose := flags.Bool("verbose", false, "show detailed SSH configuration checks")
+	deferTimer := flags.Bool("defer-timer-start", false, "install service files without starting synchronization (installer use)")
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return err
 	}
 	args := flags.Args()
 	if len(args) != 1 {
-		return errors.New("commands: init, setup, enroll, rotate, install, sync, mappings, status, verify-registration, check-ssh, configure-ssh, recover-ssh, quiet, resume")
+		return errors.New("commands: init, setup, enroll, rotate, install, start-timer, sync, mappings, status, verify-registration, check-ssh, configure-ssh, recover-ssh, quiet, resume")
 	}
 	if os.Geteuid() != 0 {
 		return errors.New("this command requires root")
@@ -79,7 +80,9 @@ func run() error {
 		}
 		return configureSSH(c)
 	case "install":
-		return installSync(c, *path)
+		return installSync(c, *path, *deferTimer)
+	case "start-timer":
+		return startSyncTimer(c)
 	case "quiet":
 		if err = atomicWrite(filepath.Join(c.StateDir, "sync-paused"), []byte("paused\n"), 0600); err != nil {
 			return err
@@ -140,6 +143,7 @@ func initializeWithCA(path string, r *bufio.Reader, caFile string) error {
 		return errors.New("configuration already exists; edit it locally and use enroll")
 	}
 	c := defaults()
+	c.AutoManageNewAccounts = os.Getenv("ALLOCUBE_CONFIGURE_SSH") != "skip"
 	c.CAFile = caFile
 	var err error
 	if c.Platform, err = prompt(r, "Platform HTTPS origin"); err != nil {

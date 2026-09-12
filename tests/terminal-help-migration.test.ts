@@ -1,0 +1,21 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import Database from "better-sqlite3";
+import { afterAll, expect, it } from "vitest";
+import { FINAL_SCHEMA_SQL } from "../server/schema";
+import { TERMINAL_HELP_SCHEMA_SQL } from "../server/terminal-help-schema";
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),"terminal-help-migration-"));
+process.env.NODE_ENV="test";process.env.DATABASE_PATH=path.join(dir,"db.sqlite");process.env.BOOTSTRAP_ADMIN_PASSWORD="Migration234!";
+let mod:typeof import("../server/db");
+afterAll(()=>{mod?.db.close();fs.rmSync(dir,{recursive:true,force:true});});
+it("upgrades v25 once and retains terminal identity and existing data",async()=>{
+ const old=new Database(process.env.DATABASE_PATH!);old.exec(FINAL_SCHEMA_SQL.replace(TERMINAL_HELP_SCHEMA_SQL,""));
+ old.prepare("INSERT INTO schema_migrations VALUES(25,?)").run(new Date().toISOString());
+ old.prepare("INSERT INTO machines(id,name,address,created_at,updated_at) VALUES('m','Kept','10.0.0.1','t','t')").run();
+ old.prepare("INSERT INTO machine_terminals(id,machine_id,callback_url,public_key,created_at) VALUES('t','m','','retained-key','t')").run();old.close();
+ mod=await import("../server/db");await mod.initializeDatabase();await mod.initializeDatabase();
+ expect(mod.db.prepare("SELECT public_key FROM machine_terminals WHERE id='t'").get()).toEqual({public_key:"retained-key"});
+ expect(mod.db.prepare("SELECT COUNT(*) AS n FROM schema_migrations WHERE version=26").get()).toEqual({n:1});
+ expect(mod.db.pragma("foreign_key_check")).toEqual([]);
+});

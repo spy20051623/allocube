@@ -31,6 +31,8 @@ export type NotificationOptions = {
 };
 
 const notificationEnglishCopy: Record<string, { title: string; body: string }> = {
+  TERMINAL_HELP: { title: "SSH synchronization needs attention", body: "A terminal needs administrator assistance. Open the machine page for details." },
+  TERMINAL_HELP_RESOLVED: { title: "SSH synchronization issue resolved", body: "The terminal confirmed that a previously reported issue is resolved." },
   ACCOUNT_STATUS: { title: "Account status updated", body: "Your Allocube account status has changed." },
   USER_APPROVAL: { title: "Review required", body: "A registration or profile update is awaiting review." },
   REGISTRATION_SUBMITTED: { title: "Registration submitted", body: "Your registration has been submitted for review." },

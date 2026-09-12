@@ -32,3 +32,34 @@
   .terminal-sync-overview { align-items: flex-start; flex-direction: column; }
   .terminal-sync-architecture .segmented button { min-width: 80px; }
 }
+
+.terminal-reports-panel { min-width: 0; }
+.terminal-report-counts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.terminal-report-table-wrap { max-width: 100%; overflow-x: auto; }
+.terminal-report-table { display: block; width: 100%; min-width: 700px; border-spacing: 0; text-align: left; }
+.terminal-report-table thead, .terminal-report-table tbody { display: block; }
+.terminal-report-row { grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 60px 118px 64px 64px; }
+.terminal-report-row > th, .terminal-report-row > td { min-width: 0; padding: 0; font-weight: inherit; }
+.terminal-report-row > th:first-child { padding-left: 8px; }
+.terminal-report-row > th:last-child { text-align: right; }
+.terminal-report-table .machine-member-head { border-bottom: 1px solid var(--line); }
+.terminal-report-scope { overflow-wrap: anywhere; }
+.terminal-report-scope code { font: inherit; }
+.terminal-report-time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.terminal-report-more { display: flex; margin: 12px auto 0; }
+.modal.terminal-report-modal { width: min(540px, 100%); border-radius: 12px; }
+.terminal-report-dialog-heading { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.terminal-report-dialog-heading strong { font-size: 15px; font-weight: 600; }
+.terminal-report-description { margin: 12px 0 18px; color: var(--text-secondary, #566176); font-size: 13px; line-height: 1.7; }
+.terminal-report-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; margin: 0; padding: 16px; background: var(--surface-panel, #f7f9fc); border: 1px solid var(--line); border-radius: 9px; }
+.terminal-report-facts .full { grid-column: 1 / -1; }
+.terminal-report-facts dt { color: var(--muted); font-size: 11px; margin-bottom: 5px; }
+.terminal-report-facts dd { margin: 0; color: var(--text-secondary, #566176); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.terminal-report-facts code { font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.terminal-report-log-path { user-select: all; }
+.terminal-report-dialog-actions { margin-top: 18px; }
+
+@media (max-width: 560px) {
+  .terminal-report-counts { gap: 8px; }
+  .terminal-report-facts { gap: 14px; padding: 12px; }
+}

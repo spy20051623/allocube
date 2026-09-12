@@ -14,6 +14,8 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { resolveNotificationDestination } from "../src/notification-navigation";
+import { resolveAppRoute } from "../src/app-routing";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-terminal-"));
 process.env.NODE_ENV = "test";
@@ -418,5 +420,120 @@ describe("public key synchronization", () => {
     const token=(await machineToken(clients[1])).json().access_token;
     db.db.prepare("UPDATE machine_terminals SET enabled=0 WHERE id=?").run(clients[1].id);
     expect((await app.inject({method:"POST",url:"/api/v1/terminal/machine/keys",headers:{...headers,authorization:`Bearer ${token}`},payload:{employees:["12345678"]}})).statusCode).toBe(403);
+  });
+});
+
+describe("terminal assistance", () => {
+  beforeAll(async()=>{clients[1]=await enroll(otherMachine);});
+  const help = (eventId=randomUUID()) => ({eventId,revision:1,code:"SSH_CONFIGURATION",scope:"sshd.service",outcome:"UNCHANGED",status:"OPEN",logPath:"/var/lib/allocube-terminal/help.log"});
+  async function report(events: unknown[], client=clients[1]) {
+    const credentials=await machineToken(client);
+    return app.inject({method:"POST",url:"/api/v1/terminal/machine/help",headers:{...headers,authorization:`Bearer ${credentials.json().access_token}`},payload:{events}});
+  }
+  const notices=()=> (db.db.prepare("SELECT COUNT(*) AS n FROM notifications WHERE type LIKE 'TERMINAL_HELP%'").get() as {n:number}).n;
+  it("authenticates reports and rejects arbitrary log/configuration payloads",async()=>{
+    expect((await app.inject({method:"POST",url:"/api/v1/terminal/machine/help",headers,payload:{events:[help()]}})).statusCode).toBe(401);
+    expect((await report([{...help(),rawLog:"private key"}])).statusCode).toBe(400);
+    expect((await report([{...help(),code:"RUN_COMMAND"}])).statusCode).toBe(400);
+    expect((await report([{...help(),scope:"root; arbitrary command"}])).statusCode).toBe(400);
+    expect((await report(Array.from({length:17},()=>help()))).statusCode).toBe(400);
+  });
+  it("deduplicates, acknowledges, escalates and closes requests without replay reopening",async()=>{
+    const event=help(),before=notices();
+    expect((await report([event])).statusCode).toBe(200);
+    expect((await report([event])).statusCode).toBe(200);
+    expect(notices()).toBe(before+1);
+    const notice = db.db.prepare("SELECT type,link FROM notifications WHERE entity_id=?").get(event.eventId) as {type:string;link:string};
+    const destination = resolveNotificationDestination(notice);
+    expect(destination).toEqual({path:`/admin/machines/${otherMachine}/info`});
+    expect(resolveAppRoute(destination!.path)).toMatchObject({page:"admin",machineId:otherMachine,machineSection:"info"});
+    const list=await app.inject({url:`/api/v1/machines/${otherMachine}/terminal`,headers:{...headers,cookie:adminCookie}});
+    expect(list.json().terminal.helpRequests).toEqual(expect.arrayContaining([expect.objectContaining({eventId:event.eventId,acknowledgedAt:null})]));
+    const ack=()=>app.inject({method:"POST",url:`/api/v1/admin/machines/${otherMachine}/terminal/help/${event.eventId}/acknowledge`,headers:{...headers,cookie:adminCookie}});
+    expect((await ack()).statusCode).toBe(200);
+    await report([{...event,revision:2,outcome:"RECOVERY_REQUIRED"}]);
+    expect(notices()).toBe(before+2);
+    expect(db.db.prepare("SELECT acknowledged_at FROM terminal_help_requests WHERE event_id=?").get(event.eventId)).toEqual({acknowledged_at:null});
+    await report([{...event,revision:3,status:"RESOLVED"}]);
+    expect(notices()).toBe(before+3);
+    const resolved = db.db.prepare("SELECT type,link FROM notifications WHERE entity_id=? AND type='TERMINAL_HELP_RESOLVED'").get(event.eventId) as {type:string;link:string};
+    expect(resolveNotificationDestination(resolved)).toEqual({path:`/admin/machines/${otherMachine}/info`});
+    await report([{...event,revision:4}]);
+    expect(notices()).toBe(before+3);
+    expect((await ack()).statusCode).toBe(404);
+  });
+  it("does not notify on resolved-only history and binds the event identity",async()=>{
+    const before=notices(),event=help();
+    await report([{...event,status:"RESOLVED"}]);expect(notices()).toBe(before);
+    expect((await report([{...event,scope:"another",revision:2}])).statusCode).toBe(409);
+  });
+  it("keeps assistance details and acknowledgement restricted to machine managers",async()=>{
+    const event=help();await report([event]);
+    db.db.prepare("INSERT OR IGNORE INTO machine_access_memberships(id,machine_id,user_id,source,created_at,updated_at) VALUES(?,?,?,'ADMIN_INVITE',?,?)").run(randomUUID(),otherMachine,userId,db.nowIso(),db.nowIso());
+    const login=await app.inject({method:"POST",url:"/api/v1/auth/login",payload:{identifierType:"USERNAME",identifier:"worker",password:"Worker123!"}});
+    const cookie=login.cookies.map(c=>`${c.name}=${c.value}`).join("; ");
+    expect(login.statusCode).toBe(200);
+    const result=await app.inject({url:`/api/v1/machines/${otherMachine}/terminal`,headers:{...headers,cookie}});
+    expect(result.statusCode).toBe(200);expect(result.json().terminal).not.toHaveProperty("helpRequests");
+    expect((await app.inject({method:"POST",url:`/api/v1/admin/machines/${otherMachine}/terminal/help/${event.eventId}/acknowledge`,headers:{...headers,cookie}})).statusCode).toBe(403);
+  });
+  it("notifies machine administrators instead of the fallback system administrator",async()=>{
+    db.db.prepare("INSERT INTO machine_admins(machine_id,user_id,assigned_by,created_at) VALUES(?,?,?,?)").run(otherMachine,userId,adminId,db.nowIso());
+    const before=notices(),event=help();await report([event]);
+    expect(notices()).toBe(before+1);
+    expect(db.db.prepare("SELECT user_id FROM notifications WHERE entity_id=?").all(event.eventId)).toEqual([{user_id:userId}]);
+    db.db.prepare("DELETE FROM machine_admins WHERE machine_id=?").run(otherMachine);
+  });
+  it("retains resolved reports, orders pending first, and allows idempotent administrator resolution",async()=>{
+    const normal={...help(),severity:"GENERAL"}, urgent={...help(),severity:"URGENT"}, automatic={...help(),severity:"GENERAL"};
+    await report([normal,urgent,automatic]);
+    const resolve=(id:string,cookie=adminCookie)=>app.inject({method:"POST",url:`/api/v1/admin/machines/${otherMachine}/terminal/help/${id}/resolve`,headers:{...headers,cookie},payload:{}});
+    const login=await app.inject({method:"POST",url:"/api/v1/auth/login",payload:{identifierType:"USERNAME",identifier:"worker",password:"Worker123!"}});
+    expect(login.statusCode).toBe(200);
+    const worker=login.cookies.map(c=>`${c.name}=${c.value}`).join("; ");
+    expect((await resolve(normal.eventId,worker)).statusCode).toBe(403);
+    expect((await resolve(normal.eventId)).statusCode).toBe(200);
+    expect((await resolve(normal.eventId)).statusCode).toBe(200);
+    await report([{...automatic,revision:2,status:"RESOLVED"}]);
+    await report([{...normal,revision:99,status:"OPEN"}]);
+    const result=await app.inject({url:`/api/v1/machines/${otherMachine}/terminal`,headers:{...headers,cookie:adminCookie}});
+    const rows=result.json().terminal.helpRequests as {eventId:string;status:string;severity:string;resolutionSource:string;resolvedAt:string}[];
+    expect(rows.find(row=>row.eventId===normal.eventId)).toMatchObject({status:"RESOLVED",resolutionSource:"ADMIN",resolvedAt:expect.any(String)});
+    expect(rows.find(row=>row.eventId===automatic.eventId)).toMatchObject({status:"RESOLVED",resolutionSource:"MACHINE"});
+    expect(rows.find(row=>row.eventId===urgent.eventId)).toMatchObject({status:"OPEN",severity:"URGENT"});
+    const firstResolved=rows.findIndex(row=>row.status==='RESOLVED');
+    expect(rows.slice(firstResolved).every(row=>row.status==='RESOLVED')).toBe(true);
+    expect((await resolve(randomUUID())).statusCode).toBe(404);
+    const other=await app.inject({method:"POST",url:`/api/v1/admin/machines/${machineId}/terminal/help/${urgent.eventId}/resolve`,headers:{...headers,cookie:adminCookie},payload:{}});
+    expect(other.statusCode).toBe(404);
+  });
+  it("emails urgent reports only when both SMTP and administration email preferences allow it",async()=>{
+    const email=(db.db.prepare("SELECT email FROM users WHERE id=?").get(adminId) as {email:string|null}).email;
+    const pref=db.db.prepare("SELECT administration_updates FROM user_email_preferences WHERE user_id=?").get(adminId) as {administration_updates:number}|undefined;
+    const queued=()=> (db.db.prepare("SELECT count(*) AS n FROM email_outbox").get() as {n:number}).n;
+    db.db.prepare("UPDATE users SET email='terminal-admin@example.com' WHERE id=?").run(adminId);
+    db.db.prepare("UPDATE smtp_settings SET enabled=1,version=version+1").run();
+    db.db.prepare("INSERT INTO user_email_preferences(user_id,administration_updates,updated_at) VALUES(?,1,?) ON CONFLICT(user_id) DO UPDATE SET administration_updates=1").run(adminId,db.nowIso());
+    try {
+      const before=queued(),event=help();
+      await report([{...event,severity:"GENERAL"}]);
+      expect(queued()).toBe(before);
+      await report([{...event,severity:"URGENT",revision:2}]);
+      expect(queued()).toBe(before+1);
+      await report([{...event,severity:"URGENT",revision:2}]);
+      expect(queued()).toBe(before+1);
+      db.db.prepare("UPDATE user_email_preferences SET administration_updates=0 WHERE user_id=?").run(adminId);
+      await report([{...help(),severity:"URGENT"}]);
+      expect(queued()).toBe(before+1);
+      db.db.prepare("UPDATE user_email_preferences SET administration_updates=1 WHERE user_id=?").run(adminId);
+      db.db.prepare("UPDATE smtp_settings SET enabled=0,version=version+1").run();
+      await report([{...help(),severity:"URGENT"}]);
+      expect(queued()).toBe(before+1);
+    } finally {
+      db.db.prepare("UPDATE users SET email=? WHERE id=?").run(email,adminId);
+      db.db.prepare("UPDATE smtp_settings SET enabled=0,version=version+1").run();
+      if(pref) db.db.prepare("UPDATE user_email_preferences SET administration_updates=? WHERE user_id=?").run(pref.administration_updates,adminId);
+      else db.db.prepare("DELETE FROM user_email_preferences WHERE user_id=?").run(adminId);
+    }
   });
 });

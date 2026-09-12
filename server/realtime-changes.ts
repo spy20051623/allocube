@@ -21,6 +21,7 @@ export class RealtimeChanges {
     };
     watch("reservations", "schedule", "ROW.machine_id", "ROW.user_id", "ROW.start_at", "ROW.end_at");
     watch("machines", "resource", "ROW.id");
+    watch("terminal_help_requests", "terminal", "(SELECT machine_id FROM machine_terminals WHERE id=ROW.terminal_id)", "NULL", "NULL", "NULL", "status,outcome,severity,resolved_at,acknowledged_at");
     watch("machine_terminals", "terminal", "ROW.machine_id", "NULL", "NULL", "NULL", "public_key,enabled,last_seen_at");
     watch("resource_groups", "resource", "ROW.machine_id");
     watch("resource_pools", "resource", "ROW.machine_id");

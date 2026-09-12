@@ -3,7 +3,9 @@ import { REPORT_SCHEMA_SQL } from "./report-schema.js";
 import { SSH_KEY_SCHEMA_SQL, SSH_KEY_ACTIVATION_SCHEMA_SQL } from "./ssh-key-schema.js";
 import { TERMINAL_SCHEMA_SQL } from "./terminal-schema.js";
 
-export const FINAL_SCHEMA_VERSION = 25;
+import { TERMINAL_HELP_SCHEMA_SQL } from "./terminal-help-schema.js";
+
+export const FINAL_SCHEMA_VERSION = 27;
 
 export const FINAL_SCHEMA_SQL = `
   ${REPORT_SCHEMA_SQL}
@@ -649,4 +651,5 @@ export const FINAL_SCHEMA_SQL = `
   ${TERMINAL_SCHEMA_SQL}
   ${SSH_KEY_SCHEMA_SQL}
   ${SSH_KEY_ACTIVATION_SCHEMA_SQL}
+  ${TERMINAL_HELP_SCHEMA_SQL}
 `;

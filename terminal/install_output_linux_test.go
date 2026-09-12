@@ -28,7 +28,7 @@ func TestInstallerPreservesManualRepairInstructions(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected installation failure")
 	}
-	for _, want := range []string{"FAILED: Preparing SSH access", message, "sudo bash ./install.sh --resume"} {
+	for _, want := range []string{"FAILED: Preparing SSH access", message, "sudo bash ./install.sh"} {
 		if !strings.Contains(string(out), want) {
 			t.Fatalf("missing %q in output: %s", want, out)
 		}

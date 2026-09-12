@@ -1,3 +1,4 @@
+import { TERMINAL_HELP_SCHEMA_SQL } from "../server/terminal-help-schema";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,7 +21,7 @@ afterAll(() => {
 it("upgrades v22 once, preserves existing verification challenges, and enables terminal purposes", async () => {
   const legacy = new Database(process.env.DATABASE_PATH!);
   legacy.exec(
-    FINAL_SCHEMA_SQL.replace(SSH_KEY_ACTIVATION_SCHEMA_SQL, "").replace(SSH_KEY_SCHEMA_SQL, "").replace(TERMINAL_SCHEMA_SQL, "").replace(
+    FINAL_SCHEMA_SQL.replace(TERMINAL_HELP_SCHEMA_SQL, "").replace(SSH_KEY_ACTIVATION_SCHEMA_SQL, "").replace(SSH_KEY_SCHEMA_SQL, "").replace(TERMINAL_SCHEMA_SQL, "").replace(
       "'REGISTER', 'EMAIL_CHANGE', 'EMAIL_OLD', 'TERMINAL', 'SSH_KEY'",
       "'REGISTER', 'EMAIL_CHANGE'",
     ),

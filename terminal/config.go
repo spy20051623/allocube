@@ -23,25 +23,26 @@ import (
 )
 
 type Config struct {
-	SSHServices     []SSHService       `json:"-"`
-	ConfigPath      string             `json:"-"`
-	Platform        string             `json:"platform"`
-	CAFile          string             `json:"caFile,omitempty"`
-	TerminalID      string             `json:"terminalId"`
-	IdentityKey     string             `json:"identityKey"`
-	StateDir        string             `json:"stateDir"`
-	KeyDir          string             `json:"syncKeyDir"`
-	SSHConfig       string             `json:"sshConfig"`
-	UserMapping     map[string]*string `json:"userMapping"`
-	AccountScope    string             `json:"accountScope,omitempty"`
-	RegularUIDMin   int                `json:"-"`
-	RegularUIDMax   int                `json:"-"`
-	DisabledUsers   []string           `json:"disabledUsers"`
-	IntervalSeconds int                `json:"intervalSeconds"`
+	AutoManageNewAccounts bool               `json:"autoManageNewAccounts"`
+	SSHServices           []SSHService       `json:"-"`
+	ConfigPath            string             `json:"-"`
+	Platform              string             `json:"platform"`
+	CAFile                string             `json:"caFile,omitempty"`
+	TerminalID            string             `json:"terminalId"`
+	IdentityKey           string             `json:"identityKey"`
+	StateDir              string             `json:"stateDir"`
+	KeyDir                string             `json:"syncKeyDir"`
+	SSHConfig             string             `json:"sshConfig"`
+	UserMapping           map[string]*string `json:"userMapping"`
+	AccountScope          string             `json:"accountScope,omitempty"`
+	RegularUIDMin         int                `json:"-"`
+	RegularUIDMax         int                `json:"-"`
+	DisabledUsers         []string           `json:"disabledUsers"`
+	IntervalSeconds       int                `json:"intervalSeconds"`
 }
 
 func defaults() Config {
-	return Config{IdentityKey: "/etc/allocube-terminal/identity.key", StateDir: "/var/lib/allocube-terminal", KeyDir: "/etc/allocube-terminal/synced_keys", SSHConfig: "/etc/ssh/sshd_config", UserMapping: map[string]*string{}, AccountScope: "named", IntervalSeconds: 300}
+	return Config{AutoManageNewAccounts: true, IdentityKey: "/etc/allocube-terminal/identity.key", StateDir: "/var/lib/allocube-terminal", KeyDir: "/etc/allocube-terminal/synced_keys", SSHConfig: "/etc/ssh/sshd_config", UserMapping: map[string]*string{}, AccountScope: "named", IntervalSeconds: 300}
 }
 func loadConfig(path string) (Config, error) {
 	c := defaults()
@@ -246,7 +247,7 @@ func (p *Platform) post(path, token string, input, output any) error {
 	}
 	resp, err := p.Client.Do(req)
 	if err != nil {
-		return platformConnectionError(err)
+		return &RetryError{platformConnectionError(err)}
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 2097153))
@@ -254,7 +255,7 @@ func (p *Platform) post(path, token string, input, output any) error {
 		return errors.New("invalid platform response")
 	}
 	if resp.StatusCode != 200 {
-		return platformHTTPError(path, resp.StatusCode, body)
+		return &RetryError{platformHTTPError(path, resp.StatusCode, body)}
 	}
 	if output == nil {
 		return nil

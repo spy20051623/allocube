@@ -1,3 +1,5 @@
+import { TerminalHelp } from "./TerminalHelp";
+import type { TerminalHelp as Help } from "../../shared/terminal-help";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Clock3, Copy, Download, KeyRound, PowerOff, RefreshCw, Settings2, Terminal } from "lucide-react";
 import { api, jsonBody } from "../../api";
@@ -11,7 +13,7 @@ import { useRealtimeRefresh } from "../../useRealtimeRefresh";
 import { terminalInstallCommand, type TerminalArchitecture, type TerminalEnrollment, type TerminalRelease } from "./install-command";
 import "./terminal.css";
 
-type TerminalInfo = { id: string; enrolled: boolean; enabled: boolean; lastSeenAt: string | null };
+type TerminalInfo = { id: string; enrolled: boolean; enabled: boolean; lastSeenAt: string | null; helpRequests?: Help[] };
 
 export function TerminalMachinePanel({ machineId, canManage, notify }: {
   machineId: string;
@@ -113,6 +115,7 @@ export function TerminalMachinePanel({ machineId, canManage, notify }: {
   }
   const status = <span className={`terminal-sync-status ${state.tone}`}><i aria-hidden="true" />{state.text}</span>;
   return (
+    <>
     <section className="card panel-card terminal-sync-panel">
       <SectionHeader title={t("公钥同步", "Public key synchronization")} actions={canManage ? (
         <button type="button" className="secondary-button compact" disabled={!loaded} onClick={() => { setEditing(true); void refresh(); }}>
@@ -189,5 +192,7 @@ export function TerminalMachinePanel({ machineId, canManage, notify }: {
         </Modal>
       )}
     </section>
+    {canManage && loaded && <TerminalHelp key={machineId} machineId={machineId} requests={terminal?.helpRequests ?? []} onChange={() => void refresh()} notify={notify} />}
+    </>
   );
 }

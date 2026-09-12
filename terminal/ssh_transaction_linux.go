@@ -14,13 +14,14 @@ import (
 )
 
 type SSHJournal struct {
-	Version      int               `json:"version"`
-	ID           string            `json:"id"`
-	Phase        string            `json:"phase"`
-	Services     []SSHService      `json:"services"`
-	Files        []SSHFilePlan     `json:"files"`
-	Dependencies map[string][]byte `json:"dependencies"`
-	Error        string            `json:"error,omitempty"`
+	Version                    int               `json:"version"`
+	ID                         string            `json:"id"`
+	Phase                      string            `json:"phase"`
+	Services                   []SSHService      `json:"services"`
+	Files                      []SSHFilePlan     `json:"files"`
+	Dependencies               map[string][]byte `json:"dependencies"`
+	AutomaticRecoveryAttempted bool              `json:"automaticRecoveryAttempted,omitempty"`
+	Error                      string            `json:"error,omitempty"`
 }
 
 func sshJournalPath(c Config) string { return filepath.Join(c.StateDir, "ssh-operation.json") }
@@ -94,11 +95,20 @@ func configureSSH(c Config) error {
 			ready = false
 		}
 	}
+	bindings, bindingErr := readSyncState(c)
+	if bindingErr != nil {
+		return bindingErr
+	}
+	for _, account := range plan.Targets {
+		if old, ok := bindings.Accounts[account.Name]; !ok || old.UID != account.UID {
+			ready = false
+		}
+	}
 	if ready {
 		fmt.Println("[OK] All SSH services are already configured.")
 		return nil
 	}
-	if len(plan.Targets) == 0 && len(plan.Restoring) == 0 {
+	if len(plan.Targets) == 0 && len(plan.Restoring) == 0 && !c.AutoManageNewAccounts {
 		fmt.Println("[SKIP] No eligible accounts; SSH files unchanged.")
 		return nil
 	}
@@ -114,6 +124,9 @@ func configureSSH(c Config) error {
 	fmt.Fprintf(tty, "[CONFIRM] Configure %d SSH services (%d files):\n", len(plan.Services), len(plan.Files))
 	for _, s := range plan.Services {
 		fmt.Fprintf(tty, "  %s | %s | %s\n", s.ID, s.Config, s.Listeners)
+	}
+	if c.AutoManageNewAccounts {
+		fmt.Fprintln(tty, "Future eligible accounts will be enrolled automatically during synchronization, including accounts with no keys.")
 	}
 	fmt.Fprintln(tty, "Managed accounts: Allocube keys only; SSH passwords disabled.")
 	for _, a := range plan.Targets {
@@ -156,13 +169,24 @@ func configureSSH(c Config) error {
 			return fmt.Errorf("%s now has no keys; files unchanged. Rerun configure-ssh to confirm the updated warning", name)
 		}
 	}
+	if err = executeSSHPlan(c, plan, latest); err != nil {
+		return err
+	}
+	_ = os.Remove(filepath.Join(c.StateDir, "automatic-failure.json"))
+	fmt.Fprintf(tty, "[OK] %d SSH services configured and reloaded.\n", len(plan.Services))
+	return nil
+}
+
+// Caller holds the shared lock; both manual and automatic enrollment use this executor.
+func executeSSHPlan(c Config, plan *SSHPlan, latest map[string][]byte) error {
+	var err error
 	if err = plan.unchanged(c); err != nil {
 		return err
 	}
 	if err = validatePlanBindings(c, plan.Targets); err != nil {
 		return err
 	}
-	j = &SSHJournal{Version: 1, ID: time.Now().UTC().Format("20060102T150405.000000000"), Phase: "prepared", Services: plan.Services, Files: plan.Files, Dependencies: map[string][]byte{}}
+	j := &SSHJournal{Version: 1, ID: time.Now().UTC().Format("20060102T150405.000000000"), Phase: "prepared", Services: plan.Services, Files: plan.Files, Dependencies: map[string][]byte{}}
 	for _, f := range plan.Files {
 		for path, data := range f.Snapshot {
 			j.Dependencies[path] = data
@@ -185,12 +209,13 @@ func configureSSH(c Config) error {
 		return err
 	}
 	fail := func(cause error) error {
+		j.AutomaticRecoveryAttempted = true
 		j.Error = cause.Error()
 		_ = writeJSON(sshJournalPath(c), j, 0600)
 		if e := restoreSSHJournal(c, j); e != nil {
-			return fmt.Errorf("%v\nState: recovery needed (%v). Next: %s", cause, e, recoveryCommand(c))
+			return needsHelp("SSH_RECOVERY", "", "RECOVERY_REQUIRED", fmt.Errorf("%v\nState: recovery needed (%v). Next: %s", cause, e, recoveryCommand(c)))
 		}
-		return fmt.Errorf("%v\nState: original SSH configurations restored; latest key changes retained. Fix the cause and rerun configure-ssh", cause)
+		return needsHelp("SSH_CONFIGURATION", "", "RESTORED", fmt.Errorf("%v\nState: original SSH configurations restored; latest key changes retained. Fix the cause and rerun configure-ssh", cause))
 	}
 	j.Phase = "writing-keys"
 	if err = writeJSON(sshJournalPath(c), j, 0600); err != nil {
@@ -222,6 +247,10 @@ func configureSSH(c Config) error {
 		return fail(err)
 	}
 	for _, s := range plan.Services {
+		f := plan.file(s.Config)
+		if bytes.Equal(f.Before, f.After) {
+			continue
+		}
 		if _, err = serviceCommand(s, s.Config, "-t"); err != nil {
 			return fail(err)
 		}
@@ -250,11 +279,13 @@ func configureSSH(c Config) error {
 	if err = saveSSHInventory(c, current); err != nil {
 		return fail(err)
 	}
+	if err = bindPlanAccounts(c, plan.Targets); err != nil {
+		return fail(err)
+	}
 	j.Phase = "complete"
 	if err = writeJSON(sshJournalPath(c), j, 0600); err != nil {
 		return fail(err)
 	}
-	fmt.Fprintf(tty, "[OK] %d SSH services configured and reloaded.\n", len(current))
 	return nil
 }
 
@@ -410,6 +441,31 @@ func validatePlanBindings(c Config, targets []Account) error {
 	return nil
 }
 func applyPlanKeys(c Config, targets []Account, keys map[string][]byte) error {
+	for _, a := range targets {
+		if err := trustedPath(c.KeyDir); err != nil {
+			return err
+		}
+		accounts, err := localAccounts()
+		if err != nil {
+			return err
+		}
+		valid := false
+		for _, now := range accounts {
+			if now.Name == a.Name && now.UID == a.UID && now.UID != 0 && now.Home == a.Home {
+				valid = true
+			}
+		}
+		if !valid {
+			return fmt.Errorf("%s changed before writing keys; key file retained", a.Name)
+		}
+		if _, err := replaceKeys(filepath.Join(c.KeyDir, a.Name), keys[a.Name]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func bindPlanAccounts(c Config, targets []Account) error {
 	state := SyncState{Accounts: map[string]SyncBinding{}}
 	path := filepath.Join(c.StateDir, "sync-state.json")
 	if data, e := safeRead(path); e == nil {
@@ -431,27 +487,6 @@ func applyPlanKeys(c Config, targets []Account, keys map[string][]byte) error {
 	}
 	if err := writeJSON(path, state, 0600); err != nil {
 		return err
-	}
-	for _, a := range targets {
-		if err := trustedPath(c.KeyDir); err != nil {
-			return err
-		}
-		accounts, err := localAccounts()
-		if err != nil {
-			return err
-		}
-		valid := false
-		for _, now := range accounts {
-			if now.Name == a.Name && now.UID == a.UID && now.UID != 0 && now.Home == a.Home {
-				valid = true
-			}
-		}
-		if !valid {
-			return fmt.Errorf("%s changed before writing keys; key file retained", a.Name)
-		}
-		if _, err := replaceKeys(filepath.Join(c.KeyDir, a.Name), keys[a.Name]); err != nil {
-			return err
-		}
 	}
 	return nil
 }

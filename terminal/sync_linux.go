@@ -254,22 +254,14 @@ func checkSyncSSH(c Config, a Account, desired []byte) error {
 	return nil
 }
 
-func synchronize(c Config) error {
+func synchronizeKeys(c Config) error {
 	if _, err := os.Stat(filepath.Join(c.StateDir, "sync-paused")); err == nil {
 		fmt.Println("[SKIP] Synchronization is paused. Run allocube-terminal resume when ready.")
 		return nil
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	lock, err := os.OpenFile(filepath.Join(c.StateDir, "sync.lock"), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
-	if err != nil {
-		return err
-	}
-	defer lock.Close()
-	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		return errors.New("another sync is running")
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	var err error
 	if err = trustedPath(c.KeyDir); err != nil {
 		return err
 	}
@@ -319,25 +311,25 @@ func synchronize(c Config) error {
 			continue
 		}
 		for _, a := range restoring {
-			problems = append(problems, fmt.Errorf("%s / %s: excluded account still has Allocube rules; run allocube-terminal configure-ssh", svc.ID, a.Name))
+			problems = append(problems, needsHelp("ACCOUNT_POLICY", a.Name, "UNCHANGED", fmt.Errorf("%s / %s: excluded account still has Allocube rules; run allocube-terminal configure-ssh", svc.ID, a.Name)))
 		}
 	}
 	for _, a := range accounts {
 		selection, e := selectAccount(c, a)
 		employee := selection.Employee
 		if e != nil {
-			problems = append(problems, fmt.Errorf("%s: %w", a.Name, e))
+			problems = append(problems, needsHelp("ACCOUNT_POLICY", a.Name, "UNCHANGED", fmt.Errorf("%s: %w", a.Name, e)))
 			continue
 		}
 		if !selection.Managed {
 			continue
 		}
 		if legacy.Managed[a.Name].Revoked {
-			problems = append(problems, fmt.Errorf("%s: legacy SSH revocation requires administrator review", a.Name))
+			problems = append(problems, needsHelp("ACCOUNT_POLICY", a.Name, "UNCHANGED", fmt.Errorf("%s: legacy SSH revocation requires administrator review", a.Name)))
 			continue
 		}
 		if old, ok := state.Accounts[a.Name]; ok && old.UID != a.UID {
-			problems = append(problems, fmt.Errorf("%s: local UID changed; remove stale keys and resolve sync binding manually", a.Name))
+			problems = append(problems, needsHelp("ACCOUNT_POLICY", a.Name, "KEYS_WITHHELD", fmt.Errorf("%s: local UID changed; enable autoManageNewAccounts or review the binding", a.Name)))
 			continue
 		}
 		targets[employee] = append(targets[employee], a)
@@ -346,7 +338,7 @@ func synchronize(c Config) error {
 		return errors.Join(problems...)
 	}
 	if coverageErr != nil {
-		problems = append(problems, fmt.Errorf("SSH coverage incomplete: %w; only safe removals will be applied", coverageErr))
+		problems = append(problems, needsHelp("SSH_CONFIGURATION", "", "KEYS_WITHHELD", fmt.Errorf("SSH coverage incomplete: %w; only safe removals will be applied", coverageErr)))
 	}
 	p, err := newPlatform(c)
 	if err != nil {
@@ -380,6 +372,7 @@ func synchronize(c Config) error {
 			binding, exists := state.Accounts[a.Name]
 			if policyErr != nil {
 				if !exists {
+					problems = append(problems, needsHelp("ACCOUNT_POLICY", a.Name, "UNCHANGED", fmt.Errorf("%s: not enrolled; run configure-ssh: %w", a.Name, policyErr)))
 					continue
 				}
 				old, e := safeRead(filepath.Join(c.KeyDir, a.Name))
@@ -396,19 +389,19 @@ func synchronize(c Config) error {
 					continue
 				}
 				if coverageErr == nil {
-					problems = append(problems, fmt.Errorf("%s: %w; new keys withheld", a.Name, policyErr))
+					problems = append(problems, needsHelp("SSH_CONFIGURATION", a.Name, "KEYS_WITHHELD", fmt.Errorf("%s: %w; new keys withheld", a.Name, policyErr)))
 				}
+			}
+			changed, e := replaceKeys(filepath.Join(c.KeyDir, a.Name), accountKeys)
+			if e != nil {
+				problems = append(problems, needsHelp("KEY_WRITE", a.Name, "KEYS_WITHHELD", fmt.Errorf("%s: %w", a.Name, e)))
+				continue
 			}
 			if !exists || binding.Employee != employee {
 				state.Accounts[a.Name] = SyncBinding{a.UID, employee, time.Now().UTC().Format(time.RFC3339)}
 				if e = writeJSON(statePath, state, 0600); e != nil {
 					return e
 				}
-			}
-			changed, e := replaceKeys(filepath.Join(c.KeyDir, a.Name), accountKeys)
-			if e != nil {
-				problems = append(problems, fmt.Errorf("%s: %w", a.Name, e))
-				continue
 			}
 			if changed {
 				if employee == "" {
@@ -437,9 +430,11 @@ func synchronize(c Config) error {
 		}
 		normalized, keyProblems, responseErr := normalizeSyncResponse(c.TerminalID, batch, response)
 		if responseErr != nil {
-			return errors.Join(append(problems, responseErr)...)
+			return errors.Join(append(problems, needsHelp("PLATFORM_RESPONSE", "", "KEYS_WITHHELD", responseErr))...)
 		}
-		problems = append(problems, keyProblems...)
+		for _, problem := range keyProblems {
+			problems = append(problems, needsHelp("PLATFORM_RESPONSE", "", "KEYS_WITHHELD", problem))
+		}
 		for _, employee := range batch {
 			desired, ok := normalized[employee]
 			if !ok {
@@ -462,7 +457,7 @@ func synchronize(c Config) error {
 	return errors.Join(problems...)
 }
 
-func installSync(c Config, path string) error {
+func installSync(c Config, path string, deferTimer bool) error {
 	binary, err := os.Executable()
 	if err != nil {
 		return err
@@ -488,7 +483,18 @@ func installSync(c Config, path string) error {
 	if err = trustedPath(c.KeyDir); err != nil {
 		return err
 	}
-	service := fmt.Sprintf("[Unit]\nDescription=Allocube public key synchronization\nWants=network-online.target\nAfter=network-online.target\n[Service]\nType=oneshot\nExecStart=%s --config %s sync\nUser=root\nUMask=0077\nNoNewPrivileges=true\nProtectSystem=strict\nReadWritePaths=%s %s\nPrivateTmp=true\nProtectKernelTunables=true\nProtectKernelModules=true\nProtectControlGroups=true\nRestrictSUIDSGID=true\nRestrictAddressFamilies=AF_UNIX AF_INET AF_INET6\nNice=19\nCPUSchedulingPolicy=idle\nIOSchedulingClass=idle\nTimeoutStartSec=120\n", binary, path, c.StateDir, c.KeyDir)
+	writePaths, err := automaticSSHWritePaths(c)
+	if err != nil {
+		return err
+	}
+	extraPaths := ""
+	for _, dir := range writePaths {
+		if strings.ContainsAny(dir, " \r\n\t\"%'\\") {
+			return errors.New("unsafe SSH directory for systemd")
+		}
+		extraPaths += " " + dir
+	}
+	service := fmt.Sprintf("[Unit]\nDescription=Allocube public key synchronization\nWants=network-online.target\nAfter=network-online.target\n[Service]\nType=oneshot\nExecStart=%s --config %s sync\nUser=root\nUMask=0077\nNoNewPrivileges=true\nProtectSystem=strict\nReadWritePaths=%s %s%s\nPrivateTmp=true\nProtectKernelTunables=true\nProtectKernelModules=true\nProtectControlGroups=true\nRestrictSUIDSGID=true\nRestrictAddressFamilies=AF_UNIX AF_INET AF_INET6\nNice=19\nCPUSchedulingPolicy=idle\nIOSchedulingClass=idle\nTimeoutStartSec=120\n", binary, path, c.StateDir, c.KeyDir, extraPaths)
 	timer := fmt.Sprintf("[Unit]\nDescription=Periodically synchronize Allocube public keys\n[Timer]\nOnBootSec=60\nOnUnitInactiveSec=%d\nRandomizedDelaySec=30\nAccuracySec=30\nUnit=allocube-terminal-sync.service\n[Install]\nWantedBy=timers.target\n", c.IntervalSeconds)
 	for name, body := range map[string]string{"allocube-terminal-sync.service": service, "allocube-terminal-sync.timer": timer} {
 		if err = atomicWrite(filepath.Join("/etc/systemd/system", name), []byte(body), 0644); err != nil {
@@ -510,10 +516,19 @@ func installSync(c Config, path string) error {
 			}
 		}
 	}
-	if _, err = os.Stat(filepath.Join(c.StateDir, "sync-paused")); err == nil {
-		fmt.Println("[SKIP] Timer files installed, but synchronization remains paused.")
+	if deferTimer {
 		return nil
 	}
-	_, err = command("/usr/bin/systemctl", "enable", "--now", "allocube-terminal-sync.timer")
+	return startSyncTimer(c)
+}
+
+func startSyncTimer(c Config) error {
+	if _, err := os.Stat(filepath.Join(c.StateDir, "sync-paused")); err == nil {
+		fmt.Println("[SKIP] Timer files installed, but synchronization remains paused.")
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	_, err := command("/usr/bin/systemctl", "enable", "--now", "allocube-terminal-sync.timer")
 	return err
 }

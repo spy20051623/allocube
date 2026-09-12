@@ -19,6 +19,8 @@ import { IdentityError } from "./identity.js";
 import { activeMachineKeys } from "./ssh-keys.js";
 import { registerSSHKeyRoutes } from "./ssh-key-routes.js";
 
+import { terminalHelpList, terminalHelpReport, receiveTerminalHelp } from "./terminal-help.js";
+
 type Terminal = {
   id: string;
   machine_id: string;
@@ -38,7 +40,7 @@ function fail(message: string, status = 400): never {
 }
 const opaque = z.string().min(32).max(128);
 const machinePaths = new Set(
-  ["enroll", "token", "keys", "rotate"].map(
+  ["enroll", "token", "keys", "rotate", "help"].map(
     (x) => `/api/v1/terminal/machine/${x}`,
   ),
 );
@@ -201,6 +203,7 @@ export function registerTerminalRoutes(
             enrolled: Boolean(row.public_key),
             certificateExpiresAt: row.certificate_expires_at,
             lastSeenAt: row.last_seen_at,
+            ...(manager ? { helpRequests: terminalHelpList(row.id) } : {}),
           }
         : null,
     };
@@ -336,6 +339,42 @@ export function registerTerminalRoutes(
       );
     });
     return { message: "身份密钥已轮换" };
+  });
+
+  app.post("/api/v1/terminal/machine/help", { bodyLimit: 32768, config: {rateLimit:{max:30,timeWindow:"1 minute"}} }, async (request) => {
+    const t = machine(request);
+    const parsed = terminalHelpReport.safeParse(request.body);
+    if (!parsed.success) fail("求助数据格式无效",400);
+    return receiveTerminalHelp(t.id,t.machine_id,parsed.data);
+  });
+  app.post("/api/v1/admin/machines/:id/terminal/help/:eventId/acknowledge", async (request, reply) => {
+    const auth = requireAuth(request,reply);
+    if (!auth) return;
+    const {id,eventId} = z.object({id:z.string().uuid(),eventId:z.string().uuid()}).parse(request.params);
+    if (!canManageMachine(auth.user.id,auth.user.role,id)) return reply.code(403).send({error:"无管理权限"});
+    const updated = db.prepare(`UPDATE terminal_help_requests SET acknowledged_at=?,acknowledged_by=?
+      WHERE event_id=? AND status='OPEN' AND terminal_id IN(SELECT id FROM machine_terminals WHERE machine_id=?)`)
+      .run(nowIso(),auth.user.id,eventId,id);
+    if (!updated.changes) return reply.code(404).send({error:"求助已解除或不存在"});
+    return {message:"已标记为处理中"};
+  });
+  app.post("/api/v1/admin/machines/:id/terminal/help/:eventId/resolve", async (request, reply) => {
+    const auth = requireAuth(request,reply);
+    if (!auth) return;
+    const {id,eventId} = z.object({id:z.string().uuid(),eventId:z.string().uuid()}).parse(request.params);
+    if (!canManageMachine(auth.user.id,auth.user.role,id)) return reply.code(403).send({error:"无管理权限"});
+    return withImmediateTransaction(() => {
+      const event = db.prepare(`SELECT h.terminal_id,h.status FROM terminal_help_requests h
+        JOIN machine_terminals t ON t.id=h.terminal_id WHERE t.machine_id=? AND h.event_id=?`).get(id,eventId) as {terminal_id:string;status:string}|undefined;
+      if (!event) return reply.code(404).send({error:"回报信息不存在"});
+      if (event.status !== "RESOLVED") {
+        const now = nowIso();
+        db.prepare(`UPDATE terminal_help_requests SET status='RESOLVED',resolved_at=?,resolved_by=?,resolution_source='ADMIN',updated_at=?
+          WHERE terminal_id=? AND event_id=?`).run(now,auth.user.id,now,event.terminal_id,eventId);
+        addAudit(auth.user.id,"TERMINAL_HELP_RESOLVE","machine",id,undefined,{eventId});
+      }
+      return {message:"已标记为已解决"};
+    });
   });
 
   app.post("/api/v1/terminal/machine/keys", async (request) => {

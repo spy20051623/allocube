@@ -12,6 +12,8 @@ import {
 const systemMessages = createSystemMessageCatalog(serverEnglish);
 
 const notificationEnglish: Record<string, string> = {
+  "notification.TERMINAL_HELP.title": "SSH synchronization needs attention",
+  "notification.TERMINAL_HELP_RESOLVED.title": "SSH synchronization issue resolved",
   "notification.ACCOUNT_STATUS.title": "Account status updated",
   "notification.USER_APPROVAL.title": "Review required",
   "notification.REGISTRATION_SUBMITTED.title": "Registration submitted",

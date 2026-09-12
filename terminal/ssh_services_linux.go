@@ -95,7 +95,9 @@ func systemdRecords(out string) []map[string]string {
 	return records
 }
 
-func discoverSSHServices() ([]SSHService, error) {
+var discoverSSHServices = discoverSystemSSHServices
+
+func discoverSystemSSHServices() ([]SSHService, error) {
 	out, err := command("/usr/bin/systemctl", "list-units", "--type=service", "--state=running", "--no-legend", "--plain", "--no-pager")
 	if err != nil {
 		return nil, fmt.Errorf("cannot enumerate systemd services: %w", err)
@@ -293,7 +295,10 @@ func listenerSockets(pid int) (map[string]string, error) {
 	}
 	return listening, nil
 }
-func reloadSSHService(s SSHService) error {
+
+var reloadSSHService = reloadSystemSSHService
+
+func reloadSystemSSHService(s SSHService) error {
 	before, err := listenerSockets(s.PID)
 	if err != nil {
 		return fmt.Errorf("%s: cannot inspect listener before reload: %w", s.ID, err)

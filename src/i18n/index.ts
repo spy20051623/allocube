@@ -21,6 +21,7 @@ const notificationEnglish: Record<string, string> = {
   "notification.PROFILE_CHANGE_REVIEW.title": "Profile review",
   "notification.PROFILE_CHANGE_SUBMITTED.title": "Profile update submitted",
   "notification.PROFILE_CHANGE_APPROVED.title": "Profile update approved",
+  "notification.PROFILE_UPDATED_BY_ADMIN.title": "Profile updated by an administrator",
   "notification.PROFILE_CHANGE_REJECTED.title": "Profile update rejected",
   "notification.MACHINE_ACCESS_REQUEST.title": "Access request",
   "notification.MACHINE_ACCESS_GRANTED.title": "Machine access granted",

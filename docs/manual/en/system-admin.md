@@ -7,7 +7,8 @@ The system administrator is responsible for accounts, machines, global rules, em
 The system administrator can:
 
 -   Approve, return, or reject registrations.
--   Review profile update requests for names and employee IDs.
+-   Review profile update requests for full names and employee IDs.
+-   Use the edit button on a regular user's row to update their full name and employee ID directly. Changes take effect immediately and notify the user. Active and disabled regular accounts are supported; system administrators cannot be edited. Previous employee IDs remain reserved as history. Review any pending profile change first. Stale edits require overwrite confirmation, which still checks employee ID availability, account status, and pending requests.
 -   Disable, re-enable, or permanently delete users.
 -   Generate one-time password reset links for enabled users.
 -   View account status, machine relationships, and recent login information.

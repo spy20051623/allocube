@@ -40,6 +40,7 @@ const notificationEnglishCopy: Record<string, { title: string; body: string }> =
   PROFILE_CHANGE_REVIEW: { title: "Profile review", body: "A profile update needs review." },
   PROFILE_CHANGE_SUBMITTED: { title: "Profile update submitted", body: "Your profile update has been submitted for review." },
   PROFILE_CHANGE_APPROVED: { title: "Profile update approved", body: "Your profile update was approved." },
+  PROFILE_UPDATED_BY_ADMIN: { title: "Profile updated by an administrator", body: "An administrator updated your full name or employee ID." },
   PROFILE_CHANGE_REJECTED: { title: "Profile update rejected", body: "Your profile update was rejected." },
   MACHINE_ACCESS_REQUEST: { title: "Access request", body: "A machine access request needs review." },
   MACHINE_ACCESS_GRANTED: { title: "Machine access granted", body: "You now have access to the requested machine." },

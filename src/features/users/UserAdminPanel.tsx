@@ -2,7 +2,8 @@ import { EditCancelled } from "../../edit-conflict";
 import { PageHeader } from "../../PageHeader";
 import { Modal } from "../../Modal";
 import { tr } from "../../i18n/index";
-import { UserX, UserCheck, Trash2, KeyRound, ChevronRight, Check, X, Copy } from "lucide-react";
+import { UserX, UserCheck, Trash2, KeyRound, ChevronRight, Check, X, Copy, Pencil } from "lucide-react";
+import { IdentityEditModal } from "../account/ProfileEditModals";
 import { useState } from "react";
 import { ApiError, jsonBody } from "../../api";
 import { copyTextToClipboard } from "../../clipboard";
@@ -24,6 +25,7 @@ export function UserAdminPanel({
   reload: () => Promise<void>;
 }) {
   const { request: api, dialog } = useConflictApi();
+  const [editingIdentity, setEditingIdentity] = useState<{ id: string; displayName: string; employeeNumber: string | null; version: number } | null>(null);
   const [passwordResetLink, setPasswordResetLink] = useState<{
     displayName: string;
     resetUrl: string;
@@ -311,6 +313,16 @@ export function UserAdminPanel({
                       </span>
                     </span>
                     <div className="row-actions">
+                      {user.role === "USER" && (
+                        <button
+                          type="button"
+                          className="icon-button tiny list-icon-action"
+                          title={user.pendingProfileChange ? tr("请先处理待审核的资料修改") : tr("修改姓名和工号")}
+                          aria-label={tr("修改 {{v0}} 的资料", { v0: user.displayName })}
+                          disabled={Boolean(user.pendingProfileChange)}
+                          onClick={() => setEditingIdentity(user)}
+                        ><Pencil size={14} /></button>
+                      )}
                       {user.status === "ACTIVE" && user.role !== "SYSTEM_ADMIN" && (
                         <button
                           type="button"
@@ -573,6 +585,23 @@ export function UserAdminPanel({
           </section>
         )}
       </div>
+      {editingIdentity && canManage && (
+        <IdentityEditModal
+          displayName={editingIdentity.displayName}
+          employeeNumber={editingIdentity.employeeNumber ?? ""}
+          registrationPending={false}
+          onClose={() => setEditingIdentity(null)}
+          saveIdentity={values => api(`/admin/users/${editingIdentity.id}/profile`, {
+            method: "PATCH",
+            body: jsonBody({ ...values, expectedVersion: editingIdentity.version })
+          })}
+          onSubmitted={async () => {
+            setEditingIdentity(null);
+            notify("success", tr("用户资料已更新"));
+            await reload();
+          }}
+        />
+      )}
       {canManage && passwordResetLink && (
         <Modal
           title={tr("密码重置链接")}

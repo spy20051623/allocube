@@ -205,7 +205,7 @@
   "管理备注已修改": "Management notes changed",
   "关联用户": "Related user",
   "审核原因": "Review reason",
-  "申请姓名": "Requested name",
+  "申请姓名": "Requested full name",
   "申请工号": "Requested employee number",
   "对象类型": "Object type",
   "已填写原因": "Reason provided",
@@ -264,7 +264,7 @@
   "修改反馈": "Edit feedback",
   "占用规则": "Reservation rules",
   "全部": "All",
-  "姓名已修改": "Name changed",
+  "姓名已修改": "Full name changed",
   "工号已修改": "Employee number changed",
   "Request timed out": "Request timed out",
   "创建密码重置链接": "Create password reset link",
@@ -296,5 +296,9 @@
   "添加个人公钥": "Add personal SSH key",
   "删除个人公钥": "Delete personal SSH key",
   "激活机器公钥": "Activate SSH key on machine",
-  "停用机器公钥": "Deactivate SSH key on machine"
+  "停用机器公钥": "Deactivate SSH key on machine",
+  "请先处理待审核的资料修改": "Review the pending profile change first",
+  "修改 {{v0}} 的资料": "Edit profile for {{v0}}",
+  "用户资料已更新": "User profile updated",
+  "修改用户资料": "Update user profile"
 }

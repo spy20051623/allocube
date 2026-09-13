@@ -576,11 +576,12 @@ export function RegisterPage({
           <RegistrationFieldShell
             field="realName"
             label={tr("姓名")}
+            hint={tr("请输入真实姓名")}
             focused={focusedField === "realName"}
             error={errors.realName}
           >
             <input
-              {...inputAccessibility("realName")}
+              {...inputAccessibility("realName", true)}
               name="realName"
               autoComplete="name"
               value={form.realName}

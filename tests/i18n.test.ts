@@ -175,6 +175,9 @@ describe("国际化资源与语言解析", () => {
       expect(tr("确认撤回")).toBe("Withdraw");
       expect(tr("生成重置链接")).toBe("Reset link");
       expect(tr("修改姓名和工号")).toBe("Edit profile");
+      expect(tr("用户名")).toBe("Username");
+      expect(tr("姓名")).toBe("Full name");
+      expect(tr("请输入真实姓名")).toBe("Enter your real name");
       expect(tr("清除已保存密码")).toBe("Clear password");
     } finally {
       await i18n.changeLanguage("zh-CN");

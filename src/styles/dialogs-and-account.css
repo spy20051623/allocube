@@ -432,6 +432,12 @@
   grid-column: span 3;
 }
 
+@media (max-width: 600px) {
+  .profile-fields-grid > .profile-field {
+    grid-column: 1 / -1;
+  }
+}
+
 .profile-security-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

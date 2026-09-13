@@ -21,6 +21,7 @@ import {
   ensureUsernameAvailable,
   ensureEmailAvailable,
   ensureEmployeeNumberAvailable,
+  normalizeEmployeeNumber,
   deleteUnapprovedUser
 } from "../identity.js";
 import { BusinessError } from "../business-error.js";
@@ -36,6 +37,57 @@ import {
 import { longDisableSchema, versionSchema } from "./unavailability-schema.js";
 
 export function registerUsersAdminRoutes(app: FastifyInstance, publishRevision: (revision: number) => void) {
+
+  app.patch("/api/v1/admin/users/:id/profile", async (request, reply) => {
+    const auth = requireSystemAdmin(request, reply);
+    if (!auth) return;
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = z.object({
+      displayName: z.string().trim(),
+      employeeNumber: z.string(),
+      expectedVersion: z.number().int().min(1)
+    }).strict().parse(request.body);
+    if (Array.from(body.displayName).length < 2 || Array.from(body.displayName).length > 60) {
+      throw new IdentityError("姓名必须为 2–60 个字符");
+    }
+    const employeeNumber = normalizeEmployeeNumber(body.employeeNumber);
+    const result = withImmediateTransaction(() => {
+      const user = getManageableUser(id);
+      if (!user) throw new IdentityError("用户不存在", 404);
+      if (user.role !== "USER") throw new IdentityError("只能修改普通用户的资料", 403);
+      if (!["ACTIVE", "DISABLED"].includes(user.status)) throw new IdentityError("请先完成用户注册审批", 409);
+      if (db.prepare("SELECT 1 FROM profile_change_requests WHERE user_id=? AND status='PENDING'").get(id)) {
+        throw new IdentityError("请先处理待审核的资料修改", 409);
+      }
+      checkEditVersion(user.version, body.expectedVersion, overwriteRequested(request));
+      const current = db.prepare("SELECT id, employee_number FROM employee_numbers WHERE user_id=? AND status='ACTIVE'").get(id) as { id: string; employee_number: string } | undefined;
+      if (user.display_name === body.displayName && current?.employee_number === employeeNumber) {
+        throw new IdentityError("姓名或工号至少需要修改一项");
+      }
+      const now = nowIso();
+      if (current?.employee_number !== employeeNumber) {
+        try {
+          ensureEmployeeNumberAvailable(employeeNumber);
+        } catch (error) {
+          if (error instanceof IdentityError) {
+            throw new BusinessError(error.message, error.statusCode, [{ path: "employeeNumber", message: error.message }]);
+          }
+          throw error;
+        }
+        if (current) db.prepare("UPDATE employee_numbers SET status='INACTIVE', updated_at=? WHERE id=?").run(now, current.id);
+        db.prepare("INSERT INTO employee_numbers(id,user_id,employee_number,status,assigned_by,assigned_at,updated_at) VALUES(?,?,?,'ACTIVE',?,?,?)")
+          .run(randomUUID(), id, employeeNumber, auth.user.id, now, now);
+      }
+      db.prepare("UPDATE users SET display_name=?,version=version+1,updated_at=? WHERE id=?").run(body.displayName, now, id);
+      addAudit(auth.user.id, "USER_PROFILE_UPDATE", "user", id,
+        { displayName: user.display_name, employeeNumber: current?.employee_number ?? null },
+        { displayName: body.displayName, employeeNumber });
+      return { displayName: body.displayName, employeeNumber, version: user.version + 1 };
+    });
+    createNotification(id, "PROFILE_UPDATED_BY_ADMIN", "管理员已更新你的资料",
+      `当前姓名为 ${result.displayName}，工号为 ${result.employeeNumber}。`, "/profile");
+    return result;
+  });
 
   app.get("/api/v1/users/directory", async (request, reply) => {
     const auth = requireAuth(request, reply);

@@ -2692,6 +2692,14 @@
   gap: 14px;
 }
 
+.user-account-table {
+  overflow-x: auto;
+}
+
+.user-account-row:not(.directory) {
+  min-width: 898px;
+}
+
 .user-account-row.directory {
   grid-template-columns: minmax(240px, 1fr) minmax(140px, .65fr) 90px;
 }

@@ -104,7 +104,7 @@
   "持久配置不完整，缺少邮件发送配置": "Persistent configuration is incomplete, missing email sending configuration",
   "待审核的工号不存在": "Pending employee ID not found",
   "当前密码不正确": "Current password is incorrect",
-  "当前姓名为 {{v0}}，工号为 {{v1}}。": "Current name is {{v0}}, employee ID is {{v1}}.",
+  "当前姓名为 {{v0}}，工号为 {{v1}}。": "Current full name is {{v0}}, employee ID is {{v1}}.",
   "当前账号不能修改用户名": "You cannot change this account's username",
   "当前账号不能修改邮箱": "You cannot change this account's email address",
   "当前账号不能修改资料": "You cannot edit this account's profile",
@@ -314,8 +314,8 @@
   "新时段不可用，原占用保持不变": "New time slot is unavailable, original reservation remains unchanged",
   "新用户名与当前用户名相同": "New username is the same as the current username",
   "新邮箱与当前邮箱相同": "New email is the same as the current email",
-  "姓名必须为 2–60 个字符": "Name must be 2–60 characters",
-  "姓名或工号至少需要修改一项": "Change the name, employee ID, or both",
+  "姓名必须为 2–60 个字符": "Full name must be 2–60 characters",
+  "姓名或工号至少需要修改一项": "Change the full name, employee ID, or both",
   "修改时间时不能改变占用范围，请取消后重新占用": "Cannot change the reservation scope when modifying time, please cancel and re-reserve",
   "修改时间时不能更换资源组，请取消后重新占用": "Cannot change the group when modifying time, please cancel and re-reserve",
   "需要系统管理员权限": "System administrator permission required",
@@ -528,5 +528,9 @@
   "自动调整后没有可用时段，未创建占用": "No available time slots remain after automatic adjustment. No reservations were created.",
   "请使用批量编辑参数提交自动调整": "Use the batch editing parameters for automatic adjustment.",
   "数据已更新，请确认是否继续修改": "Data has changed. Confirm whether to continue with your changes.",
-  "系统管理员账号已禁止提交占用，请使用个人账号。": "System administrator accounts cannot submit reservations. Please use your personal account."
+  "系统管理员账号已禁止提交占用，请使用个人账号。": "System administrator accounts cannot submit reservations. Please use your personal account.",
+  "只能修改普通用户的资料": "Only regular user profiles can be edited",
+  "请先完成用户注册审批": "Complete the registration review first",
+  "请先处理待审核的资料修改": "Review the pending profile change first",
+  "管理员已更新你的资料": "An administrator updated your profile"
 }

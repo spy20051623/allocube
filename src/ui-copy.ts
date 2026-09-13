@@ -69,6 +69,7 @@ export function auditActionLabel(action: string) {
       USER_REGISTER: tr("提交注册申请"),
       USER_LOGIN: tr("用户登录"),
       USER_STATUS_CHANGE: tr("更改用户状态"),
+      USER_PROFILE_UPDATE: tr("修改用户资料"),
       USER_DELETE: tr("永久删除用户"),
       USER_APPROVE: tr("通过注册申请"),
       USER_RETURN: tr("要求修改注册信息"),

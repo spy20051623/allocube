@@ -1,12 +1,13 @@
 import { Modal } from "../../Modal";
+import { EditCancelled } from "../../edit-conflict";
 import { tr } from "../../i18n/index";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useId } from "react";
 import { api, jsonBody, ApiError } from "../../api";
 import { verificationCooldownSeconds, verificationButtonLabel } from "../../auth-feedback";
 import { normalizeRegistrationEmail, validateEmail } from "../../registration-validation";
 import { isEmployeeNumberValid, EMPLOYEE_NUMBER_MESSAGE } from "../../shared/identity-rules";
-import { fieldErrorFromApi } from "../../api-errors";
-import { AuthFeedback } from "../../components/forms";
+import { fieldErrorFromApi, validationDetailFromApi } from "../../api-errors";
+import { AuthFeedback, AuthFieldShell } from "../../components/forms";
 import { BusyButtonContent } from "../../components/feedback";
 import { type RegistrationConfigPayload } from "../../shared/settings";
 import { PasswordInput } from "../../components/PasswordFields";
@@ -98,15 +99,19 @@ export function IdentityEditModal({
   employeeNumber,
   registrationPending,
   onClose,
-  onSubmitted
+  onSubmitted,
+  saveIdentity
 }: {
   displayName: string;
   employeeNumber: string;
   registrationPending: boolean;
   onClose: () => void;
   onSubmitted: () => Promise<void>;
+  saveIdentity?: (values: { displayName: string; employeeNumber: string }) => Promise<unknown>;
 }) {
   const [name, setName] = useState(displayName);
+  const nameId = useId();
+  const [nameFocused, setNameFocused] = useState(false);
   const [number, setNumber] = useState(employeeNumber);
   const [errors, setErrors] = useState<{ displayName?: string; employeeNumber?: string }>({});
   const [busy, setBusy] = useState(false);
@@ -128,14 +133,17 @@ export function IdentityEditModal({
     if (Object.keys(nextErrors).length) return;
     setBusy(true);
     try {
-      await api("/auth/profile-change-requests", {
+      const values = { displayName: nextName, employeeNumber: nextNumber };
+      if (saveIdentity) await saveIdentity(values);
+      else await api("/auth/profile-change-requests", {
         method: "POST",
-        body: jsonBody({ displayName: nextName, employeeNumber: nextNumber })
+        body: jsonBody(values)
       });
       await onSubmitted();
     } catch (caught) {
-      const displayNameError = fieldErrorFromApi(caught, "displayName");
-      const employeeNumberError = fieldErrorFromApi(caught, "employeeNumber");
+      if (caught instanceof EditCancelled) return;
+      const displayNameError = fieldErrorFromApi(caught, "displayName") || validationDetailFromApi(caught, "displayName");
+      const employeeNumberError = fieldErrorFromApi(caught, "employeeNumber") || validationDetailFromApi(caught, "employeeNumber");
       if (displayNameError || employeeNumberError) {
         setErrors({
           ...(displayNameError ? { displayName: displayNameError } : {}),
@@ -152,11 +160,16 @@ export function IdentityEditModal({
     <Modal title={tr("修改姓名和工号")} onClose={onClose}>
       <form className="stack-form profile-edit-form" noValidate onSubmit={submit}>
         <div className="two-fields">
-          <label className={`field${errors.displayName ? " has-error" : ""}`}>
-            <span>{tr("姓名")}</span>
+          <AuthFieldShell id={nameId} label={tr("姓名")} focused={nameFocused}
+            error={errors.displayName} hint={tr("请输入真实姓名")}>
             <input
+              id={nameId}
               autoFocus
               name="displayName"
+              autoComplete="name"
+              onFocus={() => setNameFocused(true)}
+              onBlur={() => setNameFocused(false)}
+              aria-describedby={nameFocused ? `${nameId}-hint` : errors.displayName ? `${nameId}-error` : undefined}
               value={name}
               aria-invalid={Boolean(errors.displayName)}
               onChange={(event) => {
@@ -164,8 +177,7 @@ export function IdentityEditModal({
                 setErrors((current) => ({ ...current, displayName: undefined }));
               }}
             />
-            {errors.displayName && <AuthFeedback tone="error">{errors.displayName}</AuthFeedback>}
-          </label>
+          </AuthFieldShell>
           <label className={`field${errors.employeeNumber ? " has-error" : ""}`}>
             <span>{tr("工号")}</span>
             <input
@@ -184,7 +196,7 @@ export function IdentityEditModal({
           <button type="button" className="secondary-button" onClick={onClose}>{tr("取消")}</button>
           <button className="primary-button" disabled={busy}>
             <BusyButtonContent busy={busy}>
-              {registrationPending ? tr("保存") : tr("提交审核")}
+              {saveIdentity || registrationPending ? tr("保存") : tr("提交审核")}
             </BusyButtonContent>
           </button>
         </div>

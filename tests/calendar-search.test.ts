@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { searchCalendarResources } from "../src/calendar-search.js";
+import i18n, { initializeI18n } from "../src/i18n/index";
 import type { Machine, ResourceGroup } from "../src/shared/types.js";
+
+it("finds generated shared-resource summaries using their English label", async () => {
+  await initializeI18n();
+  await i18n.changeLanguage("en");
+  try {
+    const sharedMachines = machines.map(machine => ({ ...machine, resourceSummary: "共享 · Memory · 512 GiB" }));
+    expect(searchCalendarResources(sharedMachines, groups, "Shared").length).toBeGreaterThan(0);
+    const sharedGroups = groups.map(group => ({ ...group, resourceSummary: "共享 · Memory · 256 GiB" }));
+    expect(searchCalendarResources(machines, sharedGroups, "Shared").length).toBeGreaterThan(0);
+  } finally {
+    await i18n.changeLanguage("zh-CN");
+  }
+});
 
 const machines: Machine[] = [
   {

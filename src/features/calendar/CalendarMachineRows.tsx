@@ -1,3 +1,4 @@
+import { localizeResourceSummary } from "../../resource-summary";
 import { tr } from "../../i18n/index";
 import {
   type CalendarResultFieldWidths,
@@ -60,7 +61,7 @@ export function CalendarMachineStripLine({
       : maintenanceNow
         ? tr("维护")
         : tr("status.enabled");
-  const resourceText = machine.resourceSummary || tr("尚未配置资源");
+  const resourceText = localizeResourceSummary(machine.resourceSummary) || tr("尚未配置资源");
 
   useLayoutEffect(() => {
     let active = true;

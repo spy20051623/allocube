@@ -183,6 +183,32 @@ function reserve(start: number, end: number, scope: "RESOURCE_GROUP" | "MACHINE"
 }
 
 describe("machine access expiration", () => {
+  it("allows members to read resource settings but rejects writes and expired access", async () => {
+    const read = (kind: string, cookie = memberCookie) => app.inject({ method: "GET", url: `/api/v1/admin/machines/${machineId}/${kind}`, headers: { cookie } });
+    expect((await read("resource-pools", "")).statusCode).toBe(401);
+    expect((await read("resource-pools")).statusCode).toBe(403);
+    await invite(futureDay(2));
+    const pools = await read("resource-pools");
+    expect(pools.statusCode).toBe(200);
+    expect(pools.json().pools[0]).toMatchObject({ id: poolId, kind: "INDEX_RANGE", rangeStart: 0, rangeEnd: 31 });
+    expect((await read("groups")).statusCode).toBe(200);
+    for (const [method, path] of [
+      ["PUT", `/admin/machines/${machineId}/resource-configuration`],
+      ["POST", `/admin/machines/${machineId}/resource-pools`],
+      ["POST", `/admin/machines/${machineId}/groups`],
+      ["PATCH", `/admin/resource-pools/${poolId}`],
+      ["DELETE", `/admin/resource-pools/${poolId}`],
+      ["POST", `/admin/groups/${groupId}/disable`]
+    ] as const) {
+      const response = await app.inject({ method, url: `/api/v1${path}`, headers: { cookie: memberCookie }, payload: {} });
+      expect(response.statusCode, `${method} ${path}: ${response.body}`).toBe(403);
+    }
+    expect((await read("resource-pools", managerCookie)).statusCode).toBe(200);
+    dbModule.db.prepare("UPDATE machine_access_memberships SET expires_at=? WHERE machine_id=? AND user_id=?").run(futureDay(-1), machineId, applicantId);
+    expect((await read("resource-pools")).statusCode).toBe(403);
+    expect((await read("groups")).statusCode).toBe(403);
+  });
+
   it("defaults applications and invitations to 30 days and disallows permanent user applications", async () => {
     expect((await apply(null)).statusCode).toBe(400);
     expect((await apply(futureDay(-1))).statusCode).toBe(400);

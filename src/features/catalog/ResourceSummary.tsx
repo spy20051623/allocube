@@ -1,3 +1,4 @@
+import { localizeResourceSummary } from "../../resource-summary";
 import { tr } from "../../i18n/index";
 import { useId, useRef, useState, useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
@@ -47,7 +48,7 @@ export function ResourceSummary({
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
       >
-        {value || tr("尚未配置资源")}
+        {localizeResourceSummary(value) || tr("尚未配置资源")}
       </span>
       {open && createPortal(
         <span
@@ -56,7 +57,7 @@ export function ResourceSummary({
           className="resource-summary-popover"
           style={position}
         >
-          {value || tr("尚未配置资源")}
+          {localizeResourceSummary(value) || tr("尚未配置资源")}
         </span>,
         document.body
       )}

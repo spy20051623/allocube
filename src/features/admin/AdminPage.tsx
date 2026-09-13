@@ -1,3 +1,4 @@
+import { localizeResourceSummary } from "../../resource-summary";
 import { AuditPanel } from "../../AuditPanel";
 import { EditCancelled } from "../../edit-conflict";
 import { useRealtimeRefresh } from "../../useRealtimeRefresh";
@@ -217,7 +218,7 @@ export function AdminPage({
                           <span className="machine-list-icon"><Server size={18} /></span>
                           <span>
                             <strong>{machine.name}</strong>
-                            <small>{machine.address || tr("未填写地址")} ｜ {machine.resourceSummary || tr("尚未配置资源")}</small>
+                            <small>{machine.address || tr("未填写地址")} ｜ {localizeResourceSummary(machine.resourceSummary) || tr("尚未配置资源")}</small>
                           </span>
                           <ChevronRight size={17} />
                         </button>

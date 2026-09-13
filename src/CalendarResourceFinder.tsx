@@ -1,3 +1,4 @@
+import { localizeResourceSummary } from "./resource-summary";
 import { Layers3, Search, Server, X } from "lucide-react";
 import {
   useEffect,
@@ -20,7 +21,7 @@ import {
   type CalendarSearchGroup,
   type CalendarSearchMachine
 } from "./calendar-search";
-import { tr } from "./i18n/index";
+import { tr, currentLocale } from "./i18n/index";
 
 export type CalendarSearchTarget = {
   machineId: string;
@@ -190,9 +191,10 @@ export function CalendarResourceFinder({
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [position, setPosition] = useState<MenuPosition | null>(null);
+  const locale = currentLocale();
   const results = useMemo(
     () => searchCalendarResources(machines, groups, value),
-    [groups, machines, value]
+    [groups, machines, value, locale]
   );
   const options = useMemo<FinderOption[]>(
     () =>
@@ -415,7 +417,7 @@ export function CalendarResourceFinder({
                           title={machine.name}
                           address={machine.address}
                           tags={machine.tags}
-                          resource={machine.resourceSummary}
+                          resource={localizeResourceSummary(machine.resourceSummary)}
                         />
                       </button>
                       {matchingGroups.map((group) => {
@@ -438,7 +440,7 @@ export function CalendarResourceFinder({
                             <Layers3 size={15} aria-hidden="true" />
                             <CalendarResultLine
                               title={group.name}
-                              resource={group.resourceSummary}
+                              resource={localizeResourceSummary(group.resourceSummary)}
                             />
                           </button>
                         );

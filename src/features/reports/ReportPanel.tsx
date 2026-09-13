@@ -1,3 +1,4 @@
+import { localizeResourceSummary } from "../../resource-summary";
 import { useUsageReport } from "../../useUsageReport";
 import { shiftReportDate, latestReportDate } from "../../shared/reports";
 import { PageHeader } from "../../PageHeader";
@@ -80,7 +81,7 @@ export function ReportPanel({ machines, notify, isSystemAdmin }: {
               <div className="utilization-list">
                 {report.groups.map((row: typeof report.groups[number]) => (
                   <div key={row.resourceGroupId}>
-                    <div className="util-label"><span><strong>{trDynamic(row.groupName)}</strong><small>{trDynamic(row.machineName)} ｜ {trDynamic(row.resourceSummary)}</small></span><b>{row.utilization}%</b></div>
+                    <div className="util-label"><span><strong>{trDynamic(row.groupName)}</strong><small>{trDynamic(row.machineName)} ｜ {localizeResourceSummary(row.resourceSummary)}</small></span><b>{row.utilization}%</b></div>
                     <div className="progress"><span style={{ width: `${Math.min(100, row.utilization)}%` }} /></div>
                   </div>
                 ))}

@@ -1,3 +1,4 @@
+import { localizeResourceSummary } from "../../resource-summary";
 import { useId, useRef, useMemo, useState, useLayoutEffect, useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ShieldCheck, Server, Globe2 } from "lucide-react";
@@ -245,7 +246,7 @@ export function ResourceCatalogCard({ machine, accessDisplay, children }: {
         </div>
       </div>
       <p className={`catalog-resource-summary${machine.resourceSummary ? "" : " empty"}`}>
-        {machine.resourceSummary || tr("尚未配置资源")}
+        {localizeResourceSummary(machine.resourceSummary) || tr("尚未配置资源")}
       </p>
       <div className="catalog-machine-details">
         <AdaptiveManagerList managers={machine.managers} />

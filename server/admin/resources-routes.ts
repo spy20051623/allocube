@@ -35,7 +35,7 @@ import { countRows, getCurrentResourceGroupRow } from "./records.js";
 export function registerResourcesAdminRoutes(app: FastifyInstance, publishRevision: (revision: number) => void) {
 
   app.get("/api/v1/admin/machines/:id/resource-pools", async (request, reply) => {
-    const auth = requireMachineManager(request, reply);
+    const auth = requireMachineViewer(request, reply);
     if (!auth) return;
     return { pools: listResourcePools(auth.machineId) };
   });

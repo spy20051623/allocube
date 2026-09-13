@@ -1,3 +1,4 @@
+import { localizeResourceSummary } from "../../resource-summary";
 import { EditCancelled } from "../../edit-conflict";
 import { TerminalMachinePanel } from "../terminal/TerminalMachinePanel";
 import { useRealtimeRefresh } from "../../useRealtimeRefresh";
@@ -235,7 +236,7 @@ export function MachineInfoSection({
           </div>
           <div className="machine-info-resource">
             <span><Gauge size={14} />{tr("资源摘要")}</span>
-            <strong>{detail.resourceSummary || tr("尚未配置资源")}</strong>
+            <strong>{localizeResourceSummary(detail.resourceSummary) || tr("尚未配置资源")}</strong>
           </div>
         </div>
         <div className="machine-info-tags">

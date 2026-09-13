@@ -1,3 +1,4 @@
+import { localizeResourceSummary } from "./resource-summary";
 import type { Machine, ResourceAllocation, ResourceGroup } from "./shared/types";
 
 export type CalendarSearchMachine = Pick<
@@ -68,7 +69,7 @@ function machineMatchScore(
   if (name.startsWith(normalizedQuery)) return 10;
   if (isOrderedNameMatch(name, normalizedQuery)) return 15;
   return includesAllTerms(
-    [machine.name, machine.address, machine.resourceSummary, ...machine.tags],
+    [machine.name, machine.address, machine.resourceSummary, localizeResourceSummary(machine.resourceSummary), ...machine.tags],
     terms
   )
     ? 20
@@ -89,6 +90,7 @@ function groupMatchScore(
       group.name,
       group.description,
       group.resourceSummary,
+      localizeResourceSummary(group.resourceSummary),
       ...group.tags,
       ...group.allocations.flatMap(allocationSearchText)
     ],

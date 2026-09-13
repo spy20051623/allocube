@@ -4,12 +4,20 @@ Regular users can apply for machine access, view resource scheduling, and manage
 
 ## Applying for machine access
 
+Access expires at 24:00 Beijing time on the selected date (00:00 on the following day), regardless of browser timezone or calendar display mode. Only the date is displayed and selected.
+
 1. Open "Resources".
 2. Locate the target machine and view its resource summary, maintenance status, and administrator information.
-3. Select "Request access" and add a reason if helpful.
+3. Select "Request access", choose "Requested access until", and add a reason if helpful. The default is 30 days; you can change the deadline.
 4. Wait for a machine or system administrator to review the request.
 
 Once approved, the machine appears in "Calendar" and under "Admin → Resources". If you leave a machine, you lose access and the system releases your current and upcoming reservations as described in the confirmation message.
+
+Administrators may adjust the requested deadline or grant permanent access. A request still pending at its deadline is automatically rejected, with a notification; you can apply again.
+
+Before finite access expires, select "Extend" in Resources or in the access-expired overlay in Calendar day view. It uses the same request dialog and shows "Extension pending" while a request is under review. The default adds 30 days to the original expiration date; the 7, 15, and 30 day shortcuts also use that date. While review is pending, the original deadline still applies to access and reservations. Withdrawal or rejection leaves that grant unchanged. Permanent access has no extension button; expired access shows the usual Apply action. Leaving a machine also closes any pending extension request.
+
+Reservations must end no later than your access deadline. Expired access cannot be used, but you can reapply. Shortening access automatically cancels reservations starting at or after the deadline and truncates overlapping reservations. Extending access does not restore these changes.
 
 ## Browsing the schedule
 
@@ -111,3 +119,5 @@ System administrators can publish site-wide announcements. When you open Allocub
 Announcements can contain links to external web pages and internal site pages. Before opening a link, please verify that the link text and destination match your expectations.
 
 After closing the pop-up, open "Announcements" from the user menu to view published announcements. Regular users cannot see unpublished announcements or manage them.
+
+The calendar shows the Beijing expiration date only for finite access. Gray hatching marks time beyond the deadline. Dragging across it keeps only authorized time; manual entry reports an error for times beyond the deadline. Permanent access has no expiration label.

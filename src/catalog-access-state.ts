@@ -5,13 +5,15 @@ export type CatalogAccessState =
   | "PENDING"
   | "NO_ACCESS";
 
-export type CatalogAccessAction = "APPLY" | "WITHDRAW" | "EXIT" | null;
+export type CatalogAccessAction = "APPLY" | "RENEW" | "WITHDRAW" | "EXIT" | null;
 
 export function resolveCatalogAccessDisplay(input: {
   userRole: string;
   isManager: boolean;
   hasAccess: boolean;
   hasPendingRequest: boolean;
+  expiresAt?: string | null;
+  pendingRenewal?: boolean;
 }): {
   state: CatalogAccessState;
   label: string;
@@ -26,6 +28,12 @@ export function resolveCatalogAccessDisplay(input: {
       actionLabel: input.userRole === "SYSTEM_ADMIN" ? null : tr("退出")
     };
   }
+  if (input.hasAccess && input.hasPendingRequest && input.pendingRenewal) {
+    return { state: "USER", label: tr("使用者 · 延期审核中"), action: "WITHDRAW", actionLabel: tr("撤回") };
+  }
+  if (input.hasAccess && input.expiresAt) {
+    return { state: "USER", label: tr("使用者"), action: "RENEW", actionLabel: tr("延期") };
+  }
   if (input.hasAccess) {
     return {
       state: "USER",
@@ -37,7 +45,7 @@ export function resolveCatalogAccessDisplay(input: {
   if (input.hasPendingRequest) {
     return {
       state: "PENDING",
-      label: tr("审核中"),
+      label: input.pendingRenewal ? tr("延期审核中") : tr("审核中"),
       action: "WITHDRAW",
       actionLabel: tr("撤回")
     };

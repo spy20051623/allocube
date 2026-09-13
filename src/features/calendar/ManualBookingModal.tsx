@@ -1,8 +1,9 @@
+import { accessExpiryIssues } from "./access-expiry";
 import { Modal } from "../../Modal";
 import { tr } from "../../i18n/index";
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { chinaLocalToIso } from "../../date";
+import { chinaLocalToIso, isoToChinaLocal } from "../../date";
 import { type CalendarDraft, currentMinuteStart, calendarDraftFieldIssues } from "../../calendar-state";
 import type { Machine, ResourceGroup, DashboardBootstrap } from "../../shared/types";
 import { type CalendarReservationTarget } from "./types";
@@ -111,7 +112,9 @@ export function CalendarManualBookingModal({
     startAt: startAt ? chinaLocalToIso(startAt) : "",
     endAt: endAt ? chinaLocalToIso(endAt) : ""
   };
-  const issues = calendarDraftFieldIssues(draft, settings, currentTime);
+  const expiresAt = machines.find(machine => machine.id === selectedMachineId)?.accessExpiresAt;
+  const expiryIssues = accessExpiryIssues(draft.startAt, draft.endAt, expiresAt);
+  const issues = { ...calendarDraftFieldIssues(draft, settings, currentTime), ...expiryIssues };
 
   return (
     <Modal title={tr("新增占用")} onClose={onClose}>
@@ -180,11 +183,12 @@ export function CalendarManualBookingModal({
         )}
         <Field
           label={tr("开始时间")}
-          error={submitted ? issues.startAt : undefined}
+          error={submitted ? issues.startAt : expiryIssues.startAt}
         >
           <input
             type="datetime-local"
             name="manualStartAt"
+            max={expiresAt ? isoToChinaLocal(new Date(Date.parse(expiresAt) - 60_000).toISOString()) : undefined}
             value={startAt}
             onChange={(event) => {
               setStartAt(event.target.value);
@@ -194,11 +198,12 @@ export function CalendarManualBookingModal({
         </Field>
         <Field
           label={tr("结束时间")}
-          error={submitted ? issues.endAt : undefined}
+          error={submitted ? issues.endAt : expiryIssues.endAt}
         >
           <input
             type="datetime-local"
             name="manualEndAt"
+            max={expiresAt ? isoToChinaLocal(expiresAt) : undefined}
             value={endAt}
             onChange={(event) => {
               setEndAt(event.target.value);

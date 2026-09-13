@@ -32,13 +32,13 @@ function normalized(data: Payload): Payload {
 }
 // Deliberately bounded per object family. Never serialize arbitrary old audit payloads.
 const familyFields: Record<string, string[]> = {
-  reservation: ["startAt", "endAt", "scope", "status", "title", "purpose", "note", "reason", "action", "resultingSegments", "replacementBatchId", "replacedReservationIds", "newReservationIds", "replacesReservationId", "segmentCount"],
-  machine: ["name", "address", "hardwareNotes", "connectionGuide", "announcement", "tags", "status", "reason", "managementNotesChanged", "userId", "terminalId", "callbackUrl", "operationId", "account", "target", "result", "occurredAt"],
+  reservation: ["expiresAt", "startAt", "endAt", "scope", "status", "title", "purpose", "note", "reason", "action", "resultingSegments", "replacementBatchId", "replacedReservationIds", "newReservationIds", "replacesReservationId", "segmentCount"],
+  machine: ["expiresAt", "cancelled", "truncated", "name", "address", "hardwareNotes", "connectionGuide", "announcement", "tags", "status", "reason", "managementNotesChanged", "userId", "terminalId", "callbackUrl", "operationId", "account", "target", "result", "occurredAt"],
   resource_group: ["name", "description", "tags", "allocations", "status", "reason", "sortOrder", "version"],
   resource_pool: ["name", "kind", "unit", "description", "sharingMode", "rangeStart", "rangeEnd", "capacity", "items", "status", "reason", "version"],
   user: ["username", "displayName", "employeeNumber", "email", "status", "reason", "reviewReason"],
   profile_change_request: ["displayNameChanged", "employeeNumberChanged", "reasonProvided", "status", "reason", "reviewReason", "requestedDisplayName", "requestedEmployeeNumber"],
-  machine_access_request: ["status", "reason", "userId"],
+  machine_access_request: ["previousExpiresAt", "expiresAt", "source", "status", "reason", "userId"],
   resource_unavailability: ["targetType", "startAt", "endAt", "reason", "reasonProvided", "status", "kind", "impact"],
   settings: ["blockAdminBookings", "maintenanceText", "minBookingMinutes", "maxBookingMinutes", "advanceDays", "siteName", "siteDescription", "siteOrigin", "icpFilingNumber", "publicSecurityFilingNumber", "allowedEmailDomains", "allowRegistrationWithoutEmail", "requireRegistrationEmail", "version", "fingerprint"],
   smtp_settings: ["enabled", "host", "port", "security", "username", "fromName", "fromAddress", "hasPassword", "passwordChanged", "passwordCleared"],

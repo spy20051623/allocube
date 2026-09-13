@@ -6,7 +6,7 @@ import { z } from "zod";
 import { requireAuth, getAccessibleMachineIds, canManageMachine, requireSession } from "./auth.js";
 import { nowIso, db, parseTags, getScheduleRevision, withImmediateTransaction, addAudit, bumpMachineAccessRevision, bumpScheduleRevision, getSettings } from "./db.js";
 import { createNotification } from "./mailer.js";
-import { removeMachineMembership } from "./machine-access.js";
+import { removeMachineMembership, parseAccessExpiry, expireMachineAccessRequests, expireMachineAccessRequestsInTransaction } from "./machine-access.js";
 import { BusinessError, assertUserCanAccessSegments, previewReplacementSegments, previewSegments, replaceReservationBatch, commitReservationBatch, updateReservation, cancelReservation, endReservationEarly } from "./scheduling.js";
 import { machineResourceSummary, mapResourceGroups } from "./resources.js";
 import { registerMyReservationRoutes } from "./my-reservations.js";
@@ -18,6 +18,7 @@ export function registerScheduleRoutes(
   app.get("/api/v1/machines/catalog", async (request, reply) => {
     const auth = requireAuth(request, reply);
     if (!auth) return;
+    expireMachineAccessRequests();
     const currentAt = nowIso();
     const rows = db
       .prepare(
@@ -31,7 +32,7 @@ export function registerScheduleRoutes(
            ) AS maintenance_now,
            CASE
              WHEN ? = 'SYSTEM_ADMIN' THEN 1
-             WHEN mam.id IS NOT NULL THEN 1
+             WHEN mam.id IS NOT NULL AND (mam.expires_at IS NULL OR mam.expires_at > ?) THEN 1
              ELSE 0
            END AS has_access,
            CASE
@@ -40,7 +41,8 @@ export function registerScheduleRoutes(
              ELSE 0
            END AS is_manager,
            mar.id AS request_id, mar.status AS request_status,
-           mar.reason AS request_reason, mar.created_at AS request_created_at
+           mar.reason AS request_reason, mar.created_at AS request_created_at,
+           mam.expires_at AS access_expires_at, mar.expires_at AS request_expires_at, mar.previous_expires_at
          FROM machines m
          LEFT JOIN machine_access_memberships mam
            ON mam.machine_id = m.id AND mam.user_id = ?
@@ -57,6 +59,7 @@ export function registerScheduleRoutes(
         currentAt,
         currentAt,
         auth.user.role,
+        currentAt,
         auth.user.role,
         auth.user.id,
         auth.user.id,
@@ -108,13 +111,16 @@ export function registerScheduleRoutes(
         tags: parseTags(String(row.tags_json)),
         managers: managersByMachine.get(String(row.id)) ?? [],
         hasAccess: Boolean(row.has_access),
+        expiresAt: row.access_expires_at,
         isManager: Boolean(row.is_manager),
         request: row.request_id
           ? {
               id: row.request_id,
               status: row.request_status,
               reason: row.request_reason,
-              createdAt: row.request_created_at
+              createdAt: row.request_created_at,
+              previousExpiresAt: row.previous_expires_at,
+              expiresAt: row.request_expires_at
             }
           : null
       }))
@@ -130,13 +136,16 @@ export function registerScheduleRoutes(
     const { machineId } = z
       .object({ machineId: z.string().uuid() })
       .parse(request.params);
-    const { reason } = z
-      .object({ reason: z.string().trim().max(500).optional().default("") })
+    const { reason, expiresAt: requestedExpiry } = z
+      .object({ reason: z.string().trim().max(500).optional().default(""), expiresAt: z.string().optional() })
       .parse(request.body ?? {});
     const requestId = randomUUID();
+    expireMachineAccessRequests();
     let revision = getScheduleRevision();
+    let previousExpiresAt: string | null = null;
     try {
       withImmediateTransaction(() => {
+        let expiresAt = parseAccessExpiry(requestedExpiry, false);
         const machine = db
           .prepare(
             `SELECT m.name FROM machines m
@@ -150,16 +159,23 @@ export function registerScheduleRoutes(
         if (!machine) throw new BusinessError("机器不存在", 404);
         const member = db
           .prepare(
-            "SELECT 1 FROM machine_access_memberships WHERE machine_id = ? AND user_id = ?"
+            "SELECT expires_at FROM machine_access_memberships WHERE machine_id = ? AND user_id = ? AND (expires_at IS NULL OR expires_at > ?)"
           )
-          .get(machineId, auth.user.id);
-        if (member) {
+          .get(machineId, auth.user.id, nowIso()) as { expires_at: string | null } | undefined;
+        if (member && !member.expires_at) {
           throw new BusinessError(
             "你已经拥有这台机器的使用权限",
             409,
             undefined,
             "MACHINE_MEMBER_ALREADY_EXISTS"
           );
+        }
+        previousExpiresAt = member?.expires_at ?? null;
+        if (previousExpiresAt && requestedExpiry === undefined) {
+          expiresAt = parseAccessExpiry(new Date(Date.parse(previousExpiresAt) + 30 * 86400_000).toISOString(), false);
+        }
+        if (previousExpiresAt && expiresAt && Date.parse(expiresAt) <= Date.parse(previousExpiresAt)) {
+          throw new BusinessError("延期日期必须晚于当前到期日期", 400, undefined, "MACHINE_ACCESS_RENEWAL_INVALID");
         }
         const pending = db
           .prepare(
@@ -178,16 +194,16 @@ export function registerScheduleRoutes(
         const now = nowIso();
         db.prepare(
           `INSERT INTO machine_access_requests(
-            id, machine_id, user_id, reason, created_at, updated_at
-          ) VALUES(?, ?, ?, ?, ?, ?)`
-        ).run(requestId, machineId, auth.user.id, reason, now, now);
+            id, machine_id, user_id, reason, created_at, updated_at, expires_at, previous_expires_at
+          ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(requestId, machineId, auth.user.id, reason, now, now, expiresAt, previousExpiresAt);
         addAudit(
           auth.user.id,
           "MACHINE_ACCESS_REQUEST_CREATE",
           "machine_access_request",
           requestId,
           undefined,
-          { machineId, reason }
+          { machineId, reason, expiresAt, previousExpiresAt }
         );
         bumpMachineAccessRevision();
         revision = bumpScheduleRevision();
@@ -207,7 +223,7 @@ export function registerScheduleRoutes(
         recipient.id,
         "MACHINE_ACCESS_REQUEST",
         "收到新的机器使用权申请",
-        `${auth.user.displayName} 申请使用机器，请在资源管理中处理。`,
+        previousExpiresAt ? `${auth.user.displayName} 申请延长机器使用期限，请在资源管理中处理。` : `${auth.user.displayName} 申请使用机器，请在资源管理中处理。`,
         `/admin/machines/${machineId}/users`
       );
     }
@@ -222,6 +238,13 @@ export function registerScheduleRoutes(
     let revision = getScheduleRevision();
     const changed = withImmediateTransaction(() => {
       const now = nowIso();
+      const pending = db.prepare("SELECT expires_at FROM machine_access_requests WHERE id=? AND user_id=? AND status='PENDING'")
+        .get(id, auth.user.id) as { expires_at: string | null } | undefined;
+      if (pending?.expires_at && pending.expires_at <= now) {
+        expireMachineAccessRequestsInTransaction();
+        revision = getScheduleRevision();
+        return false;
+      }
       const result = db
         .prepare(
           `UPDATE machine_access_requests
@@ -242,13 +265,13 @@ export function registerScheduleRoutes(
       revision = bumpScheduleRevision();
       return true;
     });
+    publishRevision(revision);
     if (!changed) {
       return reply.code(409).send({
         error: "申请状态已经变化，请刷新后重试",
         code: "MACHINE_ACCESS_REQUEST_ALREADY_PROCESSED"
       });
     }
-    publishRevision(revision);
     return { message: "使用权申请已撤回" };
   });
 
@@ -306,6 +329,8 @@ export function registerScheduleRoutes(
         id: row.id,
         name: row.name,
         address: row.address,
+        accessExpiresAt: (db.prepare("SELECT expires_at FROM machine_access_memberships WHERE machine_id=? AND user_id=?").get(String(row.id), auth.user.id) as { expires_at: string | null } | undefined)?.expires_at ?? null,
+        hasPendingAccessRequest: Boolean(db.prepare("SELECT 1 FROM machine_access_requests WHERE machine_id=? AND user_id=? AND status='PENDING'").get(String(row.id), auth.user.id)),
         resourceSummary: machineResourceSummary(String(row.id)),
         tags: parseTags(String(row.tags_json)),
         status: row.status,
@@ -468,6 +493,8 @@ export function registerScheduleRoutes(
         id: row.id,
         name: row.name,
         address: row.address,
+        accessExpiresAt: (db.prepare("SELECT expires_at FROM machine_access_memberships WHERE machine_id=? AND user_id=?").get(String(row.id), auth.user.id) as { expires_at: string | null } | undefined)?.expires_at ?? null,
+        hasPendingAccessRequest: Boolean(db.prepare("SELECT 1 FROM machine_access_requests WHERE machine_id=? AND user_id=? AND status='PENDING'").get(String(row.id), auth.user.id)),
         resourceSummary: machineResourceSummary(String(row.id)),
         hardwareNotes: row.hardware_notes,
         announcement: row.announcement,

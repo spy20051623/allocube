@@ -1,3 +1,4 @@
+import { isoToChinaLocal } from "../../date";
 import { tr } from "../../i18n/index";
 import { type CalendarMetadata } from "../../calendar-state";
 import type { Machine } from "../../shared/types";
@@ -48,7 +49,8 @@ export function CalendarReservationTimeFields({
   onFocusCapture,
   onBlurCapture,
   startError,
-  endError
+  endError,
+  expiresAt
 }: {
   startValue: string;
   endValue: string;
@@ -61,6 +63,7 @@ export function CalendarReservationTimeFields({
   onBlurCapture?: React.FocusEventHandler<HTMLDivElement>;
   startError?: string;
   endError?: string;
+  expiresAt?: string | null;
 }) {
   return (
     <div
@@ -73,6 +76,7 @@ export function CalendarReservationTimeFields({
           key={`start-${fieldKey}`}
           type="datetime-local"
           name="startAt"
+          max={expiresAt ? isoToChinaLocal(new Date(Date.parse(expiresAt) - 60_000).toISOString()) : undefined}
           defaultValue={startValue}
           readOnly={readOnly}
           aria-readonly={readOnly}
@@ -84,6 +88,7 @@ export function CalendarReservationTimeFields({
           key={`end-${fieldKey}`}
           type="datetime-local"
           name="endAt"
+          max={expiresAt ? isoToChinaLocal(expiresAt) : undefined}
           defaultValue={endValue}
           readOnly={readOnly}
           aria-readonly={readOnly}

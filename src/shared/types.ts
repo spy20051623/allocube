@@ -35,6 +35,8 @@ export interface AuthUser {
 }
 
 export interface Machine {
+  hasPendingAccessRequest?: boolean;
+  accessExpiresAt?: string | null;
   id: string;
   name: string;
   address: string;

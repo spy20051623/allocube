@@ -73,3 +73,13 @@ describe("全部资源卡片身份状态", () => {
     });
   });
 });
+
+it("offers extension only to finite ordinary members and keeps expired applications generic", () => {
+  const base = { userRole: "USER", isManager: false, hasAccess: true, hasPendingRequest: false, expiresAt: "2026-10-01T16:00:00.000Z" };
+  expect(resolveCatalogAccessDisplay(base).action).toBe("RENEW");
+  expect(resolveCatalogAccessDisplay({ ...base, expiresAt: null }).action).toBe("EXIT");
+  expect(resolveCatalogAccessDisplay({ ...base, isManager: true }).action).toBe("EXIT");
+  expect(resolveCatalogAccessDisplay({ ...base, hasAccess: false }).actionLabel).toBe("申请");
+  expect(resolveCatalogAccessDisplay({ ...base, hasPendingRequest: true, pendingRenewal: true })).toMatchObject({ state: "USER", action: "WITHDRAW" });
+  expect(resolveCatalogAccessDisplay({ ...base, hasAccess: false, hasPendingRequest: true, pendingRenewal: true })).toMatchObject({ state: "PENDING", label: "延期审核中", action: "WITHDRAW" });
+});

@@ -14,7 +14,6 @@ import {
   ZoomOut,
   ZoomIn,
   RefreshCw,
-  PowerOff,
   Plus,
   X,
   Cpu,
@@ -48,7 +47,8 @@ import {
   mergeProjectedDisableHistory,
   type ProjectedUnavailability
 } from "../../calendar-unavailability";
-import type { AuthUser, DashboardBootstrap, TimelineReservation } from "../../shared/types";
+import type { AuthUser, DashboardBootstrap, TimelineReservation, Machine } from "../../shared/types";
+import { MachineAccessRequestModal, type MachineAccessRequestTarget } from "../machines/MachineAccessRequestModal";
 import { type CalendarReservationTarget } from "./types";
 import { MouseLeftButtonIcon, MouseRightButtonIcon, MouseWheelIcon } from "./MouseControlIcon";
 import { CalendarEmptyState } from "./CalendarEmptyState";
@@ -58,6 +58,8 @@ import {
   TrackGrid,
   CurrentTimeLine,
   PastTimeShade,
+  AccessExpiryShade,
+  CalendarBlockedTime,
   TimelineHoverGuide,
   formatTimelineDayPeriod
 } from "./CalendarTimeline";
@@ -93,6 +95,7 @@ export function CalendarPage({
   const zoomOutButtonRef = useRef<HTMLButtonElement>(null);
   const zoomControlRef = useRef<HTMLDivElement>(null);
   const [announcementMachineId, setAnnouncementMachineId] = useState<string | null>(null);
+  const [accessRequestMachine, setAccessRequestMachine] = useState<MachineAccessRequestTarget | null>(null);
   const {
     setMyReservationsOpen,
     serverClockReady,
@@ -197,6 +200,21 @@ export function CalendarPage({
   useEffect(() => {
     if (announcementMachineId && timeline && !announcementMachine) setAnnouncementMachineId(null);
   }, [announcementMachineId, announcementMachine, timeline]);
+
+  const expiryAction = (machine: Machine) => {
+    if (!machine.accessExpiresAt || machine.isManager || user.role === "SYSTEM_ADMIN") return null;
+    if (machine.hasPendingAccessRequest) return <span className="calendar-expiry-pending" title={tr("延期审核中")}>{tr("延期审核中")}</span>;
+    const hasAccess = Date.parse(machine.accessExpiresAt) > Date.parse(serverClockIso);
+    return <button type="button" className="secondary-button calendar-expiry-renew"
+      onPointerDown={event => event.stopPropagation()}
+      onPointerMove={event => event.stopPropagation()}
+      onPointerUp={event => event.stopPropagation()}
+      onMouseDown={event => event.stopPropagation()}
+      onClick={event => {
+        event.stopPropagation();
+        setAccessRequestMachine({ id: machine.id, name: machine.name, hasAccess, expiresAt: machine.accessExpiresAt! });
+      }}>{hasAccess ? tr("延期") : tr("申请")}</button>;
+  };
 
   return (
     <div className="calendar-layout composer-open">
@@ -708,6 +726,7 @@ export function CalendarPage({
                                           pointer: event.clientX
                                         });
                                         if (!anchorAt) return;
+                                        if (action === "ADD" && machine.accessExpiresAt && Date.parse(anchorAt) >= Date.parse(machine.accessExpiresAt)) return;
                                         event.preventDefault();
                                         dragState.current = {
                                           action,
@@ -777,20 +796,15 @@ export function CalendarPage({
                                     >
                                       <TrackGrid view={view} visibleHours={visibleHours} />
                                       {longTermDisabled && (
-                                        <div className="long-term-disabled-state">
-                                          <PowerOff size={14} />
-                                          <span>
-                                            {machine.status === "DISABLED"
-                                              ? tr("机器已停用")
-                                              : tr("资源组已停用")}
-                                          </span>
-                                        </div>
+                                        <CalendarBlockedTime range={range} startAt={range.from} endAt={range.to} kind="disabled"
+                                          label={machine.status === "DISABLED" ? tr("机器已停用") : tr("资源组已停用")} />
                                       )}
+                                      {!longTermDisabled && <AccessExpiryShade range={range} expiresAt={machine.accessExpiresAt} action={expiryAction(machine)} />}
                                       <CurrentTimeLine
                                         range={range}
                                         currentTime={currentTime}
                                       />
-                                      {view === "day" && (
+                                      {view === "day" && !longTermDisabled && (
                                         <PastTimeShade
                                           range={range}
                                           currentTime={currentTime}
@@ -1073,6 +1087,7 @@ export function CalendarPage({
                         </button>
                       </div>
                       <CalendarReservationTimeFields
+                        expiresAt={timeline?.machines.find(machine => machine.id === (draft.machineId ?? timeline?.groups.find(group => group.id === draft.resourceGroupId)?.machineId))?.accessExpiresAt}
                         className="draft-time-fields"
                         startValue={
                           draft.startAt ? isoToChinaLocal(draft.startAt) : ""
@@ -1196,6 +1211,8 @@ export function CalendarPage({
           />,
           document.body
         )}
+      {accessRequestMachine && <MachineAccessRequestModal machine={accessRequestMachine} notify={notify}
+        onClose={() => setAccessRequestMachine(null)} onSubmitted={() => loadTimeline()} />}
       {manualBookingOpen && timeline && (
         <CalendarManualBookingModal
           mode={reservationMode}

@@ -315,7 +315,10 @@ describe("public key synchronization", () => {
   it("pulls exact authorized employee lists, distinguishes missing users and denies other machines", async () => {
     const result=await machineCall(clients[0],"keys",{employees:["12345678","87654321"]});expect(result.statusCode).toBe(200);
     expect(result.json()).toMatchObject({terminalId:clients[0].id,users:[{employeeNumber:"12345678",status:"OK",keys:[{id:keyId,publicKey}]},{employeeNumber:"87654321",status:"NOT_FOUND",keys:[]}]});
-    const other=await machineCall(clients[1],"keys",{employees:["12345678"]});expect(other.json().users).toEqual([{employeeNumber:"12345678",status:"DENIED",keys:[]}]);
+      const other=await machineCall(clients[1],"keys",{employees:["12345678"]});expect(other.json().users).toEqual([{employeeNumber:"12345678",status:"DENIED",keys:[]}]);
+      db.db.prepare("UPDATE machine_access_memberships SET expires_at='2000-01-01T00:00:00.000Z' WHERE machine_id=? AND user_id=?").run(machineId,userId);
+      expect((await machineCall(clients[0],"keys",{employees:["12345678"]})).json().users[0]).toEqual({employeeNumber:"12345678",status:"DENIED",keys:[]});
+      db.db.prepare("UPDATE machine_access_memberships SET expires_at=NULL WHERE machine_id=? AND user_id=?").run(machineId,userId);
     db.db.prepare("DELETE FROM machine_access_memberships WHERE machine_id=? AND user_id=?").run(machineId,userId);
     expect((await machineCall(clients[0],"keys",{employees:["12345678"]})).json().users[0]).toEqual({employeeNumber:"12345678",status:"DENIED",keys:[]});
     const now=db.nowIso();db.db.prepare("INSERT INTO machine_access_memberships(id,machine_id,user_id,source,created_at,updated_at) VALUES(?,?,?,'ADMIN_INVITE',?,?)").run(randomUUID(),machineId,userId,now,now);

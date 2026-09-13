@@ -2,7 +2,7 @@ import { EditCancelled } from "../../edit-conflict";
 import { useRealtimeRefresh } from "../../useRealtimeRefresh";
 import { Modal } from "../../Modal";
 import { tr } from "../../i18n/index";
-import { Check, X, UserPlus, ShieldCheck, ShieldOff, UserMinus, Search, RefreshCw } from "lucide-react";
+import { Check, X, UserPlus, ShieldCheck, ShieldOff, UserMinus, Search, RefreshCw, Pencil } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { jsonBody, api, ApiError } from "../../api";
 import { formatChinaFullMinute } from "../../date";
@@ -10,6 +10,26 @@ import { useConflictApi } from "../../app/useConflictApi";
 import { SectionHeader } from "../../components/SectionHeader";
 import { useAppDialog } from "../../components/dialogs";
 import { ContextNotice } from "../../components/feedback";
+import { AccessExpiryField, accessExpiryValue, accessExpiryLabel, accessExpiryInput, defaultAccessExpiryInput } from "./AccessExpiryField";
+
+type AccessIdentity = { displayName: string; username: string; employeeNumber?: string | null };
+
+function MemberIdentity({ user }: { user: AccessIdentity }) {
+  return <div className="member-identity">
+    <div className="avatar small" aria-hidden="true">{user.displayName.slice(0, 1)}</div>
+    <span><strong title={user.displayName}>{user.displayName}</strong><small>@{user.username}{user.employeeNumber ? ` · ${user.employeeNumber}` : ""}</small></span>
+  </div>;
+}
+
+function ExpiryCell({ item, onEdit }: { item: { displayName: string; expiresAt: string | null; expired?: boolean }; onEdit?: () => void }) {
+  const label = accessExpiryLabel(item.expiresAt);
+  return <div className={`access-expiry-cell${item.expired ? " expired" : ""}`}>
+    {onEdit ? <button type="button" className="access-expiry-button" onClick={onEdit}
+      aria-label={tr("修改 {{v0}} 的到期时间", { v0: item.displayName })}><span>{label}</span><Pencil size={12} aria-hidden="true" /></button>
+      : <span className="access-expiry-readonly">{label}</span>}
+    {item.expired && <small>{tr("已过期")}</small>}
+  </div>;
+}
 
 export function MachineUsersSection({
   machine,
@@ -30,6 +50,7 @@ export function MachineUsersSection({
     requests: []
   });
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [editingExpiry, setEditingExpiry] = useState<{ item: any; pending: boolean } | null>(null);
 
   const fetchLoad = useCallback(async (signal: AbortSignal) => {
     try {
@@ -38,6 +59,11 @@ export function MachineUsersSection({
       );
       if (signal.aborted) return;
       setAccess(result);
+      setEditingExpiry(current => {
+        if (!current) return null;
+        const latest = (current.pending ? result.requests : result.members).find(item => item.id === current.item.id);
+        return !latest || latest.role === "MACHINE_ADMIN" ? null : current;
+      });
     } catch (error) {
       if (error instanceof EditCancelled) return;
       if (signal.aborted) return;
@@ -53,19 +79,18 @@ export function MachineUsersSection({
   };
 
   return (
-    <div className="machine-section-stack">
+    <div className="machine-section-stack machine-access-section">
       {canManage && access.requests.length > 0 && (
         <section className="card panel-card machine-requests-panel">
           <SectionHeader title={tr("申请列表")} actions={<span className="request-count">{access.requests.length}</span>} />
           <div className="machine-request-list">
+            <div className="machine-request-row machine-member-head"><span>{tr("用户")}</span><span>{tr("申请理由")}</span><span>{tr("申请时间")}</span><span>{tr("到期日期")}</span><span /></div>
             {access.requests.map((item) => (
               <div className="machine-request-row" key={item.id}>
-                <div className="member-identity">
-                  <div className="avatar small">{item.displayName.slice(0, 1)}</div>
-                  <span><strong>{item.displayName}</strong><small>@{item.username} · {item.employeeNumber || tr("暂无工号")}</small></span>
-                </div>
-                <p>{item.reason || tr("未填写申请理由")}</p>
-                <time>{formatChinaFullMinute(item.createdAt)}</time>
+                <div><MemberIdentity user={item} />{item.previousExpiresAt && <small className="renewal-request-label">{tr("延期申请")}</small>}</div>
+                <p className="access-request-reason" title={item.reason || undefined}>{item.reason || "—"}</p>
+                <time dateTime={item.createdAt}>{formatChinaFullMinute(item.createdAt)}</time>
+                <div className="renewal-expiry-comparison">{item.previousExpiresAt && <small>{accessExpiryLabel(item.previousExpiresAt)} →</small>}<ExpiryCell item={item} onEdit={() => setEditingExpiry({ item, pending: true })} /></div>
                 <div className="row-actions">
                   <button className="icon-button tiny list-icon-action approve" title={tr("通过申请")} onClick={async () => {
                     try {
@@ -119,21 +144,19 @@ export function MachineUsersSection({
         />
         <div className="machine-member-list">
           <div className="machine-member-row machine-member-head">
-            <span>{tr("用户")}</span><span>{tr("身份")}</span><span>{tr("加入时间")}</span><span />
+            <span>{tr("用户")}</span><span>{tr("身份")}</span><span>{tr("加入时间")}</span><span>{tr("到期日期")}</span><span />
           </div>
           {access.members.map((member) => (
             <div
               className="machine-member-row"
               key={member.id ?? `${member.username}:${member.grantedAt}`}
             >
-              <div className="member-identity">
-                <div className="avatar small">{member.displayName.slice(0, 1)}</div>
-                <span><strong>{member.displayName}</strong><small>@{member.username} · {member.employeeNumber || tr("暂无工号")}</small></span>
-              </div>
+              <MemberIdentity user={member} />
               <span className={`state-chip ${member.role === "MACHINE_ADMIN" ? "active" : "member"}`}>
                 {member.role === "MACHINE_ADMIN" ? tr("管理员") : tr("使用者")}
               </span>
-              <span>{formatChinaFullMinute(member.grantedAt)}</span>
+              <time dateTime={member.grantedAt}>{formatChinaFullMinute(member.grantedAt)}</time>
+              <ExpiryCell item={member} onEdit={canManage && member.role !== "MACHINE_ADMIN" ? () => setEditingExpiry({ item: member, pending: false }) : undefined} />
               <div className="row-actions">
                 {canManage && isSystemAdmin && member.role === "MEMBER" && (
                   <button className="icon-button tiny list-icon-action" title={tr("设为管理员")} onClick={async () => {
@@ -204,8 +227,62 @@ export function MachineUsersSection({
           notify={notify}
         />
       )}
+      {editingExpiry && canManage && <AccessExpiryModal key={`${editingExpiry.pending}:${editingExpiry.item.id}`}
+        item={editingExpiry.item} pending={editingExpiry.pending} onClose={() => setEditingExpiry(null)}
+        onSave={async expiresAt => {
+          try {
+            const endpoint = editingExpiry.pending ? `/admin/machine-access/requests/${editingExpiry.item.id}/expiry`
+              : `/admin/machines/${machine.id}/members/${editingExpiry.item.id}/expiry`;
+            const result = await api<{ impact?: { cancelled: number; truncated: number } }>(endpoint, {
+              method: "PATCH", body: jsonBody({ expiresAt, expectedVersion: editingExpiry.item.expectedVersion })
+            });
+            await refresh();
+            notify("success", result.impact && (result.impact.cancelled || result.impact.truncated) ? tr("有效期已更新，取消 {{v0}} 条占用，截断 {{v1}} 条占用", { v0: result.impact.cancelled, v1: result.impact.truncated }) : tr("有效期已更新"));
+            setEditingExpiry(null);
+          } catch (error) {
+            if (!(error instanceof EditCancelled)) notify("error", error instanceof Error ? error.message : tr("操作失败"));
+            await refresh();
+          }
+        }} />}
     </div>
   );
+}
+
+function AccessExpiryModal({ item, pending, onClose, onSave }: {
+  item: AccessIdentity & { expiresAt: string | null; previousExpiresAt?: string | null }; pending: boolean; onClose: () => void;
+  onSave: (expiresAt: string | null) => Promise<void>;
+}) {
+  const [value, setValue] = useState(item.expiresAt ? accessExpiryInput(item.expiresAt) : defaultAccessExpiryInput());
+  const [permanent, setPermanent] = useState(item.expiresAt === null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const next = chinaLocalExpiry(value);
+  const shortening = !pending && !permanent && next && (!item.expiresAt || next < item.expiresAt);
+  return <Modal title={tr("修改有效期")} className="machine-access-modal" onClose={onClose}>
+    <form className="stack-form" onSubmit={async event => {
+      event.preventDefault();
+      if (busy) return;
+      setError(""); setBusy(true);
+      try { await onSave(accessExpiryValue(value, permanent)); }
+      catch (error) { setError(error instanceof Error ? error.message : tr("操作失败")); }
+      finally { setBusy(false); }
+    }}>
+      <MemberIdentity user={item} />
+      {pending && item.previousExpiresAt && <small className="catalog-access-expiry">{tr("原到期日期")}：{accessExpiryLabel(item.previousExpiresAt)}</small>}
+      <AccessExpiryField value={value} onChange={setValue} permanent={permanent} onPermanentChange={setPermanent}
+        presetBaseDate={pending && item.previousExpiresAt ? accessExpiryInput(item.previousExpiresAt) : undefined} />
+      {shortening && <ContextNotice>{tr("超期占用将取消或截断，且不会自动恢复。")}</ContextNotice>}
+      {error && <small className="field-inline-error" role="alert">{error}</small>}
+      <div className="modal-actions">
+        <button type="button" className="secondary-button" disabled={busy} onClick={onClose}>{tr("取消")}</button>
+        <button className="primary-button" disabled={busy}>{tr("保存")}</button>
+      </div>
+    </form>
+  </Modal>;
+}
+
+function chinaLocalExpiry(value: string) {
+  try { return accessExpiryValue(value, false); } catch { return null; }
 }
 
 function InviteMachineMemberModal({
@@ -224,6 +301,8 @@ function InviteMachineMemberModal({
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
+  const [expiry, setExpiry] = useState(defaultAccessExpiryInput);
+  const [permanent, setPermanent] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(async () => {
@@ -247,8 +326,9 @@ function InviteMachineMemberModal({
   }, [machine.id, notify, query]);
 
   return (
-    <Modal title={tr("邀请用户")} onClose={onClose}>
+    <Modal title={tr("邀请用户")} className="machine-access-modal" onClose={onClose}>
       <div className="stack-form invite-member-modal">
+        <AccessExpiryField value={expiry} onChange={setExpiry} permanent={permanent} onPermanentChange={setPermanent} />
         <label className="search-box">
           <Search size={16} />
           <input
@@ -258,19 +338,12 @@ function InviteMachineMemberModal({
             placeholder={tr("搜索姓名、用户名或工号")}
           />
         </label>
-        <ContextNotice>{tr("添加后，该用户将立即获得这台机器的使用权。")}</ContextNotice>
         <div className="invite-candidate-list">
           {loading ? (
             <div className="mini-empty"><RefreshCw size={15} className="spin" />{tr("正在查找")}</div>
           ) : users.length ? users.map((user) => (
             <div key={user.id}>
-              <div className="member-identity">
-                <div className="avatar small">{user.displayName.slice(0, 1)}</div>
-                <span>
-                  <strong>{user.displayName}</strong>
-                  <small>@{user.username} · {user.employeeNumber || tr("暂无工号")}</small>
-                </span>
-              </div>
+              <MemberIdentity user={user} />
               <button
                 type="button"
                 className="icon-button tiny list-icon-action invite"
@@ -287,7 +360,7 @@ function InviteMachineMemberModal({
                   try {
                     await api(`/admin/machines/${machine.id}/members`, {
                       method: "POST",
-                      body: jsonBody({ userId: user.id })
+                      body: jsonBody({ userId: user.id, expiresAt: accessExpiryValue(expiry, permanent) })
                     });
                     notify("success", tr("{{v0}} 已加入机器", { v0: user.displayName }));
                     await onInvited();

@@ -182,7 +182,7 @@ describe("每日统计与全量重算", () => {
     reservation("2026-09-01T10:00+08:00", "2026-09-01T11:00+08:00"); settle("2026-09-01");
     const denied = await app.inject({ url: `/api/v1/admin/report?fromDate=2026-09-01&toDate=2026-09-01&machineId=${machine}`, headers: { cookie: userCookie } });
     expect(denied.json().groups).toEqual([]);
-    database.db.prepare("INSERT INTO machine_access_memberships VALUES(?,?,?,'ADMIN_INVITE',?,?,?)").run(randomUUID(), machine, user, admin, iso(created), iso(created));
+    database.db.prepare("INSERT INTO machine_access_memberships(id,machine_id,user_id,source,granted_by,created_at,updated_at) VALUES(?,?,?,'ADMIN_INVITE',?,?,?)").run(randomUUID(), machine, user, admin, iso(created), iso(created));
     const request = () => app.inject({ url: `/api/v1/admin/report?fromDate=2026-09-01&toDate=2026-09-01&machineId=${machine}`, headers: { cookie: userCookie } });
     expect((await request()).json().groups.length).toBeGreaterThan(0);
     database.db.prepare("DELETE FROM machine_access_memberships WHERE machine_id=? AND user_id=?").run(machine, user);

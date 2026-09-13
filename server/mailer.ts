@@ -44,6 +44,7 @@ const notificationEnglishCopy: Record<string, { title: string; body: string }> =
   MACHINE_ACCESS_REQUEST: { title: "Access request", body: "A machine access request needs review." },
   MACHINE_ACCESS_GRANTED: { title: "Machine access granted", body: "You now have access to the requested machine." },
   MACHINE_ACCESS_REJECTED: { title: "Machine access denied", body: "Your machine access request was denied." },
+  MACHINE_ACCESS_UPDATED: { title: "Machine access expiration updated", body: "Your machine access expiration has changed." },
   MACHINE_ACCESS_REMOVED: { title: "Machine access removed", body: "Your access to a machine has been removed." },
   MACHINE_ROLE_CHANGED: { title: "Machine role updated", body: "Your machine administrator role has changed." },
   RESOURCE_UNAVAILABILITY: { title: "Resource availability changed", body: "Maintenance or a disabled resource affects one or more reservations." },

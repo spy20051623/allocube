@@ -24,6 +24,7 @@ import { longDisableSchema, versionSchema } from "./unavailability-schema.js";
 import { getCurrentMachineRow } from "./records.js";
 import { machineDeleteImpact, notifyDeletedMachineUsers, deleteMachineRecords } from "./deletion-service.js";
 import { registerMachineAnnouncementRoutes } from "./machine-announcement-routes.js";
+import { expireMachineAccessRequests } from "../machine-access.js";
 
 const machineSchema = z.object({
   name: z.string().trim().min(1).max(80),
@@ -44,6 +45,7 @@ export function registerMachinesAdminRoutes(app: FastifyInstance, publishRevisio
   app.get("/api/v1/admin/machines", async (request, reply) => {
     const auth = requireAuth(request, reply);
     if (!auth) return;
+    expireMachineAccessRequests();
     const rows = db
       .prepare(
         `SELECT

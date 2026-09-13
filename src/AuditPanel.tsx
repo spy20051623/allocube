@@ -13,6 +13,7 @@ import type { AuditEntry, AuditValue } from "./shared/audit";
 import "./audit.css";
 
 const fieldLabels: Record<string, string> = {
+  cancelled: "取消占用数量", truncated: "截断占用数量", source: "处理来源",
   terminalId: "终端标识", callbackUrl: "终端回调地址", operationId: "操作标识", removeHome: "删除主目录", account: "机器账户", target: "目标账户", result: "执行结果", occurredAt: "执行时间", fingerprint: "公钥指纹", keyId: "公钥标识",
   maintenanceText: "提示内容",
   announcement: "机器公告",
@@ -24,7 +25,7 @@ const fieldLabels: Record<string, string> = {
   blockAdminBookings: "禁止系统管理员提交占用", minBookingMinutes: "最短占用分钟数", maxBookingMinutes: "最长占用分钟数", advanceDays: "可提前预约天数", siteName: "站点名称", siteDescription: "站点描述", siteOrigin: "站点地址",
   icpFilingNumber: "ICP备案号", publicSecurityFilingNumber: "公安备案号", allowedEmailDomains: "注册邮箱白名单", allowRegistrationWithoutEmail: "允许无邮箱注册", requireRegistrationEmail: "注册需要邮箱",
   enabled: "启用", host: "邮件服务器", port: "端口", security: "连接安全", fromName: "发件人名称", fromAddress: "发件人地址", hasPassword: "已配置密码", passwordChanged: "密码已修改", passwordCleared: "密码已清除",
-  bodyLength: "正文长度", active: "生效", accessLevel: "访问级别", expiresAt: "到期时间", number: "反馈编号", type: "类型", level: "级别", titleLength: "标题长度", changedFields: "修改字段", commentLength: "评论长度",
+  bodyLength: "正文长度", active: "生效", accessLevel: "访问级别", expiresAt: "到期时间", previousExpiresAt: "原到期日期", number: "反馈编号", type: "类型", level: "级别", titleLength: "标题长度", changedFields: "修改字段", commentLength: "评论长度",
   fromDate: "起始日期", toDate: "截止日期", completedDays: "已完成天数", totalDays: "总天数", reasonCode: "原因代码"
 };
 const entityLabels: Record<string, string> = {

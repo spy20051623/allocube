@@ -46,6 +46,7 @@ type OpenApiErrorCode =
   | "RATE_LIMITED"
   | "OPERATION_EXPIRED"
   | "OPERATION_REJECTED"
+  | "MACHINE_ACCESS_EXPIRY_EXCEEDED"
   | "INTERNAL_ERROR";
 
 class OpenApiError extends Error {
@@ -404,7 +405,7 @@ function executePreparedOperation(
         `UPDATE prepared_api_operations
          SET status = 'REJECTED', rejection_code = ?
          WHERE id = ?`
-      ).run(blockedByAdminPolicy ? ADMIN_BOOKING_DISABLED_CODE : "STATE_CHANGED", operation.id);
+      ).run(blockedByAdminPolicy ? ADMIN_BOOKING_DISABLED_CODE : error instanceof BusinessError && error.code === "MACHINE_ACCESS_EXPIRY_EXCEEDED" ? error.code : "STATE_CHANGED", operation.id);
       return {
         kind: "ERROR",
         error: blockedByAdminPolicy ? adminBookingPolicyError(true) : new OpenApiError(
@@ -816,6 +817,9 @@ export function registerOpenApiRoutes(
     });
 
     openApp.setErrorHandler((error, request, reply) => {
+      if (error instanceof BusinessError && error.code === "MACHINE_ACCESS_EXPIRY_EXCEEDED") {
+        error = new OpenApiError(403, "MACHINE_ACCESS_EXPIRY_EXCEEDED", "Reservation end time cannot exceed machine access expiration.");
+      }
       if (error instanceof BusinessError && error.code === ADMIN_BOOKING_DISABLED_CODE) {
         error = adminBookingPolicyError();
       }

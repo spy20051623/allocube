@@ -1,22 +1,31 @@
-import { db, nowIso, addAudit, bumpMachineAccessRevision, bumpScheduleRevision, parseTags } from "../db.js";
+import { db, nowIso, addAudit, bumpMachineAccessRevision, bumpScheduleRevision, parseTags, withImmediateTransaction } from "../db.js";
 import { createNotification } from "../mailer.js";
+import { expireMachineAccessRequests } from "../machine-access.js";
 
 export function assignMachineManager(
   machineId: string,
   userId: string,
   actorUserId: string
 ) {
+  expireMachineAccessRequests();
+  return withImmediateTransaction(() => assignMachineManagerInTransaction(machineId, userId, actorUserId));
+}
+
+function assignMachineManagerInTransaction(machineId: string, userId: string, actorUserId: string) {
   const user = db
     .prepare(
-      `SELECT u.status
+      `SELECT u.status, mam.expires_at
        FROM users u
        JOIN machine_access_memberships mam
          ON mam.user_id = u.id AND mam.machine_id = ?
        WHERE u.id = ? AND u.role = 'USER'`
     )
-    .get(machineId, userId) as { status: string } | undefined;
+    .get(machineId, userId) as { status: string; expires_at: string | null } | undefined;
   if (!user || user.status !== "ACTIVE") {
     return { ok: false, status: 400, message: "只能将这台机器已有的已启用用户设为管理员" } as const;
+  }
+  if (db.prepare("SELECT 1 FROM machine_access_requests WHERE machine_id=? AND user_id=? AND status='PENDING'").get(machineId, userId)) {
+    return { ok: false, status: 409, message: "该用户已有待审批申请，请直接处理申请" } as const;
   }
   const result = db
     .prepare(
@@ -28,8 +37,8 @@ export function assignMachineManager(
   if (!result.changes) {
     return { ok: false, status: 409, message: "该用户已经是这台机器的管理员" } as const;
   }
-  addAudit(actorUserId, "MACHINE_ADMIN_ASSIGN", "machine", machineId, undefined, {
-    userId
+  addAudit(actorUserId, "MACHINE_ADMIN_ASSIGN", "machine", machineId, { userId, expiresAt: user.expires_at }, {
+    userId, expiresAt: null
   });
   bumpMachineAccessRevision();
   bumpScheduleRevision();

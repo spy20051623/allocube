@@ -32,6 +32,16 @@ function placeholders(value: string) {
 }
 
 describe("国际化资源与语言解析", () => {
+  it("translates finite and permanent access notifications without losing the Beijing deadline", () => {
+    const catalog = createSystemMessageCatalog(serverEnglish);
+    for (const [source, expected] of [
+      ["你现在可以使用 Machine。到期时间：2026-09-16 24:00（北京时间）。", "You can now use Machine. Access expires: 2026-09-16 24:00 (Beijing time)."],
+      ["你现在可以使用 Machine。到期时间：长期有效。", "You can now use Machine. Access is permanent."]
+    ]) {
+      const resolved = catalog.resolve(source)!;
+      expect(catalog.translate(resolved.code, resolved.params)).toBe(expected);
+    }
+  });
   beforeAll(async () => {
     await initializeI18n();
   });

@@ -1,11 +1,12 @@
 import { AUDIT_INDEX_SQL } from "./audit-schema.js";
+import { MACHINE_ACCESS_EXPIRY_INDEX_SQL } from "./machine-access-schema.js";
 import { REPORT_SCHEMA_SQL } from "./report-schema.js";
 import { SSH_KEY_SCHEMA_SQL, SSH_KEY_ACTIVATION_SCHEMA_SQL } from "./ssh-key-schema.js";
 import { TERMINAL_SCHEMA_SQL } from "./terminal-schema.js";
 
 import { TERMINAL_HELP_SCHEMA_SQL } from "./terminal-help-schema.js";
 
-export const FINAL_SCHEMA_VERSION = 27;
+export const FINAL_SCHEMA_VERSION = 29;
 
 export const FINAL_SCHEMA_SQL = `
   ${REPORT_SCHEMA_SQL}
@@ -246,6 +247,8 @@ export const FINAL_SCHEMA_SQL = `
     machine_id TEXT NOT NULL REFERENCES machines(id) ON DELETE CASCADE,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     source TEXT NOT NULL CHECK(source IN ('APPLICATION', 'ADMIN_INVITE', 'SEED')),
+    expires_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
     granted_by TEXT REFERENCES users(id) ON DELETE SET NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -259,6 +262,8 @@ export const FINAL_SCHEMA_SQL = `
     machine_id TEXT NOT NULL REFERENCES machines(id) ON DELETE CASCADE,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     reason TEXT NOT NULL DEFAULT '',
+    expires_at TEXT,
+    previous_expires_at TEXT,
     status TEXT NOT NULL DEFAULT 'PENDING'
       CHECK(status IN ('PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN')),
     version INTEGER NOT NULL DEFAULT 1,
@@ -652,4 +657,5 @@ export const FINAL_SCHEMA_SQL = `
   ${SSH_KEY_SCHEMA_SQL}
   ${SSH_KEY_ACTIVATION_SCHEMA_SQL}
   ${TERMINAL_HELP_SCHEMA_SQL}
+  ${MACHINE_ACCESS_EXPIRY_INDEX_SQL}
 `;

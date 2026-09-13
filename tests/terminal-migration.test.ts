@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { afterAll, expect, it } from "vitest";
-import { FINAL_SCHEMA_SQL } from "../server/schema";
+import { SCHEMA_V27_SQL as FINAL_SCHEMA_SQL } from "./helpers/schema-v27";
 import { SSH_KEY_SCHEMA_SQL, SSH_KEY_ACTIVATION_SCHEMA_SQL } from "../server/ssh-key-schema";
 import { TERMINAL_SCHEMA_SQL } from "../server/terminal-schema";
 const directory = fs.mkdtempSync(

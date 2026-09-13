@@ -1,4 +1,5 @@
 import { startReportScheduler } from "./report-scheduler.js";
+import { expireMachineAccessRequests } from "./machine-access.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
@@ -22,6 +23,7 @@ import { config, validateRuntimeConfig } from "./config.js";
 import { requestOriginMatches } from "./request-origin.js";
 import {
   bumpScheduleRevision,
+  bumpMachineAccessRevision,
   cleanupExpiredSecurityRecords,
   db,
   getScheduleRevision,
@@ -444,6 +446,31 @@ const unavailabilityBoundaryTimer = setInterval(() => {
   }
 }, 15_000);
 unavailabilityBoundaryTimer.unref();
+
+function effectiveAccessKey() {
+  return db.prepare("SELECT machine_id,user_id FROM machine_access_memberships WHERE expires_at IS NOT NULL AND expires_at<=? ORDER BY machine_id,user_id")
+    .all(nowIso()) as Array<{ machine_id: string; user_id: string }>;
+}
+let expiredAccess = new Set<string>();
+function refreshAccessExpiry() {
+  const requestsChanged = expireMachineAccessRequests();
+  const rows = effectiveAccessKey();
+  const next = new Set(rows.map(row => `${row.machine_id}:${row.user_id}`));
+  const changed = [...new Set([...next, ...expiredAccess])].filter(key => next.has(key) !== expiredAccess.has(key));
+  if (changed.length) {
+    realtimeChanges.accessBoundary(changed.map(key => { const [machineId, userId] = key.split(":"); return { machineId, userId }; }));
+    bumpMachineAccessRevision();
+    bumpScheduleRevision();
+  }
+  expiredAccess = next;
+  if (changed.length || requestsChanged) publishRevision(getScheduleRevision());
+}
+refreshAccessExpiry();
+const accessExpiryTimer = setInterval(() => {
+  try { refreshAccessExpiry(); } catch (error) { app.log.error(error); }
+}, 15_000);
+accessExpiryTimer.unref();
+app.addHook("onClose", async () => { clearInterval(accessExpiryTimer); });
 
 const emailTimer = setInterval(() => {
   void processEmailOutbox().catch((error) => app.log.error(error));

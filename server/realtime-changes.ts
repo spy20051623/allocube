@@ -51,6 +51,11 @@ export class RealtimeChanges {
     for (const id of new Set(machineIds)) insert.run(id);
   }
 
+  accessBoundary(members: Array<{ machineId: string; userId: string }>) {
+    const insert = this.db.prepare("INSERT INTO realtime_changes(kind,machine_id,user_id) VALUES('access',?,?)");
+    for (const member of members) insert.run(member.machineId, member.userId);
+  }
+
   full(revision: number): RealtimeChange {
     return { version: 2, eventId: `${this.boot}:${++this.sequence}`, revision,
       scopes: ["session", "notifications", "catalog", "timeline", "ownReservations", "machines", "machine", "terminal", "groups", "access", "users", "settings"].map(topic => ({ topic: topic as RealtimeTopic })) };
@@ -68,7 +73,7 @@ export class RealtimeChanges {
       WHERE s.id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(sessionIds)) as Audience[];
     const users = [...new Set(sessions.map(s => s.user_id))];
     const machines = new Set((this.db.prepare(`SELECT id FROM machines WHERE id NOT IN (SELECT machine_id FROM deleted_machine_tombstones)`).all() as { id: string }[]).map(m => m.id));
-    const memberships = this.db.prepare(`SELECT user_id,machine_id FROM machine_access_memberships WHERE user_id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(users)) as { user_id: string; machine_id: string }[];
+    const memberships = this.db.prepare(`SELECT user_id,machine_id FROM machine_access_memberships WHERE (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now')) AND user_id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(users)) as { user_id: string; machine_id: string }[];
     const managers = this.db.prepare(`SELECT user_id,machine_id FROM machine_admins WHERE user_id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(users)) as { user_id: string; machine_id: string }[];
     const changedMachines = [...new Set(rows.filter(r => r.kind === "resource" || r.kind === "maintenance").map(r => r.machine_id).filter(Boolean))];
     const owners = this.db.prepare(`SELECT DISTINCT user_id,machine_id FROM reservations WHERE machine_id IN (SELECT value FROM json_each(?)) AND user_id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(changedMachines), JSON.stringify(users)) as { user_id: string; machine_id: string }[];

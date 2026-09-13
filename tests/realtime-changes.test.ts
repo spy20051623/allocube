@@ -14,6 +14,17 @@ function reservation(id = "r", machine = "m1", user = "a", start = "2026-09-06T1
     VALUES(?,?,?,?,?,?,?,?,?,'private group','[]',1,?,?,'private purpose')`).run(id, id, machine, machine, user, start, end, start, end, date, date);
 }
 const drain = () => changes.drain(sessions, 5);
+
+it("expiration boundaries invalidate the owner and refresh manager access without exposing schedules", () => {
+  db.prepare("UPDATE machine_access_memberships SET expires_at='2000-01-01T00:00:00.000Z' WHERE user_id='a'").run();
+  drain();
+  changes.accessBoundary([{ machineId: "m1", userId: "a" }]);
+  const events = drain();
+  expect(events.get("a")?.accessChanged).toBe(true);
+  expect(events.get("admin")?.scopes).toContainEqual({ topic: "access", machineId: "m1" });
+  reservation();
+  expect(drain().get("a")?.scopes).not.toContainEqual(expect.objectContaining({ topic: "timeline", machineId: "m1" }));
+});
 beforeEach(() => {
   db = new Database(":memory:"); db.pragma("foreign_keys=ON"); db.exec(FINAL_SCHEMA_SQL);
   for (const user of sessions) {
@@ -24,7 +35,7 @@ beforeEach(() => {
     db.prepare("INSERT INTO machines(id,name,created_at,updated_at) VALUES(?,?,?,?)").run(id,id,date,date);
     db.prepare("INSERT INTO resource_groups(id,machine_id,name,created_at,updated_at) VALUES(?,?,?, ?,?)").run(id,id,id,date,date);
   }
-  for (const [user, machine] of [["a", "m1"], ["b", "m1"], ["c", "m2"]]) db.prepare("INSERT INTO machine_access_memberships VALUES(?,?,?,'SEED','admin',?,?)").run(user,machine,user,date,date);
+  for (const [user, machine] of [["a", "m1"], ["b", "m1"], ["c", "m2"]]) db.prepare("INSERT INTO machine_access_memberships(id,machine_id,user_id,source,granted_by,created_at,updated_at) VALUES(?,?,?,'SEED','admin',?,?)").run(user,machine,user,date,date);
   changes = new RealtimeChanges(db);
 });
 afterEach(() => { vi.restoreAllMocks(); db.close(); });

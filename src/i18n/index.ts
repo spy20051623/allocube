@@ -25,6 +25,7 @@ const notificationEnglish: Record<string, string> = {
   "notification.MACHINE_ACCESS_REQUEST.title": "Access request",
   "notification.MACHINE_ACCESS_GRANTED.title": "Machine access granted",
   "notification.MACHINE_ACCESS_REJECTED.title": "Machine access denied",
+  "notification.MACHINE_ACCESS_UPDATED.title": "Machine access expiration updated",
   "notification.MACHINE_ACCESS_REMOVED.title": "Machine access removed",
   "notification.MACHINE_ROLE_CHANGED.title": "Machine role updated",
   "notification.RESOURCE_UNAVAILABILITY.title": "Resource availability changed",

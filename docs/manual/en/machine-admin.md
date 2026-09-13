@@ -2,6 +2,20 @@
 
 Machine administrators are authorized per machine and can only manage the machines they are responsible for. System administrators can assign or remove machine administrators.
 
+## Access expiration
+
+Access expires at 24:00 Beijing time on the selected date (00:00 on the following day), regardless of browser timezone or calendar display mode. Only the date is displayed and selected.
+
+Both pending requests and members show an expiration column. Click a regular member's or pending request's expiration to change the deadline or select permanent access. Saving a request deadline does not approve it; use the existing approve button. Invitations default to 30 days and also support permanent access.
+
+Extension requests use the same pending list, with an extension label and original and requested dates. Finite extensions must end after the original deadline and take effect only on approval, without shortening the current grant. Expiration of the original grant does not end the request; the requested deadline controls automatic rejection. Rejection or withdrawal preserves the original grant. Leaving or removing a member also closes their pending extension request.
+
+Shortening access automatically cancels confirmed reservations starting at or after the deadline and truncates overlapping reservations, including ongoing ones. The save result reports both counts. Extending access does not restore reservations already changed.
+
+Pending requests are automatically rejected at their deadline and the applicant is notified. They remain in review history and cannot be edited or approved afterward. Expired members retain their records and can reapply; if a pending request exists, restore access through that request's approval.
+
+Machine administrators always have permanent access, which cannot be edited. Promotion automatically removes a regular member's expiration; demotion retains permanent access until an administrator changes it. Existing member access remains permanent after the upgrade.
+
 ## Permission boundaries
 
 Machine administrators can open "Admin", but only see machines they can access. They can edit only the machines they administer.
@@ -59,3 +73,5 @@ The official API can only change reservations owned by the token's user, even wh
 ## Statistics
 
 Machine administrators can view registered reservation statistics for machines they have access to. Statistics are based on system-registered reservation periods and do not represent actual hardware utilization.
+
+The calendar shows the Beijing expiration date only for finite access. Gray hatching marks time beyond the deadline. Dragging across it keeps only authorized time; manual entry reports an error for times beyond the deadline. Permanent access has no expiration label.

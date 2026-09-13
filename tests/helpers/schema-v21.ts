@@ -1,6 +1,6 @@
 import { TERMINAL_HELP_SCHEMA_SQL } from "../../server/terminal-help-schema";
 import { SSH_KEY_SCHEMA_SQL, SSH_KEY_ACTIVATION_SCHEMA_SQL } from "../../server/ssh-key-schema";
-import { FINAL_SCHEMA_SQL } from "../../server/schema";
+import { SCHEMA_V27_SQL as FINAL_SCHEMA_SQL } from "./schema-v27";
 import { TERMINAL_SCHEMA_SQL } from "../../server/terminal-schema";
 export { FINAL_SCHEMA_VERSION } from "../../server/schema";
 

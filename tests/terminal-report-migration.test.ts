@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { afterAll, expect, it } from "vitest";
-import { FINAL_SCHEMA_SQL } from "../server/schema";
+import { SCHEMA_V27_SQL as FINAL_SCHEMA_SQL } from "./helpers/schema-v27";
 import { TERMINAL_HELP_SCHEMA_SQL, TERMINAL_HELP_SCHEMA_V26_SQL } from "../server/terminal-help-schema";
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),"terminal-report-migration-"));
 process.env.NODE_ENV="test";process.env.DATABASE_PATH=path.join(dir,"db.sqlite");process.env.BOOTSTRAP_ADMIN_PASSWORD="Migration234!";

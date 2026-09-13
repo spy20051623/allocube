@@ -1,3 +1,4 @@
+import { accessExpiryBusyRanges, accessExpiryIssues } from "./access-expiry";
 import { ADMIN_BOOKING_BLOCKED_MESSAGE, isAdminBookingBlocked } from "../../shared/booking-policy";
 import { useRealtimeRefresh } from "../../useRealtimeRefresh";
 import { withRequestDeadline } from "../../request-deadline";
@@ -635,7 +636,8 @@ export function useCalendarController({
           ];
       return [
         ...reservations,
-        ...unavailable
+        ...unavailable,
+        ...accessExpiryBusyRanges(timeline?.machines.find(machine => machine.id === target.machineId)?.accessExpiresAt)
       ].map((item) => ({
         startAt: item.startAt,
         endAt: item.endAt
@@ -691,8 +693,9 @@ export function useCalendarController({
     () =>
       editingDraftTime
         ? []
-        : calendarDraftIssues(drafts, settings, currentTime, editingReservations.length > 0),
-    [currentTime, drafts, editingDraftTime, editingReservations.length, i18n.resolvedLanguage, settings]
+        : [...calendarDraftIssues(drafts, settings, currentTime, editingReservations.length > 0),
+          ...drafts.flatMap(draft => Object.values(accessExpiryIssues(draft.startAt, draft.endAt, timeline?.machines.find(machine => machine.id === (draft.machineId ?? groupById.get(draft.resourceGroupId)?.machineId))?.accessExpiresAt)))],
+    [currentTime, drafts, editingDraftTime, editingReservations.length, i18n.resolvedLanguage, settings, timeline, groupById]
   );
   const draftFieldIssuesById = useMemo(
     () =>
@@ -701,10 +704,10 @@ export function useCalendarController({
           draft.id,
           editingDraftTime
             ? {}
-            : calendarDraftFieldIssues(draft, settings, currentTime)
+            : { ...calendarDraftFieldIssues(draft, settings, currentTime), ...accessExpiryIssues(draft.startAt, draft.endAt, timeline?.machines.find(machine => machine.id === (draft.machineId ?? groupById.get(draft.resourceGroupId)?.machineId))?.accessExpiresAt) }
         ])
       ),
-    [currentTime, drafts, editingDraftTime, editingReservations.length, i18n.resolvedLanguage, settings]
+    [currentTime, drafts, editingDraftTime, editingReservations.length, i18n.resolvedLanguage, settings, timeline, groupById]
   );
   const generalDraftIssues = useMemo(() => {
     const fieldMessages = new Set(

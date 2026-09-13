@@ -25,7 +25,7 @@ afterAll(() => fixture.close());
 function machine() {
   const { db, nowIso } = context.database, id = randomUUID(), now = nowIso();
   db.prepare("INSERT INTO machines(id,name,connection_guide,created_at,updated_at) VALUES(?,?,'retained',?,?)").run(id, id, now, now);
-  for (const role of ["manager", "member"]) db.prepare("INSERT INTO machine_access_memberships VALUES(?,?,?,'SEED',?,?,?)").run(randomUUID(), id, users[role], users.admin, now, now);
+  for (const role of ["manager", "member"]) db.prepare("INSERT INTO machine_access_memberships(id,machine_id,user_id,source,granted_by,created_at,updated_at) VALUES(?,?,?,'SEED',?,?,?)").run(randomUUID(), id, users[role], users.admin, now, now);
   db.prepare("INSERT INTO machine_admins VALUES(?,?,?,?)").run(id, users.manager, users.admin, now);
   return id;
 }

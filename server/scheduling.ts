@@ -18,7 +18,7 @@ import {
 } from "./db.js";
 import { BusinessError } from "./business-error.js";
 import { createNotification } from "./mailer.js";
-import { userCanAccessMachine } from "./machine-access.js";
+import { userCanAccessMachine, assertMachineAccessEnd } from "./machine-access.js";
 import { loadGroupAllocations } from "./resources.js";
 
 export { BusinessError } from "./business-error.js";
@@ -337,6 +337,7 @@ export function assertUserCanAccessSegments(userId: string, rawSegments: unknown
     const segment = segmentSchema.parse(raw);
     const group = getGroup(segment.resourceGroupId);
     if (!group) continue;
+    assertMachineAccessEnd(userId, group.machine_id, segment.endAt);
     if (checkedMachines.has(group.machine_id)) continue;
     if (!userCanAccessMachine(userId, group.machine_id)) {
       throw new BusinessError("你没有这台机器的使用权限", 403);
@@ -431,6 +432,7 @@ export function previewReservationUpdate(
   assertUserCanSubmitReservations(userId);
   const segment = segmentSchema.parse(rawSegment);
   const existing = getOwnedConfirmedReservation(reservationId, userId);
+  assertMachineAccessEnd(userId, String(existing.machine_id), segment.endAt);
   if (segment.resourceGroupId !== existing.resource_group_id) {
     throw new BusinessError("修改时间时不能更换资源组，请取消后重新占用");
   }
@@ -855,6 +857,7 @@ export function updateReservation(
       throw new BusinessError("只能修改自己的占用", 403);
     }
     assertReservationState(existing, expectedStateToken);
+    assertMachineAccessEnd(actorUserId, String(existing.machine_id), segment.endAt);
     if (!userCanAccessMachine(actorUserId, String(existing.machine_id))) {
       throw new BusinessError("你没有这台机器的使用权限", 403);
     }

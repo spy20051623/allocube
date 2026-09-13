@@ -909,7 +909,7 @@ export const OPEN_API_DOCUMENT = {
           resourceGroupId: { type: "string", format: "uuid", description: "Target resource group UUID; a whole-machine reservation also requires passing a resource group under that machine" },
           startMode: { type: "string", enum: ["IMMEDIATE", "SCHEDULED"], default: "SCHEDULED", description: "Start immediately or schedule to start at startAt" },
           startAt: { type: "string", format: "date-time", description: "Start time (RFC 3339) using whole-minute precision. IMMEDIATE is normalized to the server's current minute." },
-          endAt: { type: "string", format: "date-time", description: "End time (RFC 3339) using whole-minute precision and later than startAt" },
+            endAt: { type: "string", format: "date-time", description: "End time (RFC 3339) using whole-minute precision and later than startAt. Must not exceed machine access expiration; preflight returns MACHINE_ACCESS_EXPIRY_EXCEEDED (403) otherwise. Commit rechecks the current authorization and returns OPERATION_REJECTED (409) if it changed." },
           title: { type: "string", maxLength: 120, default: "", description: "Reservation title" },
           purpose: { type: "string", maxLength: 500, default: "", description: "Reservation purpose" },
           note: { type: "string", maxLength: 1000, default: "", description: "Additional notes" }

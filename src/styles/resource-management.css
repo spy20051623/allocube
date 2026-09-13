@@ -62,63 +62,56 @@
 }
 
 .resource-catalog-card {
-  height: 176px;
-  padding: 20px;
-  display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 14px;
+  container-type: inline-size;
+  min-width: 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   box-sizing: border-box;
+  box-shadow: 0 2px 6px #00000006;
 }
 
+.catalog-card-header {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
 .catalog-machine-icon {
-  width: 46px;
-  height: 46px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 11px;
+  border-radius: 8px;
   color: var(--text-accent, var(--blue));
   background: var(--blue-soft);
 }
-
-.catalog-machine-copy {
-  min-width: 0;
-  height: 136px;
+.catalog-machine-heading { min-width: 0; }
+.catalog-machine-heading h2 {
+  margin: 0 0 3px;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
-
-.catalog-machine-heading {
-  min-width: 0;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow: hidden;
-}
-
-.catalog-machine-copy h2 {
-  min-width: 0;
+.catalog-card-statuses { display: flex; padding-top: 2px; }
+.catalog-card-statuses > .state-chip { flex-shrink: 0; }
+.catalog-resource-summary {
   margin: 0;
-  overflow: hidden;
-  flex: 1 1 auto;
-  font-size: 17px;
-  line-height: 22px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
 }
-
-.catalog-machine-copy p {
-  margin: 6px 0 6px;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+.catalog-resource-summary.empty { color: var(--muted); font-size: 12px; font-weight: 400; }
+.catalog-machine-details { display: grid; gap: 8px; min-width: 0; }
+.catalog-machine-details > .catalog-manager-list { margin: 0; }
+.catalog-machine-heading > .catalog-machine-login-ip { margin: 0; }
 .catalog-machine-login-ip {
   min-width: 0;
-  height: 20px;
+  min-height: 20px;
   margin-bottom: 7px;
   display: flex;
   align-items: center;
@@ -141,11 +134,11 @@
 
 .catalog-machine-login-ip > code {
   min-width: 0;
-  overflow: hidden;
   color: var(--text-primary, #31415c);
   font-family: inherit;
   font-size: 11px;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .catalog-manager-list {
@@ -301,12 +294,36 @@
 }
 
 .catalog-card-controls {
-  min-width: 48px;
-  height: 136px;
+  min-width: 0;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: auto -16px -16px;
+  padding: 10px 16px;
+  background: var(--surface-raised, #f7f9fc);
+}
+.catalog-card-controls > .catalog-access-chip { flex-shrink: 0; }
+.catalog-card-action-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.catalog-card-action-row > button { flex-shrink: 0; }
+.catalog-card-dates { display: grid; gap: 4px; min-width: 0; text-align: right; }
+.catalog-card-dates .catalog-access-expiry { font-size: 11px; line-height: 1.5; }
+.catalog-card-dates time { white-space: nowrap; }
+.catalog-card-dates:empty { display: none; }
+
+@media (max-width: 1050px) {
+  .resource-catalog-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 420px) {
+  .catalog-card-header { gap: 8px; }
+  .catalog-card-controls { flex-wrap: wrap; gap: 8px; }
+  .catalog-card-action-row { width: 100%; }
+  .catalog-card-controls:not(:has(.catalog-access-expiry)) .catalog-card-action-row { width: auto; }
+  .catalog-card-dates { margin-right: auto; text-align: left; }
+}
+@container (max-width: 300px) {
+  .catalog-card-header { grid-template-columns: minmax(0, 1fr) auto; }
+  .catalog-machine-icon { display: none; }
 }
 
 .catalog-access-chip.admin {
@@ -350,10 +367,8 @@
 }
 
 .resource-catalog-card .tag-row {
-  height: 22px;
   align-items: center;
-  flex-wrap: nowrap;
-  overflow: hidden;
+  flex-wrap: wrap;
 }
 
 .resource-catalog-card .tag-row span {
@@ -2344,6 +2359,76 @@
   order: 2;
 }
 
+/* Shared geometry keeps pending requests and members aligned. */
+.machine-access-panel, .machine-requests-panel { min-width: 0; }
+.machine-access-section .machine-member-row,
+.machine-access-section .machine-request-row {
+  grid-template-columns: minmax(160px, 1.2fr) minmax(100px, .8fr) 128px 132px 88px;
+  min-width: 660px;
+  min-height: 60px;
+  padding: 9px 8px;
+  gap: 12px;
+  font-size: 11px;
+}
+.machine-access-section .machine-member-head {
+  min-height: 34px;
+  padding-block: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+.machine-access-section .machine-member-head > span:first-child { padding-left: 0; }
+.machine-access-section .machine-member-list,
+.machine-access-section .machine-request-list { overflow-x: auto; }
+.machine-access-section .state-chip { justify-self: start; }
+.machine-access-section time {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.machine-access-section .access-request-reason {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.access-expiry-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.access-expiry-button svg { flex-shrink: 0; color: var(--muted); opacity: .65; }
+.access-expiry-button:hover, .access-expiry-button:focus-visible {
+  color: var(--text-accent, var(--blue));
+  background: var(--surface-accent, var(--blue-soft));
+  border-color: var(--border-accent, var(--line));
+}
+.access-expiry-button:focus-visible { outline: 2px solid var(--focus-ring, var(--blue)); outline-offset: 2px; }
+.access-expiry-button:hover svg, .access-expiry-button:focus-visible svg { color: inherit; opacity: 1; }
+.access-expiry-cell { display: grid; justify-items: start; gap: 2px; margin-left: -6px; }
+.access-expiry-readonly { padding: 4px 6px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.access-expiry-cell small { padding-inline: 6px; color: var(--text-danger, #a13f3f); font-size: 10px; }
+.access-expiry-cell.expired .access-expiry-button { color: var(--text-danger, #a13f3f); }
+.machine-access-modal .modal-actions { padding-top: 4px; }
+.machine-access-modal .modal-actions > button { min-width: 88px; }
+.machine-access-modal .invite-candidate-list { border-radius: 7px; }
+.catalog-access-expiry { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+
 .machine-member-list,
 .machine-request-list {
   border-top: 1px solid var(--line);
@@ -3020,3 +3105,6 @@
   font-size: 12px;
 }
 
+
+.renewal-request-label { display: block; margin: 3px 0 0 42px; color: var(--text-accent, var(--blue)); font-size: 10px; }
+.renewal-expiry-comparison > small { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }

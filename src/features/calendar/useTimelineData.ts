@@ -62,7 +62,8 @@ export function useTimelineData({ range, notify, synchronizeServerClock }: { ran
     synchronizeServerClock
   ]);
 
-  const loadTimeline = useRealtimeRefresh(fetchTimeline, ["timeline"], {
+  const loadTimeline = useRealtimeRefresh(fetchTimeline, ["timeline", "catalog"], {
+    // Catalog changes include access applications submitted or withdrawn on another page.
     // The query covers all accessible machines, including ones created since its last response.
     // Server-side audience filtering already excludes machines this user cannot access.
     filter: () => ({ from: range.from, to: range.to })

@@ -182,6 +182,27 @@ beforeAll(async () => {
 });
 
 describe("官方 API", () => {
+  it("checks access expiration at preflight and again at commit", async () => {
+    const secret = addApiToken(firstUserId, "expiry-test", "READ_WRITE");
+    const setExpiry = (value: string | null) => dbModule.db.prepare("UPDATE machine_access_memberships SET expires_at=? WHERE machine_id=? AND user_id=?").run(value, machineId, firstUserId);
+    const segment = { resourceGroupId: groupId, scope: "RESOURCE_GROUP", startMode: "SCHEDULED", startAt: minuteIso(1200), endAt: minuteIso(1260) };
+    const prepare = () => app.inject({ method: "POST", url: "/api/open/v1/reservation-operations/prepare", headers: authorization(secret), payload: { action: "CREATE", segments: [segment] } });
+    try {
+      setExpiry(minuteIso(1230));
+      const denied = await prepare();
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json().error.code).toBe("MACHINE_ACCESS_EXPIRY_EXCEEDED");
+      setExpiry(minuteIso(1260));
+      const ready = await prepare();
+      expect(ready.statusCode).toBe(200);
+      expect(ready.json().data.status).toBe("READY");
+      setExpiry(minuteIso(1230));
+      const rejected = await app.inject({ method: "POST", url: "/api/open/v1/reservation-operations/commit", headers: authorization(secret), payload: { confirmationToken: ready.json().data.confirmationToken } });
+      expect(rejected.statusCode).toBe(409);
+      expect(rejected.json().error.code).toBe("OPERATION_REJECTED");
+      expect(dbModule.db.prepare("SELECT rejection_code FROM prepared_api_operations WHERE id=?").get(ready.json().data.operationId)).toEqual({ rejection_code: "MACHINE_ACCESS_EXPIRY_EXCEEDED" });
+    } finally { setExpiry(null); }
+  });
   it("把旧 API 文档入口重定向到统一文档中心", async () => {
     const response = await app.inject({
       method: "GET",

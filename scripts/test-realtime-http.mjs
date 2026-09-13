@@ -27,7 +27,7 @@ export async function startRealtimeFixture() {
       db.prepare('INSERT INTO machines(id,name,created_at,updated_at) VALUES(?,?,?,?)').run(ids['machine'+n],'Realtime machine '+n,date,date);
       db.prepare('INSERT INTO resource_groups(id,machine_id,name,created_at,updated_at) VALUES(?,?,?,?,?)').run(ids['group'+n],ids['machine'+n],'CPU group '+n,date,date);
     }
-    for(const [user,n] of [['owner',1],['owner',2],['peer',1],['other',2]]) db.prepare("INSERT INTO machine_access_memberships VALUES(?,?,?,'SEED',?,?,?)").run(randomUUID(),ids['machine'+n],ids[user],admin,date,date);
+    for(const [user,n] of [['owner',1],['owner',2],['peer',1],['other',2]]) db.prepare("INSERT INTO machine_access_memberships(id,machine_id,user_id,source,granted_by,created_at,updated_at) VALUES(?,?,?,'SEED',?,?,?)").run(randomUUID(),ids['machine'+n],ids[user],admin,date,date);
     db.close();
   `;
   const seeded=spawnSync(process.execPath,["--input-type=module","-e",seed],{env,encoding:"utf8",windowsHide:true});

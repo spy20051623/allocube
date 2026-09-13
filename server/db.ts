@@ -1,4 +1,5 @@
 import { AUDIT_INDEX_SQL } from "./audit-schema.js";
+import { MACHINE_ACCESS_EXPIRY_MIGRATION_SQL, MACHINE_ACCESS_EXPIRY_INDEX_SQL } from "./machine-access-schema.js";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -646,6 +647,21 @@ export async function initializeDatabase() {
       db.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES(27, ?)").run(nowIso());
     });
     schemaVersion = { version: 27 };
+  }
+  if (schemaVersion.version === 27 && FINAL_SCHEMA_VERSION >= 28) {
+    withImmediateTransaction(() => {
+      db.exec(MACHINE_ACCESS_EXPIRY_MIGRATION_SQL);
+      db.exec(MACHINE_ACCESS_EXPIRY_INDEX_SQL);
+      db.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES(28, ?)").run(nowIso());
+    });
+    schemaVersion = { version: 28 };
+  }
+  if (schemaVersion.version === 28 && FINAL_SCHEMA_VERSION >= 29) {
+    withImmediateTransaction(() => {
+      db.exec("ALTER TABLE machine_access_requests ADD COLUMN previous_expires_at TEXT");
+      db.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES(29, ?)").run(nowIso());
+    });
+    schemaVersion = { version: 29 };
   }
   if (schemaVersion.version !== FINAL_SCHEMA_VERSION) {
     throw new Error(

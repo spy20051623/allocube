@@ -1,6 +1,8 @@
+import { intersectCalendarInterval, type CalendarViewRange } from "../../calendar-interval";
+import { PowerOff } from "lucide-react";
 import { tr } from "../../i18n/index";
 import { type CalendarEventModel, CalendarWeekEvent } from "../../CalendarEventVisual";
-import { useId, useRef, useState, useCallback, useLayoutEffect } from "react";
+import { useId, useRef, useState, useCallback, useLayoutEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { minuteDifference, formatChina, isoToChinaLocal, addDays, chinaLocalToIso } from "../../date";
 import { mergeTimeRanges, type CalendarView, clampDayWindowStartMinutes } from "../../calendar-state";
@@ -350,18 +352,39 @@ export function PastTimeShade({
   range: { from: string; to: string };
   currentTime: number;
 }) {
-  const from = new Date(range.from).getTime();
-  const to = new Date(range.to).getTime();
-  if (currentTime <= from) return null;
-  const width =
-    currentTime >= to ? 100 : ((currentTime - from) / (to - from)) * 100;
-  return (
-    <div
-      className="past-time-shade"
-      style={{ width: `${Math.max(0, Math.min(100, width))}%` }}
-      aria-hidden="true"
-    />
-  );
+  return <CalendarBlockedTime
+    range={range}
+    startAt={range.from}
+    endAt={new Date(currentTime).toISOString()}
+    kind="past"
+  />;
+}
+
+/** Shared shade; only its optional action accepts pointer events. */
+export function CalendarBlockedTime({ range, startAt, endAt, kind, label, action }: {
+  range: CalendarViewRange;
+  startAt: string;
+  endAt: string;
+  kind: "past" | "access-expiry" | "disabled";
+  label?: string;
+  action?: ReactNode;
+}) {
+  const visible = intersectCalendarInterval({ startAt, endAt }, range);
+  if (!visible) return null;
+  const from = Date.parse(range.from), duration = Date.parse(range.to) - from;
+  const showsExpiryBoundary = kind === "access-expiry" && Date.parse(startAt) >= from;
+  const compatibilityClass = kind === "past" ? "past-time-shade" : kind === "access-expiry" ? "access-expiry-shade" : "long-term-disabled-state";
+  return <div
+    className={`calendar-blocked-time calendar-blocked-time--${kind} ${compatibilityClass}${showsExpiryBoundary ? " has-expiry-boundary" : ""}`}
+    style={{ left: `${(visible.start - from) / duration * 100}%`, width: `${(visible.end - visible.start) / duration * 100}%` }}
+    aria-hidden={kind === "past" ? true : undefined}
+    aria-label={label}
+    title={label}
+  >
+    {kind === "disabled" && <><PowerOff size={14} /><span>{label}</span></>}
+    {kind === "access-expiry" && <span className="calendar-blocked-time-label">{tr("使用权已到期")}</span>}
+    {action && <span className="calendar-expiry-action">{action}</span>}
+  </div>;
 }
 
 export function TimelineHoverGuide({
@@ -422,4 +445,9 @@ export function formatTimelineDayPeriod(
   const startLabel = start <= from ? "00:00" : time(start);
   const endLabel = end >= to ? "24:00" : time(end);
   return `${startLabel}–${endLabel}`;
+}
+
+export function AccessExpiryShade({ range, expiresAt, action }: { range: { from: string; to: string }; expiresAt?: string | null; action?: ReactNode }) {
+  if (!expiresAt) return null;
+  return <CalendarBlockedTime range={range} startAt={expiresAt} endAt={range.to} kind="access-expiry" label={tr("使用权已到期")} action={action} />;
 }

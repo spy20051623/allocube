@@ -124,7 +124,15 @@ func sshSettings(c Config, a Account) (map[string]string, error) {
 	return result, nil
 }
 
-func sshAccountBlock(a Account, settings map[string]string, keyDir string) (string, error) {
+func sshAuthenticationPolicy(allowPassword bool) (methods, password string) {
+	if allowPassword {
+		// Space-separated methods are alternatives, not two-factor authentication.
+		return "publickey password", "yes"
+	}
+	return "publickey", "no"
+}
+
+func sshAccountBlock(a Account, settings map[string]string, keyDir string, allowPassword bool) (string, error) {
 	if a.UID == 0 || a.Name == "root" || !usernamePattern.MatchString(a.Name) {
 		return "", errors.New("unsafe SSH account")
 	}
@@ -134,14 +142,15 @@ func sshAccountBlock(a Account, settings map[string]string, keyDir string) (stri
 	if settings["pubkeyauthentication"] != "yes" {
 		return "", errors.New("public key authentication is disabled; manual review required")
 	}
-	if v := settings["authenticationmethods"]; v != "" && v != "any" && v != "publickey" {
+	if v := settings["authenticationmethods"]; v != "" && v != "any" && v != "publickey" && v != "publickey password" {
 		return "", errors.New("custom authentication methods require manual review")
 	}
 	managed := filepath.Join(keyDir, "%u")
 	if strings.ContainsAny(managed, " \t\r\n\"'\\#") {
 		return "", errors.New("unsupported managed keys path")
 	}
-	return fmt.Sprintf("Match User %s\n    AuthorizedKeysFile %s\n    AuthorizedKeysCommand none\n    AuthenticationMethods publickey\n    PasswordAuthentication no\n    KbdInteractiveAuthentication no\n", a.Name, managed), nil
+	methods, password := sshAuthenticationPolicy(allowPassword)
+	return fmt.Sprintf("Match User %s\n    AuthorizedKeysFile %s\n    AuthorizedKeysCommand none\n    AuthenticationMethods %s\n    PasswordAuthentication %s\n    KbdInteractiveAuthentication no\n", a.Name, managed, methods, password), nil
 }
 
 func sshCandidate(base []byte, blocks []string, snapshots ...map[string][]byte) []byte {
@@ -211,7 +220,7 @@ func priorSSHBlocks(original, base []byte) ([]string, map[string]bool, error) {
 	text = strings.TrimSuffix(strings.TrimSpace(text), managedSSHEnd)
 	text = strings.TrimSuffix(strings.TrimSpace(text), "Match all")
 	text = strings.TrimSpace(text)
-	pattern := regexp.MustCompile(`(?m)^Match User ([a-zA-Z_][a-zA-Z0-9_.-]{0,31}\$?)\n    AuthorizedKeysFile [^\r\n]+\n(?:    AuthorizedKeysCommand none\n    AuthenticationMethods publickey\n)?    PasswordAuthentication no\n    KbdInteractiveAuthentication no(?:\n|$)`)
+	pattern := regexp.MustCompile(`(?m)^Match User ([a-zA-Z_][a-zA-Z0-9_.-]{0,31}\$?)\n    AuthorizedKeysFile [^\r\n]+\n(?:(?:    AuthorizedKeysCommand none\n    AuthenticationMethods publickey\n)?    PasswordAuthentication no|    AuthorizedKeysCommand none\n    AuthenticationMethods publickey password\n    PasswordAuthentication yes)\n    KbdInteractiveAuthentication no(?:\n|$)`)
 	matches := pattern.FindAllStringSubmatch(text, -1)
 	remainder := pattern.ReplaceAllString(text, "")
 	if strings.TrimSpace(remainder) != "" {

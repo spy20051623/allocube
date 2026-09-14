@@ -37,6 +37,11 @@ func installationSummary(c Config, path string) error {
 	}
 	fmt.Printf("Accounts: %d managed, %d explicitly excluded, %d without keys.\n", managed, excluded, empty)
 	fmt.Printf("Configuration: %s\n", path)
+	if c.AllowSSHPasswordLogin {
+		fmt.Println("SSH password login: allowed by configuration; public key synchronization remains enabled.")
+	} else {
+		fmt.Println("SSH password login: disabled by configuration.")
+	}
 	services, coverageErr := discoverSSHServices()
 	if coverageErr == nil {
 		coverageErr = checkSSHInventory(c, services)
@@ -59,7 +64,11 @@ func installationSummary(c Config, path string) error {
 	} else if managed == 0 {
 		fmt.Printf("No accounts managed. To change this:\n  sudoedit '%s'\n  %s\n", escapeShellSingle(path), terminalCommand(path, "configure-ssh"))
 	} else if empty > 0 {
-		fmt.Println("Accounts without keys cannot log in through Allocube. To grant access: Allocube > Public keys > Manage > select this machine.")
+		if c.AllowSSHPasswordLogin {
+			fmt.Println("Accounts without keys can still use SSH passwords if their local account permits it. To add key access: Allocube > Public keys > Manage > select this machine.")
+		} else {
+			fmt.Println("Accounts without keys cannot log in through Allocube. To grant access: Allocube > Public keys > Manage > select this machine.")
+		}
 	} else {
 		fmt.Println("Next: test a new SSH connection with your private key.")
 	}

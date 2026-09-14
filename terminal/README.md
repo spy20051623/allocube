@@ -37,6 +37,7 @@
   "sshConfig": "/etc/ssh/sshd_config",
   "intervalSeconds": 300,
   "autoManageNewAccounts": true,
+  "allowSSHPasswordLogin": false,
   "accountScope": "named",
   "userMapping": {
     "a12345678": "87654321",
@@ -79,9 +80,30 @@
 
 令牌不会写入 `.env`、服务配置或日志；脚本消费后移除环境变量，通过标准输入交给登记程序。使用本机安装锁防止并发部署。已有配置和密钥复用；登记失败保留状态，不盲目重试一次性令牌；同一终端已经登记成功时，通过现有身份密钥验证后可继续执行部署，不要求再次消费令牌。
 
-部署依次完成安装、登记、映射展示、SSH 检查、定时器安装及首次同步。`configure-ssh` 对常规 SSH 配置准备账户专属规则，受管账户仅使用 Allocube 公钥文件并禁用密码与键盘交互认证。工号不存在、无权限及公钥空列表都是有效的空集合，照常写入并应用 SSH 配置；空集合意味着不能建立新的 SSH 登录。在 `/dev/tty` 中输入 `yes` 后重新校验、备份并重载；重载失败恢复原文件并尝试重新加载。重复执行保留其他账户规则，只移除明确排除的账户规则。root/UID 0 始终排除。
+部署依次完成安装、登记、映射展示、SSH 检查、定时器安装及首次同步。`configure-ssh` 对常规 SSH 配置准备账户专属规则，受管账户的公钥仅来自 Allocube 公钥文件，默认禁用密码与键盘交互认证。工号不存在、无权限及公钥空列表都是有效的空集合，照常写入并应用 SSH 配置；默认仅密钥模式下，空集合意味着不能建立新的 SSH 登录；允许密码登录时仍可使用有效本机密码。在 `/dev/tty` 中输入 `yes` 后重新校验、备份并重载；重载失败恢复原文件并尝试重新加载。重复执行保留其他账户规则，只移除明确排除的账户规则。root/UID 0 始终排除。
 
-受管账户使用 `AuthorizedKeysFile <syncKeyDir>/%u`、`AuthorizedKeysCommand none` 和 `AuthenticationMethods publickey`，因此原有公钥文件及云平台公钥不再为这些账户提供 SSH 授权。原文件和全局云平台配置保留，root、UID 0 及未受管账户的配置不改变。旧版 Allocube 的多公钥来源配置块会在本机确认后升级到该规则。
+受管账户默认使用 `AuthorizedKeysFile <syncKeyDir>/%u`、`AuthorizedKeysCommand none` 和 `AuthenticationMethods publickey`，因此原有公钥文件及云平台公钥不再为这些账户提供 SSH 授权。原文件和全局云平台配置保留，root、UID 0 及未受管账户的配置不改变。旧版 Allocube 的多公钥来源配置块会在本机确认后升级到该规则。
+
+### 同时允许 SSH 密码登录
+
+配置文件 `/etc/allocube-terminal/config.json` 中的 `allowSSHPasswordLogin` 默认是 `false`，旧配置未填写时也保持禁止 SSH 密码登录。设为 `true` 后，受管账户可使用本机密码或 Allocube 公钥登录，公钥仍按原周期同步；平台不会保存或设置本机密码。
+
+修改现有 JSON 中的字段，保留其他配置：
+
+```json
+"allowSSHPasswordLogin": true
+```
+
+然后在交互式 SSH 会话执行并确认：
+
+```bash
+sudo allocube-terminal configure-ssh
+sudo allocube-terminal status
+```
+
+开启时生成 `AuthenticationMethods publickey password`（密码或公钥任选其一）及 `PasswordAuthentication yes`；`KbdInteractiveAuthentication` 仍为 `no`。仅影响受管账户，不改变 root、UID 0、排除账户及其余本机认证限制。账户仍需有可用本机密码，并满足现有账户、PAM 等登录条件。
+
+此模式下，空公钥列表或撤销平台公钥只会停止相应密钥登录，不能阻止已有本机密码登录。关闭时改为 `false` 并再次运行 `configure-ssh`，恢复仅允许平台公钥的策略。现有和后续新增的受管账户遵循同一设置；仅编辑 JSON 不会直接修改现有 SSH 策略，未应用的变化会提示运行 `configure-ssh`，自动接管不会代为应用该变化。切换沿用 SSH 预检、备份、重载及失败恢复流程。
 
 服务检查枚举 systemd 管理的 OpenSSH 主进程，按正式 Id 去重（ssh.service / sshd.service 等别名只处理一次），不限制服务名称。读取真实可执行文件和命令行，保留 `-f`、`-p`、`-o` 等参数，并使用同一组参数校验候选配置；不删除运行参数来绕过冲突。共享配置写一次、各真实服务分别重载；不同配置一起预览、一次确认。旧 `sshConfig` 字段仍可读取，实际服务配置以运行参数为准，无需手填服务数组。
 
@@ -132,7 +154,7 @@ sudo allocube-terminal sync
 
 install 只创建 root 所有的同步目录、systemd oneshot 服务和定时器，不修改 SSH 配置。升级时停止并禁用旧网页/broker socket，旧账户、公钥、sudo 和操作日志保留。
 
-常规配置使用 `sudo allocube-terminal configure-ssh` 自动处理。需要自行维护时，受管账户的有效配置必须使用独立公钥文件，同时禁用密码和键盘交互认证。例如：
+常规配置使用 `sudo allocube-terminal configure-ssh` 自动处理。需要自行维护时，受管账户的有效配置必须使用独立公钥文件，并与 allowSSHPasswordLogin 设置一致。默认仅密钥模式示例：
 
 ```text
 Match User a12345678
@@ -146,7 +168,7 @@ Match all
 
 这是受管账户的专属配置片段，必须结合本机现有配置检查优先级；其他账户的认证来源保持不变。修改后先执行 `sshd -t` 和 `sshd -T -C user=a12345678,host=localhost,addr=127.0.0.1`，确认有效配置，再由管理员重载对应 SSH 服务；保留团队 root 恢复入口。
 
-终端每次同步会验证有效 SSH 配置仅使用同步路径、公钥认证，且禁用密码、键盘交互及外部公钥命令。仅支持 Match User / Match all；涉及地址、组等复杂 Match 条件或 SSH CA 时停止并要求手动处理。历史公钥文件不删除、不改写，但不再参与受管账户的 SSH 认证。平台公钥是这些账户的有效授权列表。
+终端每次同步会验证有效 SSH 配置使用同步公钥路径、禁用键盘交互及外部公钥命令，并按 allowSSHPasswordLogin 检查密码认证及允许的认证方式。仅支持 Match User / Match all；涉及地址、组等复杂 Match 条件或 SSH CA 时停止并要求手动处理。历史公钥文件不删除、不改写，但不再参与受管账户的 SSH 认证。平台公钥是这些账户的有效授权列表。
 
 ## 多服务变更与恢复
 
@@ -173,7 +195,7 @@ sudo allocube-terminal recover-ssh
 - 用户退出平台机器或被移除权限后，下次成功同步收到 DENIED 时清空公钥；不删除本地账户或文件，也不终止已有 SSH 会话。
 - 公钥规范化、去重、排序后比较。仅顺序或重复次数变化不写文件；没有变化不触碰公钥文件的 inode、mtime 或权限，也不重载 SSH。
 - 更新通过同目录临时文件和原子重命名完成；不跟随受管文件的符号链接。整轮同步使用 flock 串行执行。
-- 日常同步不改 SSH 配置或历史公钥文件；由于受管账户只使用同步目录，空列表即可阻止新 SSH 登录。其他服务使用本机密码的行为不受影响。
+- 日常同步不改 SSH 配置或历史公钥文件；由于受管账户只使用同步目录，默认仅密钥模式下空列表即可阻止新 SSH 登录；允许密码时只移除密钥授权。其他服务使用本机密码的行为不受影响。
 - 写入前重新检查本地账户。原账户管理版本标记为 revoked 的账户不会自动恢复，管理员核实后处理旧 state.json 的撤销记录。
 - disabledUsers / quiet 只是暂停同步，不等于撤销 SSH。要在本机撤销，请先暂停该账户同步，再清理其授权文件及管理员维护的其他来源，避免下一轮重新写回。
 

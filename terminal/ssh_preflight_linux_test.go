@@ -22,7 +22,7 @@ func TestSSHRuntimeCommandLine(t *testing.T) {
 
 func TestManagedSSHDisablesOtherKeySources(t *testing.T) {
 	settings := map[string]string{"pubkeyauthentication": "yes", "authorizedkeysfile": ".ssh/authorized_keys", "authorizedkeyscommand": "/usr/bin/cloud-provider --user %u", "authorizedkeyscommanduser": "nobody"}
-	block, err := sshAccountBlock(Account{Name: "a12345678", UID: 1001}, settings, "/etc/allocube-terminal/synced_keys")
+	block, err := sshAccountBlock(Account{Name: "a12345678", UID: 1001}, settings, "/etc/allocube-terminal/synced_keys", false)
 	if err != nil {
 		t.Fatal(err)
 	}

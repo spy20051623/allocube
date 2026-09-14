@@ -174,7 +174,7 @@ func prepareSSHPlanFor(c Config, only []Account) (plan *SSHPlan, err error) {
 			if e != nil {
 				return nil, e
 			}
-			block, e := sshAccountBlock(a, settings, c.KeyDir)
+			block, e := sshAccountBlock(a, settings, c.KeyDir, c.AllowSSHPasswordLogin)
 			if e != nil {
 				return nil, fmt.Errorf("%s / %s: %w", svc.ID, a.Name, e)
 			}

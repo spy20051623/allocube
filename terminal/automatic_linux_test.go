@@ -16,7 +16,7 @@ import (
 
 // Real sshd -t/-T and atomic filesystem operations, but never edit/reload host
 // SSH or create host accounts. Discovery/account seams are restored per test.
-func automaticFixture(t *testing.T) (Config, *[]Account, *int, *bool) {
+func automaticFixture(t *testing.T, publicKeys ...func() []any) (Config, *[]Account, *int, *bool) {
 	t.Helper()
 	if os.Geteuid() != 0 {
 		t.Skip("root-owned fixture required")
@@ -84,8 +84,12 @@ func automaticFixture(t *testing.T) (Config, *[]Account, *int, *bool) {
 		}
 		json.NewDecoder(r.Body).Decode(&request)
 		users := []map[string]any{}
+		keys := []any{}
+		if len(publicKeys) > 0 {
+			keys = publicKeys[0]()
+		}
 		for _, employee := range request.Employees {
-			users = append(users, map[string]any{"employeeNumber": employee, "status": "OK", "keys": []any{}})
+			users = append(users, map[string]any{"employeeNumber": employee, "status": "OK", "keys": keys})
 		}
 		json.NewEncoder(w).Encode(map[string]any{"terminalId": "test", "users": users})
 	}))

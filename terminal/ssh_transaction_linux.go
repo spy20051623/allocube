@@ -128,11 +128,18 @@ func configureSSH(c Config) error {
 	if c.AutoManageNewAccounts {
 		fmt.Fprintln(tty, "Future eligible accounts will be enrolled automatically during synchronization, including accounts with no keys.")
 	}
-	fmt.Fprintln(tty, "Managed accounts: Allocube keys only; SSH passwords disabled.")
+	if c.AllowSSHPasswordLogin {
+		fmt.Fprintln(tty, "Managed accounts: SSH password login allowed; Allocube public key synchronization remains enabled.")
+	} else {
+		fmt.Fprintln(tty, "Managed accounts: Allocube keys only; SSH passwords disabled.")
+	}
 	for _, a := range plan.Targets {
 		note := ""
 		if len(preview[a.Name]) == 0 {
 			note = " [NO KEYS: SSH LOGIN DENIED]"
+			if c.AllowSSHPasswordLogin {
+				note = " [NO KEYS: PASSWORD LOGIN STILL ALLOWED]"
+			}
 		}
 		fmt.Fprintf(tty, "  %s%s\n", a.Name, note)
 	}

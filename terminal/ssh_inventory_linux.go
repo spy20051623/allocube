@@ -10,8 +10,9 @@ import (
 )
 
 type SSHInventory struct {
-	Services []SSHService      `json:"services"`
-	Files    map[string]string `json:"files"`
+	AllowSSHPasswordLogin bool              `json:"allowSSHPasswordLogin"`
+	Services              []SSHService      `json:"services"`
+	Files                 map[string]string `json:"files"`
 }
 
 func inventoryFor(services []SSHService) (SSHInventory, error) {
@@ -36,6 +37,7 @@ func saveSSHInventory(c Config, services []SSHService) error {
 	if err != nil {
 		return err
 	}
+	inventory.AllowSSHPasswordLogin = c.AllowSSHPasswordLogin
 	return writeJSON(filepath.Join(c.StateDir, "ssh-inventory.json"), inventory, 0600)
 }
 func checkSSHInventory(c Config, services []SSHService) error {
@@ -52,6 +54,9 @@ func checkSSHInventory(c Config, services []SSHService) error {
 	var previous SSHInventory
 	if err = json.Unmarshal(data, &previous); err != nil {
 		return err
+	}
+	if previous.AllowSSHPasswordLogin != c.AllowSSHPasswordLogin {
+		return errors.New("SSH password login setting changed; run allocube-terminal configure-ssh to apply it")
 	}
 	now, err := inventoryFor(services)
 	if err != nil {
@@ -75,14 +80,15 @@ func checkSSHInventory(c Config, services []SSHService) error {
 	return nil
 }
 func checkSSHPolicy(c Config, settings map[string]string) error {
-	if settings["passwordauthentication"] != "no" || settings["kbdinteractiveauthentication"] != "no" {
-		return errors.New("password and keyboard-interactive authentication must both be disabled")
+	methods, password := sshAuthenticationPolicy(c.AllowSSHPasswordLogin)
+	if settings["passwordauthentication"] != password || settings["kbdinteractiveauthentication"] != "no" {
+		return fmt.Errorf("SSH must use PasswordAuthentication %s and KbdInteractiveAuthentication no; run allocube-terminal configure-ssh", password)
 	}
 	if err := checkAdditionalSSHAuth(settings); err != nil {
 		return err
 	}
-	if settings["pubkeyauthentication"] != "yes" || settings["authenticationmethods"] != "publickey" || settings["authorizedkeyscommand"] != "none" || settings["authorizedkeysfile"] != filepath.Join(c.KeyDir, "%u") {
-		return errors.New("SSH must use only the Allocube key file, AuthenticationMethods publickey and AuthorizedKeysCommand none; run allocube-terminal configure-ssh")
+	if settings["pubkeyauthentication"] != "yes" || settings["authenticationmethods"] != methods || settings["authorizedkeyscommand"] != "none" || settings["authorizedkeysfile"] != filepath.Join(c.KeyDir, "%u") {
+		return fmt.Errorf("SSH must use only the Allocube key file, AuthenticationMethods %s and AuthorizedKeysCommand none; run allocube-terminal configure-ssh", methods)
 	}
 	return nil
 }

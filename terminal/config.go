@@ -23,6 +23,7 @@ import (
 )
 
 type Config struct {
+	AllowSSHPasswordLogin bool               `json:"allowSSHPasswordLogin"`
 	AutoManageNewAccounts bool               `json:"autoManageNewAccounts"`
 	SSHServices           []SSHService       `json:"-"`
 	ConfigPath            string             `json:"-"`

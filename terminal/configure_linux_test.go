@@ -10,7 +10,7 @@ import (
 
 func TestManagedBlockPrecedesExistingUserRules(t *testing.T) {
 	base := []byte("Port 22\nMatch User a12345678\n    AuthorizedKeysFile .ssh/legacy\nMatch all\n")
-	block, _ := sshAccountBlock(Account{Name: "a12345678", UID: 1001}, map[string]string{"pubkeyauthentication": "yes"}, "/keys")
+	block, _ := sshAccountBlock(Account{Name: "a12345678", UID: 1001}, map[string]string{"pubkeyauthentication": "yes"}, "/keys", false)
 	candidate := sshCandidate(base, []string{block})
 	if strings.Index(string(candidate), managedSSHBegin) > strings.Index(string(candidate), "AuthorizedKeysFile .ssh/legacy") {
 		t.Fatal("old user rule wins")
@@ -35,7 +35,7 @@ func TestManagedBlockPrecedesIncludedUserRules(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := []byte("Port 22\nInclude " + include + "\n")
-	block, _ := sshAccountBlock(Account{Name: "a12345678", UID: 1001}, map[string]string{"pubkeyauthentication": "yes"}, "/keys")
+	block, _ := sshAccountBlock(Account{Name: "a12345678", UID: 1001}, map[string]string{"pubkeyauthentication": "yes"}, "/keys", false)
 	candidate := sshCandidate(base, []string{block}, map[string][]byte{include: body})
 	if strings.Index(string(candidate), managedSSHBegin) > strings.Index(string(candidate), "Include ") {
 		t.Fatal("included user rule wins")
@@ -49,7 +49,7 @@ func TestManagedBlockPrecedesIncludedUserRules(t *testing.T) {
 func TestManagedSSHBlocksPreservePriorAccounts(t *testing.T) {
 	base := []byte("Port 22\nPasswordAuthentication yes\n")
 	settings := map[string]string{"pubkeyauthentication": "yes", "authenticationmethods": "any", "authorizedkeysfile": ".ssh/authorized_keys .ssh/authorized_keys2"}
-	block, err := sshAccountBlock(Account{Name: "a12345678", UID: 1001}, settings, "/etc/allocube-terminal/synced_keys")
+	block, err := sshAccountBlock(Account{Name: "a12345678", UID: 1001}, settings, "/etc/allocube-terminal/synced_keys", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestManagedSSHBlocksPreservePriorAccounts(t *testing.T) {
 	if strings.Contains(block, ".ssh/authorized_keys") || !strings.Contains(block, "AuthorizedKeysCommand none") || !strings.Contains(block, "AuthenticationMethods publickey") {
 		t.Fatal("non-platform SSH source accepted")
 	}
-	newBlock, _ := sshAccountBlock(Account{Name: "b12345678", UID: 1002}, settings, "/etc/allocube-terminal/synced_keys")
+	newBlock, _ := sshAccountBlock(Account{Name: "b12345678", UID: 1002}, settings, "/etc/allocube-terminal/synced_keys", false)
 	next := string(sshCandidate(stripped, append(blocks, newBlock)))
 	if !strings.Contains(next, block) || !strings.Contains(next, newBlock) {
 		t.Fatal("old accounts lost")
@@ -84,7 +84,7 @@ func TestManagedSSHBlocksPreservePriorAccounts(t *testing.T) {
 func TestSSHAutomationRejectsRootAndCustomAuthentication(t *testing.T) {
 	s := map[string]string{"pubkeyauthentication": "yes", "authorizedkeysfile": ".ssh/authorized_keys"}
 	for _, a := range []Account{{Name: "root", UID: 1001}, {Name: "alias", UID: 0}, {Name: "bad\nMatch all", UID: 1001}} {
-		if _, e := sshAccountBlock(a, s, "/keys"); e == nil {
+		if _, e := sshAccountBlock(a, s, "/keys", false); e == nil {
 			t.Fatal("unsafe account accepted")
 		}
 	}
@@ -94,7 +94,7 @@ func TestSSHAutomationRejectsRootAndCustomAuthentication(t *testing.T) {
 			copy[k] = v
 		}
 		copy[field] = "custom"
-		if _, e := sshAccountBlock(Account{Name: "a12345678", UID: 1001}, copy, "/keys"); e == nil {
+		if _, e := sshAccountBlock(Account{Name: "a12345678", UID: 1001}, copy, "/keys", false); e == nil {
 			t.Fatal(field)
 		}
 	}

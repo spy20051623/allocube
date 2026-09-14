@@ -105,7 +105,7 @@ func TestExclusionRestoresOnlySelectedBlocks(t *testing.T) {
 	base := []byte("PasswordAuthentication yes\n")
 	var blocks []string
 	for _, name := range []string{"a12345678", "b12345678", "c12345678"} {
-		block, err := sshAccountBlock(Account{Name: name, UID: 1000}, map[string]string{"pubkeyauthentication": "yes"}, c.KeyDir)
+		block, err := sshAccountBlock(Account{Name: name, UID: 1000}, map[string]string{"pubkeyauthentication": "yes"}, c.KeyDir, false)
 		if err != nil {
 			t.Fatal(err)
 		}

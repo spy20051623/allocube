@@ -1096,8 +1096,8 @@
 .week-day-popover {
   position: fixed;
   z-index: 90;
-  width: 280px;
-  max-height: 280px;
+  width: min(280px, calc(100vw - 24px));
+  max-height: min(280px, calc(100vh - 24px));
   padding: 12px;
   display: grid;
   gap: 8px;
@@ -1562,7 +1562,9 @@
   position: fixed;
   z-index: 120;
   width: max-content;
-  max-width: 320px;
+  max-width: min(320px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
   padding: 8px 10px;
   border: 1px solid var(--border-subtle, #d9dfeb);
   border-radius: 7px;

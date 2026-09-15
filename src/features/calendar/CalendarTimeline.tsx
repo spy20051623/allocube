@@ -8,6 +8,7 @@ import { minuteDifference, formatChina, isoToChinaLocal, addDays, chinaLocalToIs
 import { mergeTimeRanges, type CalendarView, clampDayWindowStartMinutes } from "../../calendar-state";
 import type { TimelineReservation, UnavailabilityWindow } from "../../shared/types";
 import { reservationCalendarEvent } from "./reservation-events";
+import { tooltipPosition } from "../../tooltip-position";
 
 export function CalendarWeekDayCell({
   day,
@@ -30,6 +31,7 @@ export function CalendarWeekDayCell({
 }) {
   const tooltipId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState({
     left: 0,
@@ -77,44 +79,34 @@ export function CalendarWeekDayCell({
 
   const updatePopoverPosition = useCallback(() => {
     const button = buttonRef.current;
-    if (!button) return;
+    const panel = popoverRef.current;
+    if (!button || !panel) return;
     const rect = button.getBoundingClientRect();
     const containerRect =
       button.closest(".timeline-scroll-shell")?.getBoundingClientRect() ??
       new DOMRect(0, 0, window.innerWidth, window.innerHeight);
-    const width = 280;
-    const estimatedHeight = Math.min(280, 48 + details.length * 29);
-    const placement =
-      rect.bottom + estimatedHeight + 10 > window.innerHeight &&
-        rect.top > estimatedHeight + 10
-        ? "above"
-        : "below";
-    setPopoverPosition({
-      left: Math.min(
-        containerRect.right - width - 8,
-        Math.max(containerRect.left + 8, rect.left + rect.width / 2 - width / 2)
-      ),
-      top:
-        placement === "above"
-          ? Math.max(10, rect.top - estimatedHeight - 8)
-          : Math.min(
-            window.innerHeight - estimatedHeight - 10,
-            rect.bottom + 8
-          ),
-      placement
-    });
-  }, [details.length]);
+    const next = tooltipPosition(rect,
+      { width: panel.offsetWidth, height: panel.offsetHeight },
+      { width: window.innerWidth, height: window.innerHeight },
+      { align: "center", bounds: { left: containerRect.left + 8, right: containerRect.right - 8 } }
+    );
+    setPopoverPosition(current => current.left === next.left && current.top === next.top && current.placement === next.placement ? current : next);
+  }, []);
 
   useLayoutEffect(() => {
     if (!popoverOpen) return;
     updatePopoverPosition();
+    const observer = new ResizeObserver(updatePopoverPosition);
+    if (popoverRef.current) observer.observe(popoverRef.current);
+    if (buttonRef.current) observer.observe(buttonRef.current);
     window.addEventListener("resize", updatePopoverPosition);
     window.addEventListener("scroll", updatePopoverPosition, true);
     return () => {
+      observer.disconnect();
       window.removeEventListener("resize", updatePopoverPosition);
       window.removeEventListener("scroll", updatePopoverPosition, true);
     };
-  }, [popoverOpen, updatePopoverPosition]);
+  }, [popoverOpen, details.length, updatePopoverPosition]);
 
   return (
     <>
@@ -157,6 +149,7 @@ export function CalendarWeekDayCell({
         !!details.length &&
         createPortal(
           <div
+            ref={popoverRef}
             id={tooltipId}
             className={`week-day-popover ${popoverPosition.placement}`}
             role="tooltip"

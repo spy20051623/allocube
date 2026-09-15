@@ -2,6 +2,7 @@ import { localizeResourceSummary } from "../../resource-summary";
 import { tr } from "../../i18n/index";
 import { useId, useRef, useState, useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
+import { tooltipPosition } from "../../tooltip-position";
 
 export function ResourceSummary({
   value,
@@ -12,25 +13,31 @@ export function ResourceSummary({
 }) {
   const tooltipId = useId();
   const anchorRef = useRef<HTMLSpanElement>(null);
+  const popoverRef = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ left: 0, top: 0 });
 
   const updatePosition = useCallback(() => {
     const anchor = anchorRef.current;
-    if (!anchor) return;
+    const panel = popoverRef.current;
+    if (!anchor || !panel) return;
     const rect = anchor.getBoundingClientRect();
-    setPosition({
-      left: Math.min(window.innerWidth - 340, Math.max(12, rect.left)),
-      top: rect.bottom + 7
-    });
+    const next = tooltipPosition(rect,
+      { width: panel.offsetWidth, height: panel.offsetHeight },
+      { width: window.innerWidth, height: window.innerHeight }, { gap: 7 });
+    setPosition(current => current.left === next.left && current.top === next.top ? current : { left: next.left, top: next.top });
   }, []);
 
   useLayoutEffect(() => {
     if (!open) return;
     updatePosition();
+    const observer = new ResizeObserver(updatePosition);
+    if (popoverRef.current) observer.observe(popoverRef.current);
+    if (anchorRef.current) observer.observe(anchorRef.current);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     return () => {
+      observer.disconnect();
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
@@ -52,6 +59,7 @@ export function ResourceSummary({
       </span>
       {open && createPortal(
         <span
+          ref={popoverRef}
           id={tooltipId}
           role="tooltip"
           className="resource-summary-popover"

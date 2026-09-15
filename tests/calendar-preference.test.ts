@@ -43,12 +43,11 @@ describe("资源日历偏好", () => {
     });
   });
 
-  it("旧十二小时偏好只迁移一次，保留机器和模式，随后可重新选择十二小时", () => {
-    store.set("allocube.calendar-preference.v1", JSON.stringify({ machineId: "machine-a", reservationMode: "MACHINE", visibleHours: 12 }));
-    expect(readCalendarPreference()).toEqual({ machineId: "machine-a", reservationMode: "MACHINE", visibleHours: 24 });
-    expect(JSON.parse(store.get("allocube.calendar-preference.v1")!).zoomPreferenceVersion).toBe(1);
-    writeCalendarPreference({ visibleHours: 12 });
+  it.each([undefined, 1])("保留十二小时偏好，不迁移或改写缓存（旧版本 %s）", zoomPreferenceVersion => {
+    const raw = JSON.stringify({ machineId: "machine-a", reservationMode: "MACHINE", visibleHours: 12, zoomPreferenceVersion });
+    store.set("allocube.calendar-preference.v1", raw);
     expect(readCalendarPreference()).toEqual({ machineId: "machine-a", reservationMode: "MACHINE", visibleHours: 12 });
+    expect(store.get("allocube.calendar-preference.v1")).toBe(raw);
     writeCalendarPreference({ reservationMode: "RESOURCE_GROUP" });
     expect(readCalendarPreference()).toMatchObject({ visibleHours: 12 });
   });
@@ -58,7 +57,7 @@ describe("资源日历偏好", () => {
     expect(readCalendarPreference()).toMatchObject({ visibleHours });
   });
 
-  it.each(["read", "write"])("存储 %s 失败时，在当前页面保留迁移和手动缩放", async failure => {
+  it.each(["read", "write"])("存储 %s 失败时，在当前页面保留手动缩放", async failure => {
     vi.resetModules();
     const preference = await import("../src/calendar-preference");
     vi.stubGlobal("localStorage", {
@@ -68,7 +67,7 @@ describe("资源日历偏好", () => {
       },
       setItem: () => { throw new Error("Storage blocked"); }
     });
-    expect(preference.readCalendarPreference().visibleHours).toBe(24);
+    expect(preference.readCalendarPreference().visibleHours).toBe(failure === "read" ? 24 : 12);
     preference.writeCalendarPreference({ visibleHours: 12 });
     expect(preference.readCalendarPreference()).toMatchObject({ visibleHours: 12 });
   });

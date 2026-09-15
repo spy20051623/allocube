@@ -9,7 +9,7 @@ export function CalendarZoomGuide({ anchorRef, onDismiss }: {
 }) {
   const guideRef = useRef<HTMLElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number; arrow: number | null; above: boolean } | null>(null);
-  const message = tr("系统更新已将默认缩放调整至 24 小时。可点击工具栏 − / +，或按住 Alt 并滚动滚轮缩放。");
+  const message = tr("点击工具栏 − / +，或按住 Alt 并滚动滚轮缩放时间轴。");
 
   useLayoutEffect(() => {
     const anchor = anchorRef.current, guide = guideRef.current;

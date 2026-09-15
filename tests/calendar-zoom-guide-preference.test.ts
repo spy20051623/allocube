@@ -16,8 +16,16 @@ describe("日历缩放提示独立于缩放偏好", () => {
 
   it("默认展示提示，无效标记不当作已关闭", () => {
     expect(preference.readZoomGuideDismissed()).toBe(false);
-    store.set("allocube.calendar-zoom-guide.v1", "invalid");
+    store.set("allocube.calendar-zoom-guide.v2", "invalid");
     expect(preference.readZoomGuideDismissed()).toBe(false);
+  });
+
+  it("旧版提示关闭记录不影响本次首次缩放提示", () => {
+    store.set("allocube.calendar-zoom-guide.v1", "dismissed");
+    expect(preference.readZoomGuideDismissed()).toBe(false);
+    preference.saveZoomGuideDismissed();
+    expect(store.get("allocube.calendar-zoom-guide.v2")).toBe("dismissed");
+    expect(preference.readZoomGuideDismissed()).toBe(true);
   });
 
   it("关闭记录可重新加载，且不修改缩放偏好", async () => {

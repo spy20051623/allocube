@@ -18,6 +18,7 @@ try {
       localStorage.setItem("allocube:theme:v1", theme);
       if (!sessionStorage.getItem("zoom-test-initialized")) {
         localStorage.setItem("allocube.calendar-preference.v1", JSON.stringify({ visibleHours: 12, reservationMode: "RESOURCE_GROUP" }));
+        localStorage.setItem("allocube.calendar-zoom-guide.v1", "dismissed");
         sessionStorage.setItem("zoom-test-initialized", "true");
       }
     }, { theme, locale });
@@ -28,12 +29,13 @@ try {
     const guide = page.locator(".calendar-zoom-guide");
     const zoomLabel = page.locator(".timeline-zoom-control span");
     const zoomIn = page.locator(".timeline-zoom-control button").last();
+    const zoomOut = page.locator(".timeline-zoom-control button").first();
     await page.goto(`${fixture.origin}/calendar?date=${day}&view=day`);
     await page.locator(".live-state.connected").waitFor();
     await page.locator(".time-track").first().waitFor();
     await guide.waitFor();
-    assert.equal(await zoomLabel.innerText(), "24h");
-    assert.match(await guide.innerText(), locale === "en" ? /system update/ : /系统更新/);
+    assert.equal(await zoomLabel.innerText(), "12h");
+    assert.match(await guide.innerText(), locale === "en" ? /Zoom the timeline/ : /缩放时间轴/);
     assert.equal(await guide.evaluate(node => node.scrollWidth <= node.clientWidth), true);
     const guideBox = await guide.boundingBox(), gridBox = await page.locator(".timeline-scroll-frame").boundingBox();
     assert(guideBox.y + guideBox.height <= gridBox.y + 1, "Guide must not overlap the calendar");
@@ -65,40 +67,40 @@ try {
     await draft.waitFor();
     const title = page.locator('.booking-drawer input[name="title"]');
     await title.fill("Keep my draft");
-    await zoomIn.focus(); await zoomIn.press("Enter");
-    assert.equal(await zoomLabel.innerText(), "12h");
+    await zoomOut.focus(); await zoomOut.press("Enter");
+    assert.equal(await zoomLabel.innerText(), "24h");
     assert.equal(await guide.count(), 0);
     assert.equal(await title.inputValue(), "Keep my draft");
     assert.equal(await draft.locator('[name="startAt"]').inputValue(), `${day}T09:00`);
     await page.reload();
     await page.locator(".live-state.connected").waitFor();
-    assert.equal(await zoomLabel.innerText(), "12h");
+    assert.equal(await zoomLabel.innerText(), "24h");
     assert.equal(await guide.count(), 0);
 
     // Dismissal is persistent too and returns keyboard focus to the zoom control.
     await page.evaluate(() => {
-      localStorage.removeItem("allocube.calendar-zoom-guide.v1");
+      localStorage.removeItem("allocube.calendar-zoom-guide.v2");
     });
     await page.reload(); await guide.waitFor();
-    assert.equal(await zoomLabel.innerText(), "12h");
-    assert.match(await guide.innerText(), locale === "en" ? /system update/ : /系统更新/);
+    assert.equal(await zoomLabel.innerText(), "24h");
+    assert.match(await guide.innerText(), locale === "en" ? /Zoom the timeline/ : /缩放时间轴/);
     await guide.locator("button").focus(); await guide.locator("button").press("Enter");
     assert.equal(await guide.count(), 0);
     assert.equal(await zoomIn.evaluate(node => node === document.activeElement), true);
-    assert.equal(await zoomLabel.innerText(), "12h");
+    assert.equal(await zoomLabel.innerText(), "24h");
     await page.reload(); await page.locator(".live-state.connected").waitFor();
     assert.equal(await guide.count(), 0);
 
     await page.evaluate(() => {
-      localStorage.removeItem("allocube.calendar-zoom-guide.v1");
+      localStorage.removeItem("allocube.calendar-zoom-guide.v2");
     });
     await page.reload(); await guide.waitFor();
     await page.locator(".time-track").first().hover();
     await page.keyboard.down("Alt"); await page.mouse.wheel(0, -100); await page.keyboard.up("Alt");
     await guide.waitFor({ state: "detached" });
-    assert.equal(await zoomLabel.innerText(), "6h");
+    assert.equal(await zoomLabel.innerText(), "12h");
     assert.deepEqual(errors, []);
-    console.log(JSON.stringify({ theme, locale, width, migratedOnce: true, guideDismissal: true, keyboardAndWheel: true, draftRetained: true, floatingWithoutLayoutShift: true }));
+    console.log(JSON.stringify({ theme, locale, width, legacyZoomPreserved: true, guideDismissal: true, keyboardAndWheel: true, draftRetained: true, floatingWithoutLayoutShift: true }));
     await context.close();
   }
 } finally { await browser.close(); await fixture.close(); }

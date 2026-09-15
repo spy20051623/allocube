@@ -8,7 +8,6 @@ export type CalendarPreference = {
 
 const STORAGE_KEY = "allocube.calendar-preference.v1";
 const MACHINE_COLLAPSE_STORAGE_KEY = "allocube.calendar-machine-collapse.v1";
-const ZOOM_PREFERENCE_VERSION = 1;
 
 const fallbackPreference: CalendarPreference = {
   reservationMode: "RESOURCE_GROUP",
@@ -20,10 +19,7 @@ let volatilePreference: CalendarPreference | null = null;
 
 function saveCalendarPreference(preference: CalendarPreference) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      ...preference,
-      zoomPreferenceVersion: ZOOM_PREFERENCE_VERSION
-    }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(preference));
     volatilePreference = null;
   } catch {
     volatilePreference = preference;
@@ -34,8 +30,7 @@ export function readCalendarPreference(): CalendarPreference {
   if (volatilePreference) return volatilePreference;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = (raw ? JSON.parse(raw) : {}) as Partial<CalendarPreference> & { zoomPreferenceVersion?: number };
-    const needsMigration = parsed.zoomPreferenceVersion !== ZOOM_PREFERENCE_VERSION;
+    const parsed = (raw ? JSON.parse(raw) : {}) as Partial<CalendarPreference>;
     const visibleHours = DAY_ZOOM_LEVELS.includes(parsed.visibleHours as CalendarPreference["visibleHours"])
       ? parsed.visibleHours as CalendarPreference["visibleHours"]
       : fallbackPreference.visibleHours;
@@ -45,10 +40,8 @@ export function readCalendarPreference(): CalendarPreference {
         : {}),
       reservationMode:
         parsed.reservationMode === "MACHINE" ? "MACHINE" : "RESOURCE_GROUP",
-      // Legacy storage did not distinguish the 12-hour default from a manual choice.
-      visibleHours: needsMigration && visibleHours === 12 ? DEFAULT_DAY_VISIBLE_HOURS : visibleHours
+      visibleHours
     };
-    if (needsMigration) saveCalendarPreference(preference);
     return preference;
   } catch {
     return fallbackPreference;

@@ -1,4 +1,4 @@
-const STORAGE_KEY = "allocube.calendar-zoom-guide.v1";
+const STORAGE_KEY = "allocube.calendar-zoom-guide.v2";
 let dismissedForPage = false;
 
 export function readZoomGuideDismissed(): boolean {

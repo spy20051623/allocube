@@ -30,7 +30,7 @@ func run() error {
 	}
 	args := flags.Args()
 	if len(args) != 1 {
-		return errors.New("commands: init, setup, enroll, rotate, install, start-timer, sync, mappings, status, verify-registration, check-ssh, configure-ssh, recover-ssh, quiet, resume")
+		return errors.New("commands: init, setup, enroll, rotate, install, start-timer, sync, confirm-installation, mappings, status, verify-registration, check-ssh, configure-ssh, recover-ssh, quiet, resume")
 	}
 	if os.Geteuid() != 0 {
 		return errors.New("this command requires root")
@@ -68,6 +68,8 @@ func run() error {
 		return rotate(c)
 	case "sync":
 		return synchronize(c)
+	case "confirm-installation":
+		return synchronizeWithConfirmation(c, true)
 	case "mappings":
 		return showMappings(c)
 	case "check-ssh":

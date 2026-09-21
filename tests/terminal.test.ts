@@ -200,6 +200,19 @@ async function machineCall(client: Client, action: string, payload: unknown) {
 }
 
 describe("public key synchronization", () => {
+  it("requires an authenticated explicit completion, not registration or a key preview", async () => {
+    const info = async () => (await app.inject({method:"GET",url:`/api/v1/machines/${machineId}/terminal`,headers:{cookie:adminCookie}})).json().terminal;
+    expect(await info()).toMatchObject({enrolled:true,ready:false,confirmedAt:null});
+    expect((await machineCall(clients[0], "keys", {employees:["12345678"]})).statusCode).toBe(200);
+    expect(await info()).toMatchObject({ready:false,confirmedAt:null});
+    expect((await app.inject({method:"POST",url:"/api/v1/terminal/machine/confirm-installation",headers:{...headers,cookie:adminCookie},payload:{protocolVersion:1}})).statusCode).toBe(401);
+    expect((await machineCall(clients[0], "confirm-installation", {protocolVersion:0})).statusCode).toBe(400);
+    const first=await machineCall(clients[0], "confirm-installation", {protocolVersion:1});
+    expect(first.statusCode).toBe(200);
+    expect(await info()).toMatchObject({ready:true,confirmedAt:first.json().confirmedAt});
+    expect((await machineCall(clients[0], "confirm-installation", {protocolVersion:1})).json()).toEqual(first.json());
+    expect((await app.inject({method:"GET",url:`/api/v1/machines/${otherMachine}/terminal`,headers:{cookie:adminCookie}})).json().terminal.ready).toBe(false);
+  });
   let workerCookie = "", keyId = "";
   const pair = generateKeyPairSync("ed25519");
   const raw = pair.publicKey.export({format:"jwk"}).x!;
@@ -307,6 +320,8 @@ describe("public key synchronization", () => {
       db.db.prepare("INSERT INTO machine_terminals(id,machine_id,callback_url,created_at) VALUES(?,?,'',?)").run(terminalId,id,now);
       expect(await get()).toMatchObject({syncEnabled:false});
       db.db.prepare("UPDATE machine_terminals SET public_key=? WHERE id=?").run(pair.publicKey.export({type:"spki",format:"pem"}),terminalId);
+      expect(await get()).toMatchObject({syncEnabled:false});
+      db.db.prepare("UPDATE machine_terminals SET confirmed_at=? WHERE id=?").run(now,terminalId);
       expect(await get()).toMatchObject({syncEnabled:true});
       db.db.prepare("UPDATE machine_terminals SET enabled=0 WHERE id=?").run(terminalId);
       expect(await get()).toMatchObject({active:true,available:true,syncEnabled:false});

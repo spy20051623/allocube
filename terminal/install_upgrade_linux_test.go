@@ -62,6 +62,7 @@ func TestInstallerInstallAndUpgrade(t *testing.T) {
 		{name: "identity_failure", existing: true, failure: "verify-registration"},
 		{name: "configure_failure", existing: true, failure: "--verbose configure-ssh"},
 		{name: "sync_failure", existing: true, failure: "sync"},
+		{name: "confirmation_failure", existing: true, failure: "confirm-installation"},
 		{name: "bad_package", existing: true, brokenPackage: true},
 		{name: "missing_configuration", existing: true, missingConfig: true},
 		{name: "running_sync_timeout", existing: true, stuck: true},
@@ -193,7 +194,7 @@ esac
 				}
 			}
 			_, startedErr := os.Stat(dir + "/timer-started")
-			if failed || tc.paused {
+			if (failed && tc.failure != "confirm-installation") || tc.paused {
 				if startedErr == nil {
 					t.Fatal("failed/paused install started timer")
 				}
@@ -204,19 +205,25 @@ esac
 				install := strings.Index(trace, "binary --defer-timer-start install\n")
 				sync := strings.Index(trace, "binary sync\n")
 				start := strings.Index(trace, "binary start-timer\n")
-				if install < 0 || sync <= install || start <= sync {
+				confirm := strings.Index(trace, "binary confirm-installation\n")
+				if install < 0 || sync <= install || start <= sync || confirm <= start {
 					t.Fatalf("unsafe install sequence: %s", trace)
 				}
 				want := "INSTALLED"
 				if tc.existing {
 					want = "UPGRADED"
 				}
-				if !strings.Contains(string(out), want) {
+				if !failed && !strings.Contains(string(out), want) {
 					t.Fatalf("missing result: %s", out)
 				}
 			}
 			if failed && !strings.Contains(string(out), "sudo bash ./install.sh") {
 				t.Fatalf("missing retry instructions: %s", out)
+			}
+			if tc.failure == "--verbose configure-ssh" || tc.failure == "sync" {
+				if strings.Contains(trace, "binary confirm-installation") {
+					t.Fatal("incomplete installation reported success")
+				}
 			}
 			if tc.failure != "" {
 				// Retry the exact same entry point after correcting the failure,

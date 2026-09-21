@@ -7,8 +7,9 @@ import { startRealtimeFixture } from "./test-realtime-http.mjs";
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
 const fixture = await startRealtimeFixture();
-const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) });
+let browser;
 try {
+  browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) });
   // Emulate the HTTPS reverse proxy headers on the isolated local test server.
   const db = new Database(fixture.databasePath);
   db.prepare("UPDATE settings SET value='https://terminal-fixture.test' WHERE key='public_site_origin'").run();
@@ -21,7 +22,7 @@ try {
   });
   const cookie = fixture.accounts.Administrator.cookie, separator = cookie.indexOf("=");
   await context.addCookies([{ name: cookie.slice(0, separator), value: cookie.slice(separator + 1), url: fixture.origin }]);
-  await context.addInitScript(() => localStorage.setItem("allocube:locale:v1", "zh-CN"));
+  await context.addInitScript(() => { if (!localStorage.getItem("allocube:locale:v1")) localStorage.setItem("allocube:locale:v1", "zh-CN"); });
   const page = await context.newPage(), errors = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(`${fixture.origin}/admin/machines/${fixture.ids.machine1}/info`);
@@ -53,11 +54,35 @@ try {
     return { status: response.status(), body: await response.json() };
   };
   const started = Date.now();
+  const machineCall = async (value, action, data) => {
+    const now = Math.floor(Date.now()/1000);
+    const unsigned = Buffer.from(JSON.stringify({alg:"EdDSA"})).toString("base64url") + "." + Buffer.from(JSON.stringify({
+      iss:value.terminalId,sub:value.terminalId,aud:"https://terminal-fixture.test/api/v1/terminal/machine/token",
+      iat:now,exp:now+60,jti:crypto.randomUUID(),
+    })).toString("base64url");
+    const minted=await context.request.post(fixture.origin+"/api/v1/terminal/machine/token",{headers:proxyHeaders,data:{
+      client_id:value.terminalId,grant_type:"client_credentials",client_assertion_type:"urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+      client_assertion:unsigned+"."+sign(null,Buffer.from(unsigned),keys.privateKey).toString("base64url"),
+    }});
+    assert.equal(minted.status(),200,await minted.text());
+    const response=await context.request.post(fixture.origin+"/api/v1/terminal/machine/"+action,{headers:{...proxyHeaders,authorization:`Bearer ${(await minted.json()).access_token}`},data});
+    assert.equal(response.status(),200,await response.text());
+  };
   await enroll(enrollment);
+  await modal.getByRole("status").filter({hasText:"身份已登记"}).waitFor({timeout:5000});
+  assert.equal(await panel.locator(".terminal-sync-overview .terminal-sync-status").innerText(),"待确认接入");
+  await machineCall(enrollment,"keys",{employees:["12345678"]});
+  assert.equal(await modal.locator(".terminal-sync-connected").count(),0,"Key preview is not completed enrollment");
+  await page.screenshot({path:".codex-tmp/terminal-confirmation-desktop.png"});
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:".codex-tmp/terminal-confirmation-mobile.png"});
+  assert.equal(await modal.evaluate(el=>el.scrollWidth<=el.clientWidth),true,"Pending content must fit narrow dialog");
+  await page.setViewportSize({width:1280,height:960});
+  await machineCall(enrollment,"confirm-installation",{protocolVersion:1});
   await modal.getByRole("status").filter({ hasText: "机器已接入" }).waitFor({ timeout: 5000 });
   assert.equal(await panel.locator(".terminal-sync-overview .terminal-sync-status").innerText(), "已接入");
   assert.notEqual(await panel.locator("time").innerText(), "—");
-  assert.equal(await modal.locator("pre").count(), 0, "Consumed enrollment command must disappear");
+  assert.equal(await modal.locator("pre").count(), 0, "Completed enrollment command must disappear");
   const latency = Date.now() - started;
   // Remote disable/regeneration and a closed modal must still refresh the machine badge.
   const disabled = await manage("DELETE");
@@ -69,13 +94,27 @@ try {
   assert.equal(next.status, 200);
   await panel.locator(".terminal-sync-status.pending").waitFor();
   await enroll(next.body);
+  await panel.locator(".terminal-sync-status.pending").waitFor();
+  await machineCall(next.body,"confirm-installation",{protocolVersion:1});
   await panel.locator(".terminal-sync-status.active").waitFor({ timeout: 5000 });
   await panel.getByRole("button", { name: "管理接入" }).click();
   await modal.locator(".terminal-sync-connected").waitFor();
   assert.equal(await modal.locator("pre").count(), 0);
+  const english = await manage("POST", {});
+  assert.equal(english.status,200);
+  await enroll(english.body);
+  await page.evaluate(() => localStorage.setItem("allocube:locale:v1","en"));
+  await page.reload();
+  await panel.getByRole("button",{name:"Manage connection"}).click();
+  await modal.getByRole("status").filter({hasText:"Identity registered"}).waitFor();
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:".codex-tmp/terminal-confirmation-mobile-en.png"});
+  assert.equal(await modal.evaluate(el=>el.scrollWidth<=el.clientWidth),true);
+  await machineCall(english.body,"confirm-installation",{protocolVersion:1});
+  await modal.locator(".terminal-sync-connected").waitFor();
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ enrollmentFeedbackMs: latency, modalAndBadgeUpdated: true, consumedCommandRemoved: true, remoteDisableAndRegeneration: true, closedModalUpdates: true }));
 } finally {
-  await browser.close();
+  await browser?.close();
   await fixture.close();
 }

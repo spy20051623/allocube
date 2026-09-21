@@ -43,6 +43,7 @@ finish() {
     fi
     if [ -n "$log" ]; then printf 'Details: sudo cat %s\n' "$log" >&4; fi
     if [ "$timer_stopped" = yes ]; then printf 'Scheduled sync remains stopped until installation succeeds.\n' >&4; fi
+    if [ "$step" = 'Confirming installation with Allocube' ]; then printf 'Local installation is retained. Confirmation will retry after the next successful scheduled sync.\n' >&4; fi
     if [ -n "$backup" ]; then printf 'Previous program, configuration and service files: %s\n' "$backup" >&4; fi
   fi
   exit "$status"
@@ -186,6 +187,8 @@ step='Running the final key sync'
 step='Starting the sync timer'
 "$binary" start-timer
 timer_stopped=no
+step='Confirming installation with Allocube'
+"$binary" confirm-installation
 "$binary" status > "$work/summary"
 if [ "$upgrading" = yes ]; then progress 'UPGRADED'; else progress 'INSTALLED'; fi
 while IFS= read -r line; do progress "$line"; done < "$work/summary"

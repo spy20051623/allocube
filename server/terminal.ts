@@ -29,6 +29,7 @@ type Terminal = {
   enabled: number;
   certificate_expires_at: string | null;
   last_seen_at: string | null;
+  confirmed_at: string | null;
 };
 const tokenPath = "/api/v1/terminal/machine/token";
 const assertionLifetimeSeconds = 60;
@@ -40,7 +41,7 @@ function fail(message: string, status = 400): never {
 }
 const opaque = z.string().min(32).max(128);
 const machinePaths = new Set(
-  ["enroll", "token", "keys", "rotate", "help"].map(
+  ["enroll", "token", "keys", "rotate", "help", "confirm-installation"].map(
     (x) => `/api/v1/terminal/machine/${x}`,
   ),
 );
@@ -191,7 +192,7 @@ export function registerTerminalRoutes(
       return reply.code(403).send({ error: "无机器使用权" });
     const row = db
       .prepare(
-        "SELECT id,callback_url,enabled,certificate_expires_at,last_seen_at,public_key FROM machine_terminals WHERE machine_id=?",
+        "SELECT id,callback_url,enabled,certificate_expires_at,last_seen_at,public_key,confirmed_at FROM machine_terminals WHERE machine_id=?",
       )
       .get(id) as Terminal | undefined;
     return {
@@ -201,6 +202,8 @@ export function registerTerminalRoutes(
             mode: "KEY_SYNC",
             enabled: Boolean(row.enabled),
             enrolled: Boolean(row.public_key),
+            ready: Boolean(row.public_key && row.confirmed_at),
+            confirmedAt: row.confirmed_at,
             certificateExpiresAt: row.certificate_expires_at,
             lastSeenAt: row.last_seen_at,
             ...(manager ? { helpRequests: terminalHelpList(row.id) } : {}),
@@ -311,6 +314,15 @@ export function registerTerminalRoutes(
       };
     },
   );
+  app.post("/api/v1/terminal/machine/confirm-installation", async (request) => {
+    const t = machine(request);
+    if (!z.object({ protocolVersion: z.literal(1) }).strict().safeParse(request.body).success) fail("接入确认格式无效");
+    if (!t.public_key) fail("机器身份尚未登记", 409);
+    // Contact, token exchange and key previews are not installation acknowledgements.
+    db.prepare("UPDATE machine_terminals SET confirmed_at=? WHERE id=? AND confirmed_at IS NULL").run(nowIso(), t.id);
+    const row = db.prepare("SELECT confirmed_at FROM machine_terminals WHERE id=?").get(t.id) as {confirmed_at: string};
+    return { terminalId: t.id, confirmedAt: row.confirmed_at };
+  });
   app.post("/api/v1/terminal/machine/rotate", async (request) => {
     const t = machine(request);
     const body = z

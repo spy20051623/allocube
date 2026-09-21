@@ -122,7 +122,7 @@ function response(userId: string) {
 function activationMachines(userId: string, role: string, keyId: string) {
   const rows = db
     .prepare(
-      "SELECT m.id,m.name,m.address,m.status,EXISTS(SELECT 1 FROM deleted_machine_tombstones d WHERE d.machine_id=m.id) AS deleted,EXISTS(SELECT 1 FROM machine_ssh_keys a WHERE a.machine_id=m.id AND a.key_id=?) AS active,EXISTS(SELECT 1 FROM machine_terminals t WHERE t.machine_id=m.id AND t.enabled=1 AND t.public_key<>'') AS sync_enabled FROM machines m ORDER BY m.name,m.id",
+      "SELECT m.id,m.name,m.address,m.status,EXISTS(SELECT 1 FROM deleted_machine_tombstones d WHERE d.machine_id=m.id) AS deleted,EXISTS(SELECT 1 FROM machine_ssh_keys a WHERE a.machine_id=m.id AND a.key_id=?) AS active,EXISTS(SELECT 1 FROM machine_terminals t WHERE t.machine_id=m.id AND t.enabled=1 AND t.public_key<>'' AND t.confirmed_at IS NOT NULL) AS sync_enabled FROM machines m ORDER BY m.name,m.id",
     )
     .all(keyId) as Array<{
     id: string;

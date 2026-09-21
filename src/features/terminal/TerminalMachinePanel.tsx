@@ -13,7 +13,7 @@ import { useRealtimeRefresh } from "../../useRealtimeRefresh";
 import { terminalInstallCommand, type TerminalArchitecture, type TerminalEnrollment, type TerminalRelease } from "./install-command";
 import "./terminal.css";
 
-type TerminalInfo = { id: string; enrolled: boolean; enabled: boolean; lastSeenAt: string | null; helpRequests?: Help[] };
+type TerminalInfo = { id: string; enrolled: boolean; ready: boolean; enabled: boolean; lastSeenAt: string | null; helpRequests?: Help[] };
 
 export function TerminalMachinePanel({ machineId, canManage, notify }: {
   machineId: string;
@@ -41,7 +41,7 @@ export function TerminalMachinePanel({ machineId, canManage, notify }: {
     setTerminal(next);
     setLoaded(true);
     setEnrollment((old) => old && (!next?.enabled || next.enrolled || old.terminalId !== next.id) ? null : old);
-    if (next?.enabled && next.enrolled && previous?.id === next.id && !previous.enrolled) {
+    if (next?.enabled && next.ready && previous?.id === next.id && !previous.ready) {
       notifyRef.current("success", currentLocale() === "en" ? "Machine enrolled" : "机器已接入");
     }
   }, []);
@@ -88,7 +88,8 @@ export function TerminalMachinePanel({ machineId, canManage, notify }: {
     ? { text: loading ? t("正在加载", "Loading") : t("加载失败", "Load failed"), tone: "neutral" }
     : !terminal ? { text: t("尚未接入", "Not enrolled"), tone: "neutral" }
       : !terminal.enabled ? { text: t("已停用", "Disabled"), tone: "disabled" }
-        : terminal.enrolled ? { text: t("已接入", "Enrolled"), tone: "active" }
+        : terminal.ready ? { text: t("已接入", "Connected"), tone: "active" }
+          : terminal.enrolled ? { text: t("待确认接入", "Awaiting confirmation"), tone: "pending" }
           : { text: t("待登记", "Awaiting enrollment"), tone: "pending" };
   const close = () => {
     if (busy) return;
@@ -142,7 +143,7 @@ export function TerminalMachinePanel({ machineId, canManage, notify }: {
                   }))) return;
                   const result = await api<TerminalEnrollment>(`/admin/machines/${machineId}/terminal`, { method: "POST", body: jsonBody({}), signal });
                   if (signal?.aborted) return;
-                  applyTerminal({ id: result.terminalId, enabled: true, enrolled: false, lastSeenAt: null });
+                  applyTerminal({ id: result.terminalId, enabled: true, enrolled: false, ready: false, lastSeenAt: null });
                   setEnrollment(result);
                 })}>
                   {terminal ? <RefreshCw size={14} /> : <KeyRound size={14} />}
@@ -182,7 +183,11 @@ export function TerminalMachinePanel({ machineId, canManage, notify }: {
                 : <button type="button" className="secondary-button compact terminal-sync-download" disabled><Download size={14} />{t("下载部署包", "Download package")}</button>}
               </div>
             </div>
-            {terminal?.enabled && terminal.enrolled ? <div className="terminal-sync-connected" role="status"><CheckCircle2 size={20} />{t("机器已接入", "Machine enrolled")}</div> : <div className="terminal-sync-command">
+            {terminal?.enabled && terminal.ready ? <div className="terminal-sync-connected" role="status"><CheckCircle2 size={20} />{t("机器已接入", "Machine enrolled")}</div> : terminal?.enabled && terminal.enrolled ? <div className="terminal-sync-command terminal-sync-pending" role="status">
+              <span>{t("身份已登记，等待终端确认配置完成。", "Identity registered. Waiting for the terminal to confirm setup is complete.")}</span>
+              <span>{t("请完成终端安装；如需重试，在新版部署包目录执行：", "Finish setup on the machine. To retry, run this from the latest deployment package:")}</span>
+              <pre><code>sudo bash ./install.sh</code></pre>
+            </div> : <div className="terminal-sync-command">
               <div className="terminal-sync-command-heading"><span><Terminal size={15} />{t("解压并进入目录后执行", "Run inside the extracted directory")}</span><button type="button" className="secondary-button compact" disabled={!command} onClick={() => void copy(command)}><Copy size={14} />{t("复制命令", "Copy command")}</button></div>
               {command ? <pre><code>{command}</code></pre> : <p className="terminal-sync-command-empty">{releaseState === "loading" ? t("正在获取安装程序", "Loading installer") : releaseState === "failed" ? t("安装程序加载失败，请重新打开窗口", "Could not load installer. Reopen this window to retry.") : !release ? t("平台尚未发布此架构的安装程序", "No installer published for this architecture") : enrollment ? t("安装信息无效，请重新生成", "Invalid installation details. Regenerate credentials.") : t("生成接入凭据后显示安装命令", "Generate credentials to get the install command")}</p>}
             </div>}

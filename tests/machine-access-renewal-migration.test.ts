@@ -4,6 +4,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { expect, it } from "vitest";
 import { FINAL_SCHEMA_SQL } from "../server/schema";
+import { TERMINAL_CONFIRMATION_MIGRATION_SQL } from "../server/terminal-schema";
 
 it("upgrades v28 without changing existing grants or pending deadlines", async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "allocube-renewal-migration-"));
@@ -11,7 +12,7 @@ it("upgrades v28 without changing existing grants or pending deadlines", async (
   process.env.DATABASE_PATH = path.join(directory, "db.sqlite");
   process.env.BOOTSTRAP_ADMIN_PASSWORD = "Migration234!";
   const old = new Database(process.env.DATABASE_PATH);
-  old.exec(FINAL_SCHEMA_SQL.replace("    previous_expires_at TEXT,\n", ""));
+  old.exec(FINAL_SCHEMA_SQL.replace(TERMINAL_CONFIRMATION_MIGRATION_SQL, "").replace("    previous_expires_at TEXT,\n", ""));
   const now = new Date().toISOString();
   old.prepare("INSERT INTO schema_migrations VALUES(28,?)").run(now);
   old.prepare("INSERT INTO users(id,username,username_normalized,display_name,password_hash,role,status,created_at,updated_at) VALUES('a','a','a','Admin','hash','SYSTEM_ADMIN','ACTIVE',?,?)").run(now, now);

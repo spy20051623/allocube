@@ -243,6 +243,10 @@ func updateHelp(c Config, result error) error {
 }
 
 func synchronize(c Config) error {
+	return synchronizeWithConfirmation(c, false)
+}
+
+func synchronizeWithConfirmation(c Config, required bool) error {
 	if _, err := os.Stat(filepath.Join(c.StateDir, "sync-paused")); err == nil {
 		fmt.Println("[SKIP] Synchronization is paused.")
 		return nil
@@ -259,6 +263,14 @@ func synchronize(c Config) error {
 	result := errors.Join(autoErr, syncErr)
 	if err := updateHelp(c, result); err != nil {
 		fmt.Fprintln(os.Stderr, "[HELP] Assistance delivery pending; retrying on the next synchronization:", err)
+	}
+	if result == nil {
+		if err := confirmInstallation(c, required); err != nil {
+			if required {
+				return err
+			}
+			fmt.Fprintln(os.Stderr, "[CONFIRM] Installation confirmation pending; retrying after the next successful synchronization:", err)
+		}
 	}
 	return result
 }

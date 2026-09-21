@@ -16,8 +16,10 @@
 .terminal-sync-buttons > button { height: 32px; min-height: 32px; padding: 0 10px; gap: 6px; font-size: 12px; }
 .terminal-sync-command { display: grid; min-width: 0; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-panel, #fafbfd); }
 .terminal-sync-footer { padding-top: 14px; border-top: 1px solid var(--line); }
-.terminal-sync-architecture { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; }
+.terminal-sync-architecture { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 12px; }
 .terminal-sync-architecture .segmented button { min-width: 100px; }
+.terminal-sync-architecture > span { flex-shrink: 0; white-space: nowrap; }
+.terminal-sync-pending { font-size: 12px; line-height: 1.6; }
 .terminal-sync-download-controls { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .terminal-sync-download { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; white-space: nowrap; text-decoration: none; font-size: 12px; }
 .terminal-sync-command-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

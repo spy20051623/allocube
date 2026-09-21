@@ -1,3 +1,7 @@
+export const TERMINAL_CONFIRMATION_MIGRATION_SQL = `
+ALTER TABLE machine_terminals ADD COLUMN confirmed_at TEXT;
+`;
+
 export const TERMINAL_SCHEMA_SQL = `
 CREATE TABLE machine_terminals (
   id TEXT PRIMARY KEY,

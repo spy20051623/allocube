@@ -9,7 +9,7 @@ import { FINAL_SCHEMA_SQL, FINAL_SCHEMA_VERSION } from "./schema.js";
 import { REPORT_SCHEMA_SQL } from "./report-schema.js";
 import { SSH_KEY_SCHEMA_SQL, SSH_KEY_ACTIVATION_SCHEMA_SQL } from "./ssh-key-schema.js";
 import { TERMINAL_HELP_SCHEMA_V26_SQL, TERMINAL_REPORT_MIGRATION_SQL } from "./terminal-help-schema.js";
-import { TERMINAL_SCHEMA_SQL, TERMINAL_EMAIL_MIGRATION_SQL } from "./terminal-schema.js";
+import { TERMINAL_SCHEMA_SQL, TERMINAL_EMAIL_MIGRATION_SQL, TERMINAL_CONFIRMATION_MIGRATION_SQL } from "./terminal-schema.js";
 import { bootstrapAdministrator } from "./bootstrap-admin.js";
 import { normalizeAllowedEmailDomains } from "../src/shared/email-domain-rules.js";
 import {
@@ -662,6 +662,13 @@ export async function initializeDatabase() {
       db.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES(29, ?)").run(nowIso());
     });
     schemaVersion = { version: 29 };
+  }
+  if (schemaVersion.version === 29 && FINAL_SCHEMA_VERSION >= 30) {
+    withImmediateTransaction(() => {
+      db.exec(TERMINAL_CONFIRMATION_MIGRATION_SQL);
+      db.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES(30, ?)").run(nowIso());
+    });
+    schemaVersion = { version: 30 };
   }
   if (schemaVersion.version !== FINAL_SCHEMA_VERSION) {
     throw new Error(

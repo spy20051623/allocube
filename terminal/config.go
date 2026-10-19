@@ -274,8 +274,9 @@ func platformHTTPError(operation string, status int, body []byte) error {
 		"接入凭据已使用或过期":  "the enrollment token has expired or was already used. Generate a new enrollment command in Allocube for this machine",
 		"终端已停用或机器不存在": "this terminal is disabled or its machine no longer exists. Ask the machine administrator to check its registration in Allocube",
 		"机器凭据无效":      "machine credentials were rejected. Check whether the machine was re-enrolled or disabled in Allocube",
-		"机器签名无效":      "machine signature verification failed. Check the machine clock and registration; do not delete the local identity key",
+		"机器签名无效":      "machine signature verification failed. Check the machine identity key and registration; do not delete the local identity key",
 		"机器签名已经使用":    "a machine authentication request was already used. Retry with a fresh request",
+		"机器挑战无效或已过期":  "machine authentication challenge expired or was already used. Retry the request",
 		"注册签名无效":      "enrollment signature verification failed. Keep the local identity files and ask the administrator to check the registration",
 	}
 	message := known[problem.Error]
@@ -294,15 +295,21 @@ func platformHTTPError(operation string, status int, body []byte) error {
 	return fmt.Errorf("platform %s failed (HTTP %d): %s", operation, status, message)
 }
 func (p *Platform) token() (string, error) {
-	now := time.Now().Unix()
-	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"EdDSA","typ":"JWT"}`))
-	body, _ := json.Marshal(map[string]any{"iss": p.Config.TerminalID, "sub": p.Config.TerminalID, "aud": p.Config.Platform + "/api/v1/terminal/machine/token", "iat": now, "exp": now + 60, "jti": randomToken()})
-	unsigned := header + "." + base64.RawURLEncoding.EncodeToString(body)
-	jwt := unsigned + "." + base64.RawURLEncoding.EncodeToString(ed25519.Sign(p.Key, []byte(unsigned)))
+	var challenge struct {
+		Value string `json:"challenge"`
+	}
+	if err := p.post("challenge", "", map[string]string{"terminalId": p.Config.TerminalID}, &challenge); err != nil {
+		return "", err
+	}
+	if len(challenge.Value) < 32 || len(challenge.Value) > 128 {
+		return "", errors.New("invalid machine authentication challenge")
+	}
+	message := fmt.Sprintf("allocube-machine-token-v2\n%s\n%s/api/v1/terminal/machine/token\n%s", p.Config.TerminalID, p.Config.Platform, challenge.Value)
+	proof := base64.RawURLEncoding.EncodeToString(ed25519.Sign(p.Key, []byte(message)))
 	var result struct {
 		Token string `json:"access_token"`
 	}
-	err := p.post("token", "", map[string]string{"client_id": p.Config.TerminalID, "grant_type": "client_credentials", "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer", "client_assertion": jwt}, &result)
+	err := p.post("token", "", map[string]string{"client_id": p.Config.TerminalID, "grant_type": "client_credentials", "challenge": challenge.Value, "proof": proof}, &result)
 	if err == nil && result.Token == "" {
 		err = errors.New("missing machine token")
 	}

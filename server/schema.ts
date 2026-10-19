@@ -2,11 +2,11 @@ import { AUDIT_INDEX_SQL } from "./audit-schema.js";
 import { MACHINE_ACCESS_EXPIRY_INDEX_SQL } from "./machine-access-schema.js";
 import { REPORT_SCHEMA_SQL } from "./report-schema.js";
 import { SSH_KEY_SCHEMA_SQL, SSH_KEY_ACTIVATION_SCHEMA_SQL } from "./ssh-key-schema.js";
-import { TERMINAL_SCHEMA_SQL, TERMINAL_CONFIRMATION_MIGRATION_SQL } from "./terminal-schema.js";
+import { TERMINAL_SCHEMA_SQL, TERMINAL_CONFIRMATION_MIGRATION_SQL, TERMINAL_CHALLENGE_MIGRATION_SQL } from "./terminal-schema.js";
 
 import { TERMINAL_HELP_SCHEMA_SQL } from "./terminal-help-schema.js";
 
-export const FINAL_SCHEMA_VERSION = 30;
+export const FINAL_SCHEMA_VERSION = 31;
 
 export const FINAL_SCHEMA_SQL = `
   ${REPORT_SCHEMA_SQL}
@@ -655,6 +655,7 @@ export const FINAL_SCHEMA_SQL = `
   );
   ${TERMINAL_SCHEMA_SQL}
   ${TERMINAL_CONFIRMATION_MIGRATION_SQL}
+  ${TERMINAL_CHALLENGE_MIGRATION_SQL}
   ${SSH_KEY_SCHEMA_SQL}
   ${SSH_KEY_ACTIVATION_SCHEMA_SQL}
   ${TERMINAL_HELP_SCHEMA_SQL}

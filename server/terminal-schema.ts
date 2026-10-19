@@ -2,6 +2,15 @@ export const TERMINAL_CONFIRMATION_MIGRATION_SQL = `
 ALTER TABLE machine_terminals ADD COLUMN confirmed_at TEXT;
 `;
 
+export const TERMINAL_CHALLENGE_MIGRATION_SQL = `
+CREATE TABLE terminal_machine_challenges (
+  challenge_hash TEXT PRIMARY KEY,
+  terminal_id TEXT NOT NULL REFERENCES machine_terminals(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX terminal_machine_challenges_expiry ON terminal_machine_challenges(expires_at);
+`;
+
 export const TERMINAL_SCHEMA_SQL = `
 CREATE TABLE machine_terminals (
   id TEXT PRIMARY KEY,

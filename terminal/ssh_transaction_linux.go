@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 )
 
 type SSHJournal struct {
@@ -193,7 +192,7 @@ func executeSSHPlan(c Config, plan *SSHPlan, latest map[string][]byte) error {
 	if err = validatePlanBindings(c, plan.Targets); err != nil {
 		return err
 	}
-	j := &SSHJournal{Version: 1, ID: time.Now().UTC().Format("20060102T150405.000000000"), Phase: "prepared", Services: plan.Services, Files: plan.Files, Dependencies: map[string][]byte{}}
+	j := &SSHJournal{Version: 1, ID: uuid(), Phase: "prepared", Services: plan.Services, Files: plan.Files, Dependencies: map[string][]byte{}}
 	for _, f := range plan.Files {
 		for path, data := range f.Snapshot {
 			j.Dependencies[path] = data
@@ -490,7 +489,7 @@ func bindPlanAccounts(c Config, targets []Account) error {
 		if e != nil {
 			return e
 		}
-		state.Accounts[a.Name] = SyncBinding{a.UID, s.Employee, time.Now().UTC().Format(time.RFC3339)}
+		state.Accounts[a.Name] = SyncBinding{UID: a.UID, Employee: s.Employee}
 	}
 	if err := writeJSON(path, state, 0600); err != nil {
 		return err

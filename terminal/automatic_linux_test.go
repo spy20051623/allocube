@@ -75,6 +75,10 @@ func automaticFixture(t *testing.T, publicKeys ...func() []any) (Config, *[]Acco
 			fmt.Fprint(w, `{}`)
 			return
 		}
+		if strings.HasSuffix(r.URL.Path, "/challenge") {
+			fmt.Fprint(w, `{"challenge":"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"}`)
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, "/token") {
 			fmt.Fprint(w, `{"access_token":"fixture"}`)
 			return

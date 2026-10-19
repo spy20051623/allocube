@@ -9,7 +9,7 @@ import { FINAL_SCHEMA_SQL, FINAL_SCHEMA_VERSION } from "./schema.js";
 import { REPORT_SCHEMA_SQL } from "./report-schema.js";
 import { SSH_KEY_SCHEMA_SQL, SSH_KEY_ACTIVATION_SCHEMA_SQL } from "./ssh-key-schema.js";
 import { TERMINAL_HELP_SCHEMA_V26_SQL, TERMINAL_REPORT_MIGRATION_SQL } from "./terminal-help-schema.js";
-import { TERMINAL_SCHEMA_SQL, TERMINAL_EMAIL_MIGRATION_SQL, TERMINAL_CONFIRMATION_MIGRATION_SQL } from "./terminal-schema.js";
+import { TERMINAL_SCHEMA_SQL, TERMINAL_EMAIL_MIGRATION_SQL, TERMINAL_CONFIRMATION_MIGRATION_SQL, TERMINAL_CHALLENGE_MIGRATION_SQL } from "./terminal-schema.js";
 import { bootstrapAdministrator } from "./bootstrap-admin.js";
 import { normalizeAllowedEmailDomains } from "../src/shared/email-domain-rules.js";
 import {
@@ -25,7 +25,7 @@ import {
 export type Db = Database.Database;
 
 const REQUIRED_TABLES = [
-  "terminal_help_requests", "ssh_key_challenges", "machine_ssh_keys", "user_ssh_keys", "machine_terminals", "terminal_credentials", "terminal_authorizations", "terminal_audit_receipts",
+  "terminal_help_requests", "ssh_key_challenges", "machine_ssh_keys", "user_ssh_keys", "machine_terminals", "terminal_credentials", "terminal_machine_challenges", "terminal_authorizations", "terminal_audit_receipts",
   "report_versions", "report_state", "report_days", "report_group_days", "report_reservation_days", "report_jobs",
   "schema_migrations",
   "users",
@@ -670,6 +670,13 @@ export async function initializeDatabase() {
     });
     schemaVersion = { version: 30 };
   }
+  if (schemaVersion.version === 30 && FINAL_SCHEMA_VERSION >= 31) {
+    withImmediateTransaction(() => {
+      db.exec(TERMINAL_CHALLENGE_MIGRATION_SQL);
+      db.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES(31, ?)").run(nowIso());
+    });
+    schemaVersion = { version: 31 };
+  }
   if (schemaVersion.version !== FINAL_SCHEMA_VERSION) {
     throw new Error(
       `数据库结构版本不匹配：当前 ${schemaVersion.version ?? 0}，需要 ${FINAL_SCHEMA_VERSION}。开发阶段请先重置数据库。`
@@ -919,6 +926,7 @@ function assertPersistentConfiguration() {
 export function cleanupExpiredSecurityRecords(at = nowIso()) {
   return withImmediateTransaction(() => ({
     terminalCredentials: db.prepare("DELETE FROM terminal_credentials WHERE expires_at <= ?").run(at).changes,
+    terminalChallenges: db.prepare("DELETE FROM terminal_machine_challenges WHERE expires_at <= ?").run(at).changes,
     terminalAuthorizations: db.prepare("DELETE FROM terminal_authorizations WHERE expires_at <= ?").run(at).changes,
     sessions: db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(at).changes,
     authTokens: db

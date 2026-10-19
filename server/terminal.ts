@@ -32,8 +32,10 @@ type Terminal = {
   confirmed_at: string | null;
 };
 const tokenPath = "/api/v1/terminal/machine/token";
+const challengePath = "/api/v1/terminal/machine/challenge";
 const assertionLifetimeSeconds = 60;
 const assertionClockSkewSeconds = 5;
+const challengeLifetimeSeconds = 60;
 const expires = (seconds: number) =>
   new Date(Date.now() + seconds * 1000).toISOString();
 function fail(message: string, status = 400): never {
@@ -41,7 +43,7 @@ function fail(message: string, status = 400): never {
 }
 const opaque = z.string().min(32).max(128);
 const machinePaths = new Set(
-  ["enroll", "token", "keys", "rotate", "help", "confirm-installation"].map(
+  ["enroll", "challenge", "token", "keys", "rotate", "help", "confirm-installation"].map(
     (x) => `/api/v1/terminal/machine/${x}`,
   ),
 );
@@ -152,6 +154,27 @@ export function verifyClientAssertion(jwt: string, t: Terminal) {
     if (error instanceof IdentityError) throw error;
     fail("机器签名无效", 401);
   }
+}
+
+function challengeMessage(t: Terminal, challenge: string) {
+  return `allocube-machine-token-v2\n${t.id}\n${platformOrigin()}${tokenPath}\n${challenge}`;
+}
+
+function redeemChallenge(t: Terminal, challenge: string, proof: string) {
+  let valid = false;
+  try {
+    valid = verify(null, Buffer.from(challengeMessage(t, challenge)), publicKey(t.public_key), Buffer.from(proof, "base64url"));
+  } catch {
+    // Invalid proofs must not consume a challenge.
+  }
+  if (!valid) fail("机器签名无效", 401);
+  return withImmediateTransaction(() => {
+    const consumed = db.prepare(`DELETE FROM terminal_machine_challenges
+      WHERE challenge_hash=? AND terminal_id=? AND expires_at>?`)
+      .run(hashToken(challenge), t.id, nowIso());
+    if (!consumed.changes) fail("机器挑战无效或已过期", 401);
+    return credential(t, "MACHINE", 60);
+  });
 }
 export function registerTerminalRoutes(
   app: FastifyInstance,
@@ -292,23 +315,41 @@ export function registerTerminalRoutes(
     },
   );
   app.post(
+    challengePath,
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (request) => {
+      const { terminalId } = z.object({ terminalId: z.string().uuid() }).strict().parse(request.body);
+      const t = terminal(terminalId);
+      return withImmediateTransaction(() => {
+        db.prepare("DELETE FROM terminal_machine_challenges WHERE terminal_id=? AND expires_at<=?").run(t.id, nowIso());
+        const active = db.prepare("SELECT COUNT(*) AS count FROM terminal_machine_challenges WHERE terminal_id=?").get(t.id) as { count: number };
+        if (active.count >= 64) fail("机器挑战请求过多，请稍后重试", 429);
+        const challenge = createOpaqueToken();
+        db.prepare("INSERT INTO terminal_machine_challenges(challenge_hash,terminal_id,expires_at) VALUES(?,?,?)")
+          .run(hashToken(challenge), t.id, expires(challengeLifetimeSeconds));
+        return { challenge };
+      });
+    },
+  );
+  app.post(
     tokenPath,
     { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },
     async (request) => {
-      const body = z
-        .object({
-          client_id: z.string().uuid(),
-          grant_type: z.literal("client_credentials"),
-          client_assertion_type: z.literal(
-            "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-          ),
-          client_assertion: z.string().max(2048),
-        })
-        .parse(request.body);
+      const base = { client_id: z.string().uuid(), grant_type: z.literal("client_credentials") };
+      const body = z.union([
+        z.object({ ...base, client_assertion_type: z.literal("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"), client_assertion: z.string().max(2048) }).strict(),
+        z.object({ ...base, challenge: z.string().min(32).max(128).regex(/^[A-Za-z0-9_-]+$/), proof: z.string().min(80).max(128).regex(/^[A-Za-z0-9_-]+$/) }).strict(),
+      ]).parse(request.body);
       const t = terminal(body.client_id);
-      verifyClientAssertion(body.client_assertion, t);
+      let accessToken: string;
+      if ("client_assertion" in body) {
+        verifyClientAssertion(body.client_assertion, t);
+        accessToken = credential(t, "MACHINE", 60);
+      } else {
+        accessToken = redeemChallenge(t, body.challenge, body.proof);
+      }
       return {
-        access_token: credential(t, "MACHINE", 60),
+        access_token: accessToken,
         token_type: "Bearer",
         expires_in: 60,
       };

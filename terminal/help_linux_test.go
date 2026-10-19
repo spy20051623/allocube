@@ -17,6 +17,10 @@ func helpFixture(t *testing.T) (Config, *[]HelpEvent, *bool) {
 	events := []HelpEvent{}
 	unavailable := false
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/terminal/machine/challenge" {
+			fmt.Fprint(w, `{"challenge":"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"}`)
+			return
+		}
 		if r.URL.Path == "/api/v1/terminal/machine/token" {
 			fmt.Fprint(w, `{"access_token":"fixture"}`)
 			return

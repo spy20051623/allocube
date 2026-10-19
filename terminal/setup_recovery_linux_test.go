@@ -40,19 +40,22 @@ func TestSetupRecoversCommittedEnrollment(t *testing.T) {
 			}
 			enrolled, enrollCalls, authenticated := false, 0, 0
 			delay := delayed
-			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var server *httptest.Server
+			server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var body map[string]string
 				if json.NewDecoder(r.Body).Decode(&body) != nil {
 					w.WriteHeader(400)
 					return
 				}
+				if strings.HasSuffix(r.URL.Path, "/challenge") {
+					fmt.Fprint(w, `{"challenge":"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"}`)
+					return
+				}
 				if strings.HasSuffix(r.URL.Path, "/token") {
-					parts := strings.Split(body["client_assertion"], ".")
-					valid := false
-					if len(parts) == 3 {
-						sig, _ := base64.RawURLEncoding.DecodeString(parts[2])
-						valid = ed25519.Verify(key.Public().(ed25519.PublicKey), []byte(parts[0]+"."+parts[1]), sig)
-					}
+					challenge := "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"
+					message := fmt.Sprintf("allocube-machine-token-v2\n%s\n%s/api/v1/terminal/machine/token\n%s", "new-terminal", server.URL, challenge)
+					sig, _ := base64.RawURLEncoding.DecodeString(body["proof"])
+					valid := body["challenge"] == challenge && ed25519.Verify(key.Public().(ed25519.PublicKey), []byte(message), sig)
 					if !enrolled || body["client_id"] != "new-terminal" || !valid {
 						w.WriteHeader(401)
 						return

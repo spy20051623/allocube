@@ -26,6 +26,8 @@ func TestInstallationConfirmationRequiresLocalCompletionAndRetries(t *testing.T)
 	unavailable := true
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/api/v1/terminal/machine/challenge":
+			fmt.Fprint(w, `{"challenge":"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"}`)
 		case "/api/v1/terminal/machine/token":
 			fmt.Fprint(w, `{"access_token":"fixture"}`)
 		case "/api/v1/terminal/machine/confirm-installation":

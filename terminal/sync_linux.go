@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strings"
 	"syscall"
-	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -108,9 +107,8 @@ func normalizeSyncUser(user SyncUser) ([]byte, error) {
 }
 
 type SyncBinding struct {
-	UID       int    `json:"uid"`
-	Employee  string `json:"employeeNumber"`
-	UpdatedAt string `json:"updatedAt"`
+	UID      int    `json:"uid"`
+	Employee string `json:"employeeNumber"`
 }
 type SyncState struct {
 	Accounts map[string]SyncBinding `json:"accounts"`
@@ -398,7 +396,7 @@ func synchronizeKeys(c Config) error {
 				continue
 			}
 			if !exists || binding.Employee != employee {
-				state.Accounts[a.Name] = SyncBinding{a.UID, employee, time.Now().UTC().Format(time.RFC3339)}
+				state.Accounts[a.Name] = SyncBinding{UID: a.UID, Employee: employee}
 				if e = writeJSON(statePath, state, 0600); e != nil {
 					return e
 				}

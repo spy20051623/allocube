@@ -185,6 +185,28 @@ async function machineToken(client: Client, jwt = assertion(client)) {
     },
   });
 }
+async function machineChallenge(client: Client) {
+  return app.inject({
+    method: "POST",
+    url: "/api/v1/terminal/machine/challenge",
+    headers,
+    payload: { terminalId: client.id },
+  });
+}
+async function challengeToken(client: Client, challenge: string, signer = client) {
+  const message = `allocube-machine-token-v2\n${client.id}\n${origin}/api/v1/terminal/machine/token\n${challenge}`;
+  return app.inject({
+    method: "POST",
+    url: "/api/v1/terminal/machine/token",
+    headers,
+    payload: {
+      client_id: client.id,
+      grant_type: "client_credentials",
+      challenge,
+      proof: sign(null, Buffer.from(message), signer.key.privateKey).toString("base64url"),
+    },
+  });
+}
 async function machineCall(client: Client, action: string, payload: unknown) {
   const minted = await machineToken(client);
   expect(minted.statusCode).toBe(200);
@@ -225,6 +247,21 @@ describe("public key synchronization", () => {
     expect((await machineToken(clients[0],assertion(clients[0],{exp:1}))).statusCode).toBe(401);
     expect((await machineToken(clients[1],assertion(clients[0]))).statusCode).toBe(401);
   });
+  it("authenticates without a client timestamp and consumes server-issued challenges once", async () => {
+    const challenge = await machineChallenge(clients[0]);
+    expect(challenge.statusCode).toBe(200);
+    const value = challenge.json().challenge as string;
+    expect((await challengeToken(clients[0], value, clients[1])).statusCode).toBe(401);
+    expect((await challengeToken(clients[1], value)).statusCode).toBe(401);
+    const token = await challengeToken(clients[0], value);
+    expect(token.statusCode).toBe(200);
+    expect(token.json().access_token).toBeTruthy();
+    expect((await challengeToken(clients[0], value)).statusCode).toBe(401);
+    const later = await machineChallenge(clients[0]);
+    expect(later.statusCode).toBe(200);
+    db.db.prepare("UPDATE terminal_machine_challenges SET expires_at='2000-01-01T00:00:00.000Z' WHERE terminal_id=?").run(clients[0].id);
+    expect((await challengeToken(clients[0], later.json().challenge)).statusCode).toBe(401);
+  });
   it.each([[-60,401],[-59,200],[-1,200],[0,200],[1,200],[5,200],[6,401]])(
     "checks 60-second machine assertions with a clock offset of %i seconds",
     async (offset, status) => {
@@ -249,6 +286,7 @@ describe("public key synchronization", () => {
   it("keeps only machine key routes outside browser CSRF protection", async () => {
     const {isTerminalProtocolPath}=await import("../server/terminal");
     expect(isTerminalProtocolPath("/api/v1/terminal/machine/keys")).toBe(true);
+    expect(isTerminalProtocolPath("/api/v1/terminal/machine/challenge")).toBe(true);
     for(const path of ["/api/v1/auth/ssh-keys","/api/v1/terminal/machine/begin","/api/v1/terminal/machine/exchange","/api/v1/terminal/browser/123/password"])expect(isTerminalProtocolPath(path)).toBe(false);
     expect((await app.inject({method:"POST",url:"/api/v1/terminal/machine/keys",headers,payload:{employees:["12345678"]}})).statusCode).toBe(401);
     expect((await app.inject({method:"POST",url:"/api/v1/terminal/machine/begin",headers,payload:{}})).statusCode).toBe(404);

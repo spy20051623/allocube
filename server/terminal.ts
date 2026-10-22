@@ -1,5 +1,5 @@
 import { createPublicKey, verify } from "node:crypto";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   canAccessMachine,
@@ -18,6 +18,7 @@ import {
 import { IdentityError } from "./identity.js";
 import { activeMachineKeys } from "./ssh-keys.js";
 import { registerSSHKeyRoutes } from "./ssh-key-routes.js";
+import { SourceRateLimiter } from "./source-rate-limit.js";
 
 import { terminalHelpList, terminalHelpReport, receiveTerminalHelp } from "./terminal-help.js";
 
@@ -77,7 +78,7 @@ function credential(t: Terminal, kind: "MACHINE" | "ENROLL", seconds: number) {
   );
   return value;
 }
-function machine(request: FastifyRequest): Terminal {
+function authenticatedTerminal(request: FastifyRequest): Terminal {
   const value =
     request.headers.authorization?.match(/^Bearer ([A-Za-z0-9_-]+)$/)?.[1] ??
     "";
@@ -87,13 +88,31 @@ function machine(request: FastifyRequest): Terminal {
     )
     .get(hashToken(value), nowIso()) as { terminal_id: string } | undefined;
   if (!row) fail("机器凭据无效", 401);
-  const t = terminal(row.terminal_id);
+  return terminal(row.terminal_id);
+}
+
+function machine(request: FastifyRequest): Terminal {
+  const t = authenticatedTerminal(request);
   db.prepare("UPDATE machine_terminals SET last_seen_at=? WHERE id=?").run(
     nowIso(),
     t.id,
   );
   return t;
 }
+
+// Override the browser/global limiter for every machine protocol route. Cookies,
+// arbitrary bearer strings and client-supplied IDs never establish identity.
+const sourceRateKey = (request: FastifyRequest) => `terminal-source:${request.ip}`;
+function machineRateKey(request: FastifyRequest) {
+  try {
+    return `terminal:${authenticatedTerminal(request).id}`;
+  } catch (error) {
+    if (!(error instanceof IdentityError)) throw error;
+    return sourceRateKey(request);
+  }
+}
+const machineRateLimit = (max: number) => ({ max, timeWindow: "1 minute", keyGenerator: machineRateKey });
+const authenticationSourceLimit = { max: 600, timeWindow: "1 minute", keyGenerator: sourceRateKey };
 function publicKey(pem: string) {
   try {
     if (!pem.startsWith("-----BEGIN PUBLIC KEY-----"))
@@ -160,7 +179,7 @@ function challengeMessage(t: Terminal, challenge: string) {
   return `allocube-machine-token-v2\n${t.id}\n${platformOrigin()}${tokenPath}\n${challenge}`;
 }
 
-function redeemChallenge(t: Terminal, challenge: string, proof: string) {
+function redeemChallenge(t: Terminal, challenge: string, proof: string, authorize: () => void) {
   let valid = false;
   try {
     valid = verify(null, Buffer.from(challengeMessage(t, challenge)), publicKey(t.public_key), Buffer.from(proof, "base64url"));
@@ -168,6 +187,7 @@ function redeemChallenge(t: Terminal, challenge: string, proof: string) {
     // Invalid proofs must not consume a challenge.
   }
   if (!valid) fail("机器签名无效", 401);
+  authorize();
   return withImmediateTransaction(() => {
     const consumed = db.prepare(`DELETE FROM terminal_machine_challenges
       WHERE challenge_hash=? AND terminal_id=? AND expires_at>?`)
@@ -180,6 +200,14 @@ export function registerTerminalRoutes(
   app: FastifyInstance,
   _publishRevision: (revision: number) => void = () => {},
 ) {
+  const authenticationLimiter = new SourceRateLimiter();
+  const authorizeToken = (t: Terminal, reply: FastifyReply) => {
+    const result = authenticationLimiter.check(t.id, { max: 60, windowMs: 60_000 });
+    if (!result.allowed) {
+      reply.header("Retry-After", result.retryAfterSeconds);
+      fail("机器认证请求过多，请稍后重试", 429);
+    }
+  };
   registerSSHKeyRoutes(app);
   app.addHook("onRequest", async (request, reply) => {
     const path = request.url.split("?")[0];
@@ -279,7 +307,7 @@ export function registerTerminalRoutes(
 
   app.post(
     "/api/v1/terminal/machine/enroll",
-    { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } },
+    { config: { rateLimit: { max: 10, timeWindow: "15 minutes", keyGenerator: sourceRateKey } } },
     async (request) => {
       const body = z
         .object({
@@ -316,14 +344,17 @@ export function registerTerminalRoutes(
   );
   app.post(
     challengePath,
-    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
-    async (request) => {
+    { config: { rateLimit: authenticationSourceLimit } },
+    async (request, reply) => {
       const { terminalId } = z.object({ terminalId: z.string().uuid() }).strict().parse(request.body);
       const t = terminal(terminalId);
       return withImmediateTransaction(() => {
         db.prepare("DELETE FROM terminal_machine_challenges WHERE terminal_id=? AND expires_at<=?").run(t.id, nowIso());
         const active = db.prepare("SELECT COUNT(*) AS count FROM terminal_machine_challenges WHERE terminal_id=?").get(t.id) as { count: number };
-        if (active.count >= 64) fail("机器挑战请求过多，请稍后重试", 429);
+        if (active.count >= 64) {
+          reply.header("Retry-After", challengeLifetimeSeconds);
+          fail("机器挑战请求过多，请稍后重试", 429);
+        }
         const challenge = createOpaqueToken();
         db.prepare("INSERT INTO terminal_machine_challenges(challenge_hash,terminal_id,expires_at) VALUES(?,?,?)")
           .run(hashToken(challenge), t.id, expires(challengeLifetimeSeconds));
@@ -333,8 +364,8 @@ export function registerTerminalRoutes(
   );
   app.post(
     tokenPath,
-    { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },
-    async (request) => {
+    { config: { rateLimit: authenticationSourceLimit } },
+    async (request, reply) => {
       const base = { client_id: z.string().uuid(), grant_type: z.literal("client_credentials") };
       const body = z.union([
         z.object({ ...base, client_assertion_type: z.literal("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"), client_assertion: z.string().max(2048) }).strict(),
@@ -344,9 +375,10 @@ export function registerTerminalRoutes(
       let accessToken: string;
       if ("client_assertion" in body) {
         verifyClientAssertion(body.client_assertion, t);
+        authorizeToken(t, reply);
         accessToken = credential(t, "MACHINE", 60);
       } else {
-        accessToken = redeemChallenge(t, body.challenge, body.proof);
+        accessToken = redeemChallenge(t, body.challenge, body.proof, () => authorizeToken(t, reply));
       }
       return {
         access_token: accessToken,
@@ -355,7 +387,7 @@ export function registerTerminalRoutes(
       };
     },
   );
-  app.post("/api/v1/terminal/machine/confirm-installation", async (request) => {
+  app.post("/api/v1/terminal/machine/confirm-installation", { config: { rateLimit: machineRateLimit(60) } }, async (request) => {
     const t = machine(request);
     if (!z.object({ protocolVersion: z.literal(1) }).strict().safeParse(request.body).success) fail("接入确认格式无效");
     if (!t.public_key) fail("机器身份尚未登记", 409);
@@ -364,7 +396,7 @@ export function registerTerminalRoutes(
     const row = db.prepare("SELECT confirmed_at FROM machine_terminals WHERE id=?").get(t.id) as {confirmed_at: string};
     return { terminalId: t.id, confirmedAt: row.confirmed_at };
   });
-  app.post("/api/v1/terminal/machine/rotate", async (request) => {
+  app.post("/api/v1/terminal/machine/rotate", { config: { rateLimit: machineRateLimit(30) } }, async (request) => {
     const t = machine(request);
     const body = z
       .object({ publicKey: z.string().max(500), proof: z.string().max(128) })
@@ -394,7 +426,7 @@ export function registerTerminalRoutes(
     return { message: "身份密钥已轮换" };
   });
 
-  app.post("/api/v1/terminal/machine/help", { bodyLimit: 32768, config: {rateLimit:{max:30,timeWindow:"1 minute"}} }, async (request) => {
+  app.post("/api/v1/terminal/machine/help", { bodyLimit: 32768, config: {rateLimit:machineRateLimit(30)} }, async (request) => {
     const t = machine(request);
     const parsed = terminalHelpReport.safeParse(request.body);
     if (!parsed.success) fail("求助数据格式无效",400);
@@ -430,7 +462,7 @@ export function registerTerminalRoutes(
     });
   });
 
-  app.post("/api/v1/terminal/machine/keys", async (request) => {
+  app.post("/api/v1/terminal/machine/keys", { config: { rateLimit: machineRateLimit(300) } }, async (request) => {
     const t = machine(request);
     const { employees } = z
       .object({

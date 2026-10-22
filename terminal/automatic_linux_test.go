@@ -80,7 +80,7 @@ func automaticFixture(t *testing.T, publicKeys ...func() []any) (Config, *[]Acco
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/token") {
-			fmt.Fprint(w, `{"access_token":"fixture"}`)
+			fmt.Fprint(w, `{"access_token":"fixture","expires_in":60}`)
 			return
 		}
 		var request struct {

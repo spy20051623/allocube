@@ -61,12 +61,11 @@ func TestSetupRecoversCommittedEnrollment(t *testing.T) {
 						return
 					}
 					if delay {
-						delay = false
 						w.WriteHeader(503)
 						return
 					}
 					authenticated++
-					fmt.Fprint(w, `{"access_token":"new-machine-credential"}`)
+					fmt.Fprint(w, `{"access_token":"new-machine-credential","expires_in":60}`)
 					return
 				}
 				if body["terminalId"] != "new-terminal" || body["publicKey"] != publicPEM(key) || body["enrollmentToken"] != "one-time" || enrolled {
@@ -106,6 +105,7 @@ func TestSetupRecoversCommittedEnrollment(t *testing.T) {
 					t.Fatal("failed verification changed configuration")
 				}
 				// Repeating the original command succeeds despite its consumed token.
+				delay = false
 				err = setup(path, bufio.NewReader(strings.NewReader(input)))
 			}
 			if err != nil {

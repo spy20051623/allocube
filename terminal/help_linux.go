@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -258,6 +259,14 @@ func synchronizeWithConfirmation(c Config, required bool) error {
 		return err
 	}
 	defer unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), syncRequestBudget)
+	defer cancel()
+	c.session = &platformSession{ctx: ctx}
+	defer func() {
+		if c.session.client != nil {
+			c.session.client.Client.CloseIdleConnections()
+		}
+	}()
 	autoErr := autoManageAccounts(c)
 	syncErr := synchronizeKeys(c)
 	result := errors.Join(autoErr, syncErr)

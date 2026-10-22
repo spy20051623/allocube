@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -23,6 +24,7 @@ import (
 )
 
 type Config struct {
+	session               *platformSession
 	AllowSSHPasswordLogin bool               `json:"allowSSHPasswordLogin"`
 	AutoManageNewAccounts bool               `json:"autoManageNewAccounts"`
 	SSHServices           []SSHService       `json:"-"`
@@ -183,12 +185,28 @@ func publicPEM(key ed25519.PrivateKey) string {
 }
 
 type Platform struct {
-	Config Config
-	Key    ed25519.PrivateKey
-	Client *http.Client
+	Config          Config
+	Key             ed25519.PrivateKey
+	Client          *http.Client
+	ctx             context.Context
+	elapsed         func() time.Duration
+	wait            func(context.Context, time.Duration) error
+	retryWait       time.Duration
+	accessToken     string
+	tokenValidUntil time.Duration
+	retryNotBefore  time.Duration
+}
+
+// A session belongs to one sync invocation, never to persisted configuration.
+type platformSession struct {
+	ctx    context.Context
+	client *Platform
 }
 
 func newPlatform(c Config) (*Platform, error) {
+	if c.session != nil && c.session.client != nil {
+		return c.session.client, nil
+	}
 	k, err := readKey(c.IdentityKey)
 	if err != nil {
 		return nil, err
@@ -209,7 +227,13 @@ func newPlatform(c Config) (*Platform, error) {
 		}
 		transport.TLSClientConfig = &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}
 	}
-	return &Platform{c, k, &http.Client{Transport: transport, Timeout: 12 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("platform redirects are forbidden") }}}, nil
+	started := time.Now()
+	p := &Platform{Config: c, Key: k, Client: &http.Client{Transport: transport, Timeout: 12 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("platform redirects are forbidden") }}, ctx: context.Background(), elapsed: func() time.Duration { return time.Since(started) }}
+	if c.session != nil {
+		p.ctx = c.session.ctx
+		c.session.client = p
+	}
+	return p, nil
 }
 
 func platformConnectionError(err error) error {
@@ -234,11 +258,14 @@ func platformConnectionError(err error) error {
 	}
 }
 func (p *Platform) post(path, token string, input, output any) error {
+	if remaining := p.retryNotBefore - p.elapsed(); remaining > 0 {
+		return &RetryError{&platformRequestError{cause: errors.New("platform requested a retry delay; request deferred"), status: 429, transient: true, retryAfter: remaining}}
+	}
 	data, err := json.Marshal(input)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest("POST", p.Config.Platform+"/api/v1/terminal/machine/"+path, strings.NewReader(string(data)))
+	req, err := http.NewRequestWithContext(p.ctx, "POST", p.Config.Platform+"/api/v1/terminal/machine/"+path, strings.NewReader(string(data)))
 	if err != nil {
 		return err
 	}
@@ -248,15 +275,26 @@ func (p *Platform) post(path, token string, input, output any) error {
 	}
 	resp, err := p.Client.Do(req)
 	if err != nil {
-		return &RetryError{platformConnectionError(err)}
+		return &RetryError{&platformRequestError{cause: platformConnectionError(err), transient: transientConnectionError(err)}}
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 2097153))
-	if err != nil || len(body) > 2097152 {
+	if err != nil {
+		return &RetryError{&platformRequestError{cause: platformConnectionError(err), transient: true}}
+	}
+	if len(body) > 2097152 {
 		return errors.New("invalid platform response")
 	}
 	if resp.StatusCode != 200 {
-		return &RetryError{platformHTTPError(path, resp.StatusCode, body)}
+		var problem struct {
+			Error string `json:"error"`
+		}
+		_ = json.Unmarshal(body, &problem)
+		delay := platformRetryAfter(resp.Header)
+		if resp.StatusCode == 429 || (resp.StatusCode >= 500 && delay > 0) {
+			p.retryNotBefore = p.elapsed() + max(delay, 250*time.Millisecond)
+		}
+		return &RetryError{&platformRequestError{cause: platformHTTPError(path, resp.StatusCode, body), status: resp.StatusCode, challengeExpired: problem.Error == "机器挑战无效或已过期", transient: resp.StatusCode == 429 || resp.StatusCode >= 500, retryAfter: delay}}
 	}
 	if output == nil {
 		return nil
@@ -295,6 +333,26 @@ func platformHTTPError(operation string, status int, body []byte) error {
 	return fmt.Errorf("platform %s failed (HTTP %d): %s", operation, status, message)
 }
 func (p *Platform) token() (string, error) {
+	if p.accessToken != "" && p.elapsed() < p.tokenValidUntil {
+		return p.accessToken, nil
+	}
+	p.accessToken = ""
+	for attempt := 0; ; attempt++ {
+		token, err := p.freshToken()
+		if err == nil {
+			return token, nil
+		}
+		var request *platformRequestError
+		if errors.As(err, &request) && request.status == 401 && request.challengeExpired && attempt == 0 {
+			continue
+		}
+		if !p.retry(err, attempt) {
+			return "", err
+		}
+	}
+}
+
+func (p *Platform) freshToken() (string, error) {
 	var challenge struct {
 		Value string `json:"challenge"`
 	}
@@ -307,18 +365,47 @@ func (p *Platform) token() (string, error) {
 	message := fmt.Sprintf("allocube-machine-token-v2\n%s\n%s/api/v1/terminal/machine/token\n%s", p.Config.TerminalID, p.Config.Platform, challenge.Value)
 	proof := base64.RawURLEncoding.EncodeToString(ed25519.Sign(p.Key, []byte(message)))
 	var result struct {
-		Token string `json:"access_token"`
+		Token     string `json:"access_token"`
+		ExpiresIn int    `json:"expires_in"`
 	}
+	issuedAt := p.elapsed()
 	err := p.post("token", "", map[string]string{"client_id": p.Config.TerminalID, "grant_type": "client_credentials", "challenge": challenge.Value, "proof": proof}, &result)
-	if err == nil && result.Token == "" {
-		err = errors.New("missing machine token")
+	if err == nil {
+		if result.Token == "" || result.ExpiresIn <= 5 || result.ExpiresIn > 3600 {
+			return "", errors.New("invalid machine token or lifetime")
+		}
+		// elapsed uses Go's monotonic clock, and starts before the token request
+		// so network latency cannot extend the server's credential lifetime.
+		p.tokenValidUntil = issuedAt + time.Duration(result.ExpiresIn)*time.Second - 5*time.Second
+		p.accessToken = result.Token
 	}
 	return result.Token, err
 }
 func (p *Platform) call(path string, input, output any) error {
-	token, err := p.token()
-	if err != nil {
-		return err
+	previous := p.ctx
+	ctx, cancel := context.WithTimeout(previous, syncRequestBudget)
+	p.ctx = ctx
+	defer func() { p.ctx = previous; cancel() }()
+	refreshed := false
+	for attempt := 0; ; attempt++ {
+		token, err := p.token()
+		if err != nil {
+			return err
+		}
+		err = p.post(path, token, input, output)
+		if err == nil {
+			return nil
+		}
+		var request *platformRequestError
+		if errors.As(err, &request) && request.status == 401 && !refreshed {
+			p.accessToken = ""
+			refreshed = true
+			continue
+		}
+		// Only reads and idempotent reports can be replayed after an unknown
+		// outcome. Enrollment and identity rotation retain their recovery flow.
+		if (path != "keys" && path != "help" && path != "confirm-installation") || !p.retry(err, attempt) {
+			return err
+		}
 	}
-	return p.post(path, token, input, output)
 }

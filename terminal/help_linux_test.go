@@ -22,7 +22,7 @@ func helpFixture(t *testing.T) (Config, *[]HelpEvent, *bool) {
 			return
 		}
 		if r.URL.Path == "/api/v1/terminal/machine/token" {
-			fmt.Fprint(w, `{"access_token":"fixture"}`)
+			fmt.Fprint(w, `{"access_token":"fixture","expires_in":60}`)
 			return
 		}
 		var body struct {
@@ -144,17 +144,23 @@ func TestUnknownHelpDeliveryReplaysSameIDAndResolvesAfterRestart(t *testing.T) {
 		t.Fatal("expected failed delivery")
 	}
 	first := (*events)[0]
+	attempted := len(*events)
+	for _, event := range *events {
+		if event != first {
+			t.Fatal("in-cycle retry changed event identity")
+		}
+	}
 	*unavailable = false
 	if err := updateHelp(c, failure); err != nil {
 		t.Fatal(err)
 	}
-	if len(*events) != 2 || (*events)[1] != first {
+	if len(*events) != attempted+1 || (*events)[attempted] != first {
 		t.Fatal("retry changed event identity")
 	}
 	if err := updateHelp(c, nil); err != nil {
 		t.Fatal(err)
 	}
-	if (*events)[2].Revision != 2 {
+	if (*events)[attempted+1].Revision != 2 {
 		t.Fatal("resolution must advance revision")
 	}
 }

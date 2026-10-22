@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -139,6 +140,67 @@ func TestAutomaticEmptyEnrollmentAndNoRepeatedReload(t *testing.T) {
 	root, _ := sshSettings(c, Account{Name: "root"})
 	if root["passwordauthentication"] != "yes" {
 		t.Fatal("root policy changed")
+	}
+}
+
+func TestAutomaticEnrollmentWithSavedConfigAndRuntimeSession(t *testing.T) {
+	c, _, reloads, _ := automaticFixture(t)
+	c.ConfigPath = filepath.Join(filepath.Dir(c.StateDir), "config.json")
+	if err := writeJSON(c.ConfigPath, c, 0600); err != nil {
+		t.Fatal(err)
+	}
+	c.session = &platformSession{ctx: context.Background()}
+	if err := autoManageAccounts(c); err != nil {
+		t.Fatal("runtime authentication session must not look like a configuration change:", err)
+	}
+	state, err := readSyncState(c)
+	if err != nil || state.Accounts["a12345678"].UID != 1001 || *reloads != 1 {
+		t.Fatal("account was not enrolled", err, state, *reloads)
+	}
+	plan, err := prepareSSHPlan(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plan.close()
+	changed := c
+	changed.IntervalSeconds++
+	if err := writeJSON(c.ConfigPath, changed, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := plan.unchanged(c); err == nil || !strings.Contains(err.Error(), "Allocube configuration changed") {
+		t.Fatal("actual saved configuration changes must still block the operation", err)
+	}
+}
+
+func TestSyncSavedConfigEnrollsNewAccountsAcrossRounds(t *testing.T) {
+	c, accounts, reloads, _ := automaticFixture(t)
+	c.ConfigPath = filepath.Join(filepath.Dir(c.StateDir), "config.json")
+	if err := writeJSON(c.ConfigPath, c, 0600); err != nil {
+		t.Fatal(err)
+	}
+	oldReady := installationTimerReady
+	installationTimerReady = func() bool { return false }
+	t.Cleanup(func() { installationTimerReady = oldReady })
+	if err := synchronize(c); err != nil {
+		t.Fatal("initial full synchronization:", err)
+	}
+	*accounts = append(*accounts,
+		Account{Name: "b12345678", UID: 1002, Home: "/home/b12345678"},
+		Account{Name: "c12345678", UID: 1003, Home: "/home/c12345678"})
+	if err := synchronize(c); err != nil {
+		t.Fatal("new accounts in the next synchronization:", err)
+	}
+	if err := synchronize(c); err != nil {
+		t.Fatal("unchanged follow-up synchronization:", err)
+	}
+	state, err := readSyncState(c)
+	if err != nil || len(state.Accounts) != 3 || *reloads != 2 {
+		t.Fatal("new accounts must enroll once per batch", err, state, *reloads)
+	}
+	for _, name := range []string{"automatic-failure.json", "help-requests.json"} {
+		if _, err := os.Stat(filepath.Join(c.StateDir, name)); !os.IsNotExist(err) {
+			t.Fatal("healthy automatic enrollment left failure state", name, err)
+		}
 	}
 }
 

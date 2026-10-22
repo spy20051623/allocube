@@ -293,7 +293,11 @@ func (p *SSHPlan) unchanged(c Config) error {
 			return e
 		}
 		now.ConfigPath = c.ConfigPath
-		if !reflect.DeepEqual(c, now) {
+		// Authentication state exists only for this synchronization round; it is
+		// not part of the saved configuration checked before changing SSH.
+		saved := c
+		saved.session = nil
+		if !reflect.DeepEqual(saved, now) {
 			return errors.New("Allocube configuration changed; rerun configure-ssh")
 		}
 	}
